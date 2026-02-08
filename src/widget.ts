@@ -69,7 +69,13 @@ function formatCandidate(
 		candidate.remainingPercent <= 50 ? "warning" : "success";
 	const percentStr = theme.fg(percentColor, remainingStr);
 
-	return `${statusIcon} ${providerWindow} ${bar} ${percentStr}`;
+	// Time left
+	let resetStr = "";
+	if (candidate.resetsAt) {
+		resetStr = " " + theme.fg("dim", `(${formatReset(candidate.resetsAt)})`);
+	}
+
+	return `${statusIcon} ${providerWindow} ${bar} ${percentStr}${resetStr}`;
 }
 
 // ============================================================================
