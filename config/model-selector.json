@@ -4,6 +4,11 @@
     "earliestReset",
     "remainingPercent"
   ],
+  "widget": {
+    "enabled": true,
+    "placement": "belowEditor",
+    "showCount": 3
+  },
   "mappings": [
     {
       "usage": {
