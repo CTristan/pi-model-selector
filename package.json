@@ -1,5 +1,5 @@
 {
-  "name": "model-selector",
+  "name": "pi-model-selector",
   "version": "1.0.0",
   "description": "A Pi extension that automatically selects the best model based on remaining usage quotas across various providers (Claude, OpenAI, Gemini, etc.).",
   "keywords": ["pi-package"],
