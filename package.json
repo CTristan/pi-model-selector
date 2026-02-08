@@ -14,5 +14,11 @@
     "@mariozechner/pi-coding-agent": "latest",
     "@types/node": "^20.0.0",
     "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "type-check": "tsc",
+    "ci": "npm run type-check",
+    "setup-hooks": "./scripts/setup-hooks.sh",
+    "prepare": "npm run setup-hooks"
   }
 }

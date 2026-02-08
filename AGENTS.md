@@ -23,6 +23,12 @@
     - **`widget`**: Widget display settings (enabled, placement, showCount).
     - **`mappings`**: Links usage windows to model IDs or marks them as ignored.
 
+### CI/CD
+- **`scripts/ci.sh`**: CI gate script for local and automated checks (type checking).
+- **`scripts/setup-hooks.sh`**: Script to install and configure the Git pre-commit hook.
+- **`.github/workflows/ci.yml`**: GitHub Actions workflow for running the CI gate on push/PR.
+- **`.git/hooks/pre-commit`**: Local Git hook that runs `ci.sh` before every commit.
+
 ## Data Flow
 1. **Trigger**: Extension runs on session start or `/model-select` command.
 2. **Configuration Load**: Reads and merges global + project configs.
