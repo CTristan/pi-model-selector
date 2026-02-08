@@ -1,0 +1,141 @@
+{
+  "priority": [
+    "fullAvailability",
+    "earliestReset",
+    "remainingPercent"
+  ],
+  "mappings": [
+    {
+      "usage": {
+        "provider": "codex",
+        "window": "5h"
+      },
+      "ignore": true
+    },
+    {
+      "usage": {
+        "provider": "copilot",
+        "window": "Premium"
+      },
+      "model": {
+        "provider": "github-copilot",
+        "id": "gpt-5.2-codex"
+      }
+    },
+    {
+      "usage": {
+        "provider": "antigravity",
+        "window": "G3 Flash"
+      },
+      "model": {
+        "provider": "google-antigravity",
+        "id": "gemini-3-flash"
+      }
+    },
+    {
+      "usage": {
+        "provider": "antigravity",
+        "window": "G3 Pro"
+      },
+      "model": {
+        "provider": "google-antigravity",
+        "id": "gemini-3-pro-high"
+      }
+    },
+    {
+      "usage": {
+        "provider": "anthropic",
+        "window": "5h"
+      },
+      "ignore": true
+    },
+    {
+      "usage": {
+        "provider": "anthropic",
+        "window": "Week"
+      },
+      "model": {
+        "provider": "anthropic",
+        "id": "claude-opus-4-5"
+      }
+    },
+    {
+      "usage": {
+        "provider": "codex",
+        "window": "Week"
+      },
+      "model": {
+        "provider": "openai-codex",
+        "id": "gpt-5.3-codex"
+      }
+    },
+    {
+      "usage": {
+        "provider": "gemini",
+        "window": "Flash"
+      },
+      "model": {
+        "provider": "google-gemini-cli",
+        "id": "gemini-3-flash-preview"
+      }
+    },
+    {
+      "usage": {
+        "provider": "gemini",
+        "window": "Pro"
+      },
+      "model": {
+        "provider": "google-gemini-cli",
+        "id": "gemini-3-pro-preview"
+      }
+    },
+    {
+      "usage": {
+        "provider": "antigravity",
+        "window": "Claude"
+      },
+      "model": {
+        "provider": "google-antigravity",
+        "id": "claude-opus-4-5-thinking"
+      }
+    }
+  ],
+  "examples": [
+    {
+      "usage": {
+        "provider": "anthropic",
+        "window": "Sonnet"
+      },
+      "model": {
+        "provider": "anthropic",
+        "id": "claude-sonnet-4-5"
+      }
+    },
+    {
+      "usage": {
+        "provider": "gemini",
+        "window": "Flash"
+      },
+      "model": {
+        "provider": "google",
+        "id": "gemini-2.5-flash"
+      }
+    },
+    {
+      "usage": {
+        "provider": "codex",
+        "windowPattern": "^(3h|Week)$"
+      },
+      "model": {
+        "provider": "openai-codex",
+        "id": "gpt-5.2-codex"
+      }
+    },
+    {
+      "usage": {
+        "provider": "copilot",
+        "window": "Chat"
+      }
+    }
+  ]
+}
