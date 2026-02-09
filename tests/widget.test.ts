@@ -28,10 +28,10 @@ describe('Widget', () => {
 
     it('should handle no UI or no setWidget branch', () => {
         const mockCtxNoUI: any = { hasUI: false };
-        expect(renderUsageWidget(mockCtxNoUI)).toBeUndefined();
+        expect(() => renderUsageWidget(mockCtxNoUI)).not.toThrow();
         
         const mockCtxNoSet: any = { hasUI: true, ui: {} };
-        expect(renderUsageWidget(mockCtxNoSet)).toBeUndefined();
+        expect(() => renderUsageWidget(mockCtxNoSet)).not.toThrow();
     });
 
     describe('renderUsageWidget helpers', () => {

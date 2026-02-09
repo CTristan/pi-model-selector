@@ -43,12 +43,42 @@ export type { MappingEntry, PriorityRule, UsageCandidate, LoadedConfig, WidgetCo
 // Helpers
 // ============================================================================
 
+function isCatchAllIgnoreMapping(m: MappingEntry): boolean {
+	const anyMapping = m as any;
+
+	const hasWindow =
+		"window" in anyMapping &&
+		anyMapping.window !== undefined &&
+		anyMapping.window !== null &&
+		anyMapping.window !== "";
+
+	const hasWindowPattern =
+		"windowPattern" in anyMapping &&
+		anyMapping.windowPattern !== undefined &&
+		anyMapping.windowPattern !== null &&
+		anyMapping.windowPattern !== "";
+
+	if (!hasWindow && !hasWindowPattern) {
+		return true;
+	}
+
+	if (hasWindowPattern) {
+		const pattern = String(anyMapping.windowPattern);
+		if (pattern === "*" || pattern === ".*") {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 function isProviderIgnored(provider: string, account: string | undefined, mappings: MappingEntry[]): boolean {
 	return mappings.some(
 		(m) =>
 			m.usage.provider === provider &&
 			(m.usage.account === undefined || m.usage.account === account) &&
-			m.ignore === true
+			m.ignore === true &&
+			isCatchAllIgnoreMapping(m)
 	);
 }
 
@@ -470,9 +500,11 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
 	const modelCooldowns = new Map<string, number>();
 	const COOLDOWN_DURATION = 60 * 60 * 1000; // 1 hour
 	let lastSelectedCandidateKey: string | null = null;
+	let cooldownsLoaded = false;
 
 	// Load persisted cooldown state from file
 	const loadPersistedCooldowns = async (): Promise<void> => {
+		if (cooldownsLoaded) return;
 		const state = await loadCooldownState();
 		const now = Date.now();
 		
@@ -487,6 +519,7 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
 		if (state.lastSelected) {
 			lastSelectedCandidateKey = state.lastSelected;
 		}
+		cooldownsLoaded = true;
 	};
 
 	// Save current cooldown state to file
@@ -521,9 +554,7 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
 
 		try {
 			// Load persisted cooldowns on startup (for print-mode support)
-			if (reason === "startup") {
-				await loadPersistedCooldowns();
-			}
+			await loadPersistedCooldowns();
 
 			const config = options.preloadedConfig || (await loadConfig(ctx));
 			if (!config) return;

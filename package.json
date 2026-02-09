@@ -28,6 +28,6 @@
     "test:watch": "vitest",
     "ci": "npm run type-check && npm run test",
     "setup-hooks": "./scripts/setup-hooks.sh",
-    "prepare": "[ \"$CI\" = \"true\" ] || npm run setup-hooks"
+    "prepare": "node scripts/prepare.js"
   }
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildCandidates, sortCandidates, findModelMapping, dedupeCandidates, selectionReason, pickBestCandidate, findIgnoreMapping, compareCandidates } from '../src/candidates.js';
+import { buildCandidates, findModelMapping, dedupeCandidates, selectionReason, pickBestCandidate, compareCandidates } from '../src/candidates.js';
 import { UsageSnapshot, UsageCandidate, MappingEntry } from '../src/types.js';
 
 describe('Candidate Logic', () => {

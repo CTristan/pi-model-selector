@@ -5,7 +5,6 @@ import {
     fetchCopilotUsage, 
     fetchGeminiUsage, 
     fetchAntigravityUsage, 
-    fetchZaiUsage, 
     fetchKiroUsage, 
     fetchAllCodexUsages, 
     formatReset, 
@@ -14,7 +13,6 @@ import {
 } from '../src/usage-fetchers.js';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
-import * as path from 'node:path';
 
 // Mocks
 vi.mock('node:fs', async () => {
@@ -400,7 +398,7 @@ describe('Usage Fetchers Branch Coverage', () => {
              
              vi.stubGlobal('fetch', fetchMock);
 
-             const result = await fetchAntigravityUsage({}, piAuth);
+             await fetchAntigravityUsage({}, piAuth);
              expect(fetchMock.mock.calls[0][0]).toContain('oauth2.googleapis.com');
         });
         

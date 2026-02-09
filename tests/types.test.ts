@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mappingKey, DEFAULT_PRIORITY, writeDebugLog, setGlobalConfig, notify } from '../src/types.js';
 import * as fs from 'node:fs';
 
@@ -8,6 +8,11 @@ vi.mock('node:fs', () => ({
 }));
 
 describe('Types / Utilities', () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+        // Reset global config state if possible, or just re-set it in tests
+    });
+
     it('should generate correct mapping keys', () => {
         const entry: any = { usage: { provider: 'p1', account: 'a1', window: 'w1', windowPattern: 'wp1' } };
         expect(mappingKey(entry)).toBe('p1|a1|w1|wp1');
@@ -30,16 +35,19 @@ describe('Types / Utilities', () => {
         
         writeDebugLog("Test message");
         // mkdir called with /mock/dir
-        const mkdirCall = vi.mocked(fs.mkdir).mock.calls[0];
-        expect(mkdirCall[0]).toBe('/mock/dir');
+        const mkdirCalls = vi.mocked(fs.mkdir).mock.calls;
+        const lastMkdirCall = mkdirCalls[mkdirCalls.length - 1];
+        expect(lastMkdirCall[0]).toBe('/mock/dir');
         
         // Trigger the callback
-        const mkdirCb = mkdirCall[mkdirCall.length - 1] as any;
+        const mkdirCb = lastMkdirCall[lastMkdirCall.length - 1] as any;
         mkdirCb(null); // success
         
         expect(fs.appendFile).toHaveBeenCalled();
-        const appendCall = vi.mocked(fs.appendFile).mock.calls[0];
-        const appendCb = appendCall[appendCall.length - 1] as any;
+        const appendCalls = vi.mocked(fs.appendFile).mock.calls;
+        const lastAppendCall = appendCalls[appendCalls.length - 1];
+        const appendCb = lastAppendCall[lastAppendCall.length - 1] as any;
+
         // Trigger error in appendFile
         appendCb(new Error("append fail"));
         expect(config.debugLog.enabled).toBe(false);
@@ -52,7 +60,10 @@ describe('Types / Utilities', () => {
         setGlobalConfig(config);
         
         writeDebugLog("Error test");
-        const mkdirCb = vi.mocked(fs.mkdir).mock.calls[1][2] as any;
+        const mkdirCalls = vi.mocked(fs.mkdir).mock.calls;
+        const lastMkdirCall = mkdirCalls[mkdirCalls.length - 1];
+        const mkdirCb = lastMkdirCall[lastMkdirCall.length - 1] as any;
+        
         mkdirCb(new Error("mkdir fail"));
         expect(config.debugLog.enabled).toBe(false);
     });

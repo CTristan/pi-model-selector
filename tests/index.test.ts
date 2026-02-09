@@ -1,10 +1,30 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import modelSelectorExtension from '../index.js';
 import * as usageFetchers from '../src/usage-fetchers.js';
 import * as configMod from '../src/config.js';
+
+// Mock node:fs to prevent real file operations
+vi.mock('node:fs', async () => {
+    return {
+        existsSync: vi.fn(),
+        unlinkSync: vi.fn(),
+        promises: {
+            access: vi.fn(),
+            readFile: vi.fn(),
+            writeFile: vi.fn(),
+            rename: vi.fn(),
+            mkdir: vi.fn(),
+        }
+    };
+});
+
+vi.mock('node:os', () => ({
+    homedir: () => '/mock/home',
+    platform: () => 'darwin'
+}));
 
 // Mock dependencies
 vi.mock('../src/usage-fetchers.js');
@@ -16,7 +36,7 @@ vi.mock('../src/widget.js', () => ({
     getWidgetState: vi.fn(),
 }));
 
-const COOLDOWN_STATE_PATH = path.join(os.homedir(), ".pi", "model-selector-cooldowns.json");
+const COOLDOWN_STATE_PATH = path.join('/mock/home', ".pi", "model-selector-cooldowns.json");
 
 describe('Model Selector Extension', () => {
     let pi: any;
@@ -24,15 +44,14 @@ describe('Model Selector Extension', () => {
     let commands: Record<string, Function> = {};
 
     beforeEach(() => {
-        // Clear persisted cooldown state before each test
-        try {
-            if (fs.existsSync(COOLDOWN_STATE_PATH)) {
-                fs.unlinkSync(COOLDOWN_STATE_PATH);
-            }
-        } catch {
-            // Ignore errors
-        }
+        vi.clearAllMocks();
 
+        // Setup FS mocks
+        vi.mocked(fs.existsSync).mockReturnValue(true);
+        vi.mocked(fs.promises.access).mockResolvedValue(undefined);
+        vi.mocked(fs.promises.readFile).mockResolvedValue(JSON.stringify({ cooldowns: {}, lastSelected: null }));
+        vi.mocked(fs.promises.mkdir).mockResolvedValue(undefined);
+        
         commands = {};
         pi = {
             on: vi.fn(),
@@ -126,9 +145,6 @@ describe('Model Selector Extension', () => {
         // Run skip without prior select
         // It should run selection first (p1), set it to cooldown, then run again (p2)
         await skipHandler({}, ctx);
-
-        // Debug: print notify calls
-        // console.log(ctx.ui.notify.mock.calls);
 
         // Verify it eventually picked p2
         expect(pi.setModel).toHaveBeenCalledWith(expect.objectContaining({ provider: 'p2', id: 'm2' }));

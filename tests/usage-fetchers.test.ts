@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { fetchClaudeUsage, fetchCopilotUsage, fetchAllUsages, fetchGeminiUsage, fetchAntigravityUsage, fetchZaiUsage, fetchKiroUsage, fetchAllCodexUsages, formatReset, safeDate, loadPiAuth, refreshGoogleToken } from '../src/usage-fetchers.js';
+import { fetchClaudeUsage, fetchCopilotUsage, fetchAllUsages, fetchGeminiUsage, fetchAntigravityUsage, fetchZaiUsage, fetchKiroUsage, fetchAllCodexUsages, formatReset, safeDate, loadPiAuth } from '../src/usage-fetchers.js';
 import * as fs from 'node:fs';
 
 vi.mock('node:fs', async () => {
