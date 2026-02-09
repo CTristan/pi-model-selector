@@ -15,7 +15,8 @@
 ### Source Modules (`src/`)
 
 - **`src/types.ts`**: Core TypeScript interfaces and types (`UsageSnapshot`, `RateWindow`, `UsageCandidate`, `MappingEntry`, `LoadedConfig`, `WidgetConfig`). Also exports utility functions like `notify()` and default constants.
-- **`src/usage-fetchers.ts`**: Provider-specific usage fetching logic for Claude, Copilot, Gemini, Antigravity, Codex, Kiro, and z.ai. Exports `fetchAllUsages()` as the main aggregator.
+- **`src/usage-fetchers.ts`**: Usage aggregation entry point. Exports `fetchAllUsages()` and re-exports fetcher utilities for compatibility.
+- **`src/fetchers/*.ts`**: Provider-specific usage fetchers and shared fetch utilities (`anthropic.ts`, `copilot.ts`, `gemini.ts`, `antigravity.ts`, `codex.ts`, `kiro.ts`, `zai.ts`, `common.ts`).
 - **`src/config.ts`**: Configuration loading, parsing, validation, and saving. Handles merging global and project configs. Exports `loadConfig()`, `saveConfigFile()`, `upsertMapping()`, `updateWidgetConfig()`.
 - **`src/candidates.ts`**: Candidate building and ranking logic. Exports `buildCandidates()`, `sortCandidates()`, `findModelMapping()`, `findIgnoreMapping()`, `selectionReason()`.
 - **`src/widget.ts`**: Visual sub-bar widget rendering. Displays top N ranked candidates with progress bars. Exports `updateWidgetState()`, `renderUsageWidget()`, `clearWidget()`.
@@ -29,8 +30,8 @@
 
 ### CI/CD
 
-- **`scripts/ci.sh`**: CI gate script for local and automated checks (type checking, unit tests).
-- **`scripts/setup-hooks.sh`**: Script to install and configure the Git pre-commit hook.
+- **`scripts/ci.sh`**: CI gate script for local and automated checks (type checking, unit tests). Requires a bash-compatible environment (Linux, macOS, WSL, or Git Bash on Windows).
+- **`scripts/setup-hooks.sh`**: Shell script to install and configure the Git pre-commit hook. Requires a bash-compatible environment.
 - **`.github/workflows/ci.yml`**: GitHub Actions workflow for running the CI gate on push/PR.
 - **`.git/hooks/pre-commit`**: Local Git hook that runs `ci.sh` before every commit.
 
@@ -93,11 +94,12 @@ To handle transient "No capacity" (503) errors that aren't reflected in quota us
 
 ### File Size Limit
 
-**Any file reaching 2000 lines or more must be refactored.** Split large files into focused modules with clear responsibilities. Current architecture maintains files under 500 lines each.
+**Any file reaching 2000 lines or more must be refactored.** Split large files into focused modules with clear responsibilities. Aim to keep most files under roughly 500 lines where practical, and periodically refactor growing files.
 
 ### Code Organization
 
-- Keep provider-specific logic in `usage-fetchers.ts`
+- Keep provider-specific logic in `src/fetchers/*.ts`
+- Keep usage orchestration in `src/usage-fetchers.ts`
 - Keep ranking/comparison logic in `candidates.ts`
 - Keep UI/widget code in `widget.ts`
 - Keep config I/O in `config.ts`
@@ -112,4 +114,5 @@ To handle transient "No capacity" (503) errors that aren't reflected in quota us
 
 - **Language**: TypeScript
 - **Environment**: Node.js (executed within Pi extension host)
+- **Tooling**: Shell scripts (`.sh`) are used for CI/CD and Git hooks. On Windows, a bash-compatible environment such as Git Bash or WSL is required. **Do not convert shell scripts to Node.js or batch files for Windows compatibility.**
 - **Dependencies**: `@mariozechner/pi-coding-agent` for extension API types

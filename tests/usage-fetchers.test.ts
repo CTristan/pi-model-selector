@@ -92,6 +92,8 @@ describe("Usage Fetchers Utilities", () => {
     expect(formatReset(new Date("invalid"))).toBe("");
     const now = Date.now();
     expect(formatReset(new Date(now - 10000))).toBe("now");
+    expect(formatReset(new Date(now + 30 * 1000))).toBe("now");
+    expect(formatReset(new Date(now + 65 * 1000))).toBe("1m");
     expect(formatReset(new Date(now + 61 * 60000 + 1000))).toBe("1h 1m");
     expect(formatReset(new Date(now + 60 * 60000 + 1000))).toBe("1h");
     expect(formatReset(new Date(now + 3 * 24 * 3600000 + 1000))).toBe("3d");
@@ -181,11 +183,27 @@ describe("Usage Fetchers", () => {
         result.windows.find((w) => w.label === "Sonnet")?.usedPercent,
       ).toBe(50);
     });
+
+    it("should include fallback window even if global utilization is zero", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            five_hour: { utilization: 0 },
+            seven_day: { utilization: 0 },
+          }),
+        }),
+      );
+      const result = await fetchClaudeUsage({ anthropic: { access: "mock" } });
+      expect(result.windows).toHaveLength(1);
+      expect(result.windows[0].usedPercent).toBe(0);
+    });
   });
 
   describe("fetchCopilotUsage", () => {
     it("should handle discovery and extraction branches", async () => {
-      const result = await fetchCopilotUsage(
+      const results = await fetchCopilotUsage(
         {
           authStorage: {
             getApiKey: async (id: string) => {
@@ -202,7 +220,7 @@ describe("Usage Fetchers", () => {
         },
         {},
       );
-      expect(result.provider).toBe("copilot");
+      expect(results[0].provider).toBe("copilot");
     });
 
     it("should handle token exchange and SKU Found fallback", async () => {
@@ -228,7 +246,7 @@ describe("Usage Fetchers", () => {
           text: async () => "forbidden",
         });
       vi.stubGlobal("fetch", fetchMock);
-      const result = await fetchCopilotUsage(
+      const results = await fetchCopilotUsage(
         {
           authStorage: {
             getApiKey: async () => "gh_token",
@@ -237,8 +255,8 @@ describe("Usage Fetchers", () => {
         },
         {},
       );
-      expect(result.plan).toBe("Enterprise");
-      expect(result.account).toBe("fallback");
+      expect(results[0].plan).toBe("Enterprise");
+      expect(results[0].account).toBe("fallback");
     });
 
     it("should handle 304 fallback", async () => {
@@ -250,7 +268,7 @@ describe("Usage Fetchers", () => {
         }),
       );
 
-      const result = await fetchCopilotUsage(
+      const results = await fetchCopilotUsage(
         {
           authStorage: {
             getApiKey: async () => "tid=mock",
@@ -259,7 +277,30 @@ describe("Usage Fetchers", () => {
         },
         {},
       );
-      expect(result.account).toBe("304-fallback");
+      expect(results[0].account).toBe("304-fallback");
+    });
+
+    it("should aggregate unique errors from multiple tokens", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi
+          .fn()
+          .mockResolvedValueOnce({ ok: false, status: 401 })
+          .mockResolvedValueOnce({ ok: false, status: 429 }),
+      );
+
+      const results = await fetchCopilotUsage(
+        {
+          authStorage: {
+            getApiKey: async (id: string) =>
+              id === "github-copilot" ? "tid=t1" : "tid=t2",
+          },
+        },
+        {},
+      );
+      expect(results[0].account).toBe("registry:github-copilot:apiKey");
+      expect(results[1].error).toContain("HTTP 429");
+      expect(results[0].error).toContain("HTTP 401");
     });
   });
 
@@ -406,7 +447,8 @@ describe("Usage Fetchers", () => {
         (cmd, options, cb): any => {
           if (typeof options === "function") cb = options;
           if (!cb) return;
-          if (cmd.startsWith("which")) cb(null, "/bin/kiro-cli", "");
+          if (cmd.startsWith("which") || cmd.startsWith("where"))
+            cb(null, "/bin/kiro-cli", "");
           else if (cmd.includes("whoami")) cb(null, "user", "");
           else if (cmd.includes("/usage")) {
             cb(
@@ -420,31 +462,64 @@ describe("Usage Fetchers", () => {
       const result = await fetchKiroUsage();
       expect(result.windows).toHaveLength(2);
       expect(result.windows[1].resetDescription).toBe("2d left");
+      expect(result.windows[1].usedPercent).toBe(50);
+    });
+
+    it("should correctly handle 'Remaining Bonus credits'", async () => {
+      const child_process = await import("node:child_process");
+      vi.mocked(child_process.exec).mockImplementation(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (cmd, options, cb): any => {
+          if (typeof options === "function") cb = options;
+          if (!cb) return;
+          if (cmd.startsWith("which") || cmd.startsWith("where"))
+            cb(null, "/bin/kiro-cli", "");
+          else if (cmd.includes("whoami")) cb(null, "user", "");
+          else if (cmd.includes("/usage")) {
+            cb(null, "Remaining Bonus credits: 2.5 / 10.0", "");
+          } else cb(null, "", "");
+        },
+      );
+      const result = await fetchKiroUsage();
+      const bonus = result.windows.find((w) => w.label === "Bonus");
+      expect(bonus?.usedPercent).toBe(75);
     });
   });
 
   describe("fetchCodexUsage", () => {
-    it("should handle credits and deduplication", async () => {
+    it("should handle credits and deduplication and distinguish by account", async () => {
       vi.stubGlobal(
         "fetch",
-        vi.fn().mockResolvedValue({
-          ok: true,
-          json: async () => ({
-            rate_limit: { primary_window: { used_percent: 10 } },
-            credits: { balance: 15.0 },
-            plan_type: "Plus",
+        vi
+          .fn()
+          .mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({
+              rate_limit: { primary_window: { used_percent: 10 } },
+              credits: { balance: 15.0 },
+              plan_type: "Plus",
+            }),
+          })
+          .mockResolvedValueOnce({
+            ok: true,
+            json: async () => ({
+              rate_limit: { primary_window: { used_percent: 10 } },
+              credits: { balance: 15.0 },
+              plan_type: "Plus",
+            }),
           }),
-        }),
       );
       const result = await fetchAllCodexUsages(
         {},
         {
           "openai-codex-1": { access: "token1" },
-          "openai-codex-2": { access: "token1" },
+          "openai-codex-2": { access: "token2" },
         },
       );
-      expect(result).toHaveLength(1);
-      expect(result[0].plan).toBe("Plus ($15.00)");
+      // Should have 2 because although usage is identical, they are from different accounts
+      expect(result).toHaveLength(2);
+      expect(result[0].account).toBe("pi:1");
+      expect(result[1].account).toBe("pi:2");
     });
   });
 
@@ -467,7 +542,12 @@ describe("Usage Fetchers", () => {
         "kiro",
         "zai",
       ]);
-      for (let i = 0; i < 10; i++) await vi.advanceTimersByTimeAsync(2000);
+
+      // Advance past the 12s timeout
+      await vi.advanceTimersByTimeAsync(13000);
+      // Ensure all microtasks and timers are processed
+      await vi.runAllTimersAsync();
+
       const result = await promise;
       expect(result[0].error).toBe("Timeout");
       vi.useRealTimers();

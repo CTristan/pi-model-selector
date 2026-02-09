@@ -8,7 +8,7 @@
   "autoRun": true,
   "debugLog": {
     "enabled": false,
-    "path": "model-selector.log"
+    "path": "/Users/chris/projects/pi-model-selector/config/model-selector.log"
   },
   "disabledProviders": ["kiro", "zai"],
   "mappings": [

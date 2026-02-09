@@ -285,9 +285,9 @@ describe("Usage Fetchers Branch Coverage", () => {
           get: vi.fn().mockRejectedValue(new Error("registry fail")),
         },
       };
-      const result = await fetchCopilotUsage(modelRegistry, {});
-      expect(result.provider).toBe("copilot");
-      expect(result.error).toBe("No token found");
+      const results = await fetchCopilotUsage(modelRegistry, {});
+      expect(results[0].provider).toBe("copilot");
+      expect(results[0].error).toBe("No token found");
     });
 
     it("should pick up token from gh auth token", async () => {
@@ -313,8 +313,8 @@ describe("Usage Fetchers Branch Coverage", () => {
         }),
       );
 
-      const result = await fetchCopilotUsage({}, {});
-      expect(result.account).toBe("gh-cli");
+      const results = await fetchCopilotUsage({}, {});
+      expect(results[0].account).toBe("gh-cli");
     });
 
     it("should fallback to 304 cached state", async () => {
@@ -332,9 +332,9 @@ describe("Usage Fetchers Branch Coverage", () => {
         }),
       );
 
-      const result = await fetchCopilotUsage({}, {});
-      expect(result.account).toBe("304-fallback");
-      expect(result.windows[0].resetDescription).toContain("cached");
+      const results = await fetchCopilotUsage({}, {});
+      expect(results[0].account).toBe("304-fallback");
+      expect(results[0].windows[0].resetDescription).toContain("cached");
     });
 
     it("fetchCopilotUsage should use registry token", async () => {
@@ -355,8 +355,8 @@ describe("Usage Fetchers Branch Coverage", () => {
         }),
       );
 
-      const result = await fetchCopilotUsage(modelRegistry, {});
-      expect(result.account).toContain("registry");
+      const results = await fetchCopilotUsage(modelRegistry, {});
+      expect(results[0].account).toContain("registry");
     });
   });
 
@@ -377,6 +377,7 @@ describe("Usage Fetchers Branch Coverage", () => {
         .fn()
         .mockResolvedValueOnce({ ok: false, status: 401 })
         .mockResolvedValueOnce({ ok: false })
+        .mockResolvedValueOnce({ ok: false })
         .mockResolvedValueOnce({
           ok: true,
           json: async () => ({ buckets: [] }),
@@ -391,7 +392,7 @@ describe("Usage Fetchers Branch Coverage", () => {
 
       const result = await fetchGeminiUsage({}, piAuth);
       expect(result.provider).toBe("gemini");
-      expect(fetchMock).toHaveBeenCalledTimes(3);
+      expect(fetchMock).toHaveBeenCalledTimes(4);
     });
 
     it("should handle generic model families", async () => {
@@ -431,6 +432,48 @@ describe("Usage Fetchers Branch Coverage", () => {
       );
       expect(await refreshGoogleToken("rt")).toBeNull();
     });
+
+    it("refreshGoogleToken should not force cloud-shell client_id when none is provided", async () => {
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ access_token: "new_token", expires_in: 3600 }),
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      await refreshGoogleToken("rt");
+
+      const firstOptions = fetchMock.mock.calls[0]?.[1] as
+        | RequestInit
+        | undefined;
+      const firstBody = firstOptions?.body as URLSearchParams;
+      expect(firstBody.toString()).not.toContain("client_id=");
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("refreshGoogleToken should fall back to cloud-shell client_id only after a failed no-client attempt", async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce({ ok: false, status: 400 })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ access_token: "new_token", expires_in: 3600 }),
+        });
+      vi.stubGlobal("fetch", fetchMock);
+
+      await refreshGoogleToken("rt");
+
+      const firstOptions = fetchMock.mock.calls[0]?.[1] as
+        | RequestInit
+        | undefined;
+      const firstBody = firstOptions?.body as URLSearchParams;
+      const secondOptions = fetchMock.mock.calls[1]?.[1] as
+        | RequestInit
+        | undefined;
+      const secondBody = secondOptions?.body as URLSearchParams;
+      expect(firstBody.toString()).not.toContain("client_id=");
+      expect(secondBody.toString()).toContain("client_id=");
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
   });
 
   // ========================================================================
@@ -449,6 +492,48 @@ describe("Usage Fetchers Branch Coverage", () => {
       delete process.env.ANTIGRAVITY_API_KEY;
     });
 
+    it("should merge projectId from piAuth when token comes from registry", async () => {
+      const modelRegistry = {
+        authStorage: {
+          getApiKey: async () => "registry_token",
+          get: async () => ({}),
+        },
+      };
+      const piAuth = {
+        "google-antigravity": { projectId: "pid" },
+      };
+
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({ models: {} }),
+        }),
+      );
+
+      const result = await fetchAntigravityUsage(modelRegistry, piAuth);
+      expect(result.error).toBe("No quota data");
+    });
+
+    it("should allow ANTIGRAVITY_API_KEY auth when projectId exists in piAuth", async () => {
+      process.env.ANTIGRAVITY_API_KEY = "env_key";
+      const piAuth = {
+        "google-antigravity": { projectId: "pid" },
+      };
+
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({ models: {} }),
+        }),
+      );
+
+      const result = await fetchAntigravityUsage({}, piAuth);
+      expect(result.error).toBe("No quota data");
+      delete process.env.ANTIGRAVITY_API_KEY;
+    });
+
     it("should handle refresh failure and fallback to piAuth", async () => {
       const modelRegistry = {
         authStorage: {
@@ -463,6 +548,7 @@ describe("Usage Fetchers Branch Coverage", () => {
 
       const fetchMock = vi.fn();
       fetchMock.mockResolvedValueOnce({ ok: false, status: 401 });
+      fetchMock.mockResolvedValueOnce({ ok: false });
       fetchMock.mockResolvedValueOnce({ ok: false });
       fetchMock.mockResolvedValueOnce({
         ok: true,
@@ -686,7 +772,7 @@ describe("Usage Fetchers Branch Coverage", () => {
           cb(null, "user", "");
         } else {
           // @ts-expect-error: mock callback signature
-          cb(null, "resets on 02/03", "");
+          cb(null, "Usage: 10% resets on 02/03", "");
         }
       });
 
@@ -705,7 +791,7 @@ describe("Usage Fetchers Branch Coverage", () => {
           cb(null, "user", "");
         } else {
           // @ts-expect-error: mock callback signature
-          cb(null, "resets on 10/11", "");
+          cb(null, "Usage: 10% resets on 10/11", "");
         }
       });
       const result = await fetchKiroUsage();
@@ -745,9 +831,9 @@ describe("Usage Fetchers Branch Coverage", () => {
 
       vi.stubGlobal("fetch", fetchMock);
 
-      const result = await fetchCopilotUsage({}, piAuth);
+      const results = await fetchCopilotUsage({}, piAuth);
       // Should fail eventually
-      expect(result.error).toBeDefined();
+      expect(results[0].error).toBeDefined();
     });
     it("fetchGeminiUsage should try file fallback if refreshed token still fails", async () => {
       const piAuth = {
@@ -985,8 +1071,8 @@ describe("Usage Fetchers Branch Coverage", () => {
         fetchMock.mockRejectedValueOnce(new Error("net"));
 
         vi.stubGlobal("fetch", fetchMock);
-        const res = await fetchCopilotUsage({}, piAuth);
-        expect(res.error).toBeDefined();
+        const results = await fetchCopilotUsage({}, piAuth);
+        expect(results[0].error).toBeDefined();
       });
 
       it("should handle tryExchange response ok but no token", async () => {
@@ -1005,8 +1091,8 @@ describe("Usage Fetchers Branch Coverage", () => {
         fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({}) });
 
         vi.stubGlobal("fetch", fetchMock);
-        const res = await fetchCopilotUsage({}, piAuth);
-        expect(res.error).toBeDefined();
+        const results = await fetchCopilotUsage({}, piAuth);
+        expect(results[0].error).toBeDefined();
       });
 
       it("should ignore unlimited chat snapshots", async () => {
@@ -1020,8 +1106,8 @@ describe("Usage Fetchers Branch Coverage", () => {
             }),
           }),
         );
-        const res = await fetchCopilotUsage({}, piAuth);
-        expect(res.windows).toHaveLength(0);
+        const results = await fetchCopilotUsage({}, piAuth);
+        expect(results[0].windows).toHaveLength(0);
       });
 
       it("should find tokens in piAuth directly", async () => {
@@ -1033,8 +1119,8 @@ describe("Usage Fetchers Branch Coverage", () => {
             json: async () => ({ quota_snapshots: {} }),
           }),
         );
-        const res = await fetchCopilotUsage({}, piAuth);
-        expect(res.account).toBe("auth.json");
+        const results = await fetchCopilotUsage({}, piAuth);
+        expect(results[0].account).toBe("auth.json.access");
       });
 
       it("should handle gh auth token throwing", async () => {
@@ -1045,8 +1131,8 @@ describe("Usage Fetchers Branch Coverage", () => {
             cb(new Error("fail"), "", "");
           },
         );
-        const res = await fetchCopilotUsage({}, {});
-        expect(res.error).toBe("No token found");
+        const results = await fetchCopilotUsage({}, {});
+        expect(results[0].error).toBe("No token found");
       });
     });
 
@@ -1273,7 +1359,8 @@ describe("Usage Fetchers Branch Coverage", () => {
           (cmd, opts, cb): any => {
             if (typeof opts === "function") cb = opts as any;
             if (cb) {
-              if (cmd.includes("/usage")) cb(null, "resets on 10/11", "");
+              if (cmd.includes("/usage"))
+                cb(null, "Usage: 10% resets on 10/11", "");
               else cb(null, "ok", "");
             }
           },
@@ -1288,7 +1375,8 @@ describe("Usage Fetchers Branch Coverage", () => {
           (cmd, opts, cb): any => {
             if (typeof opts === "function") cb = opts as any;
             if (cb) {
-              if (cmd.includes("/usage")) cb(null, "resets on 01/01", "");
+              if (cmd.includes("/usage"))
+                cb(null, "Usage: 10% resets on 01/01", "");
               else cb(null, "ok", "");
             }
           },

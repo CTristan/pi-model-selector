@@ -37,8 +37,8 @@
     "format:fix": "prettier --write .",
     "test": "vitest run --coverage",
     "test:watch": "vitest",
-    "ci": "npm run type-check && npm run test",
-    "setup-hooks": "node scripts/setup-hooks.js",
+    "ci": "./scripts/ci.sh",
+    "setup-hooks": "./scripts/setup-hooks.sh",
     "prepare": "node scripts/prepare.js"
   }
 }
