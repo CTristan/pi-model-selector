@@ -26,6 +26,7 @@ export function buildCandidates(usages: UsageSnapshot[]): UsageCandidate[] {
 				usedPercent,
 				remainingPercent,
 				resetsAt: window.resetsAt,
+				account: usage.account,
 			});
 		}
 	}
@@ -68,8 +69,8 @@ export function compareCandidates(
 			if (aReset === undefined && bReset === undefined) {
 				continue;
 			}
-			if (aReset === undefined) return { diff: -1, rule };
-			if (bReset === undefined) return { diff: 1, rule };
+			if (aReset === undefined) return { diff: 1, rule };
+			if (bReset === undefined) return { diff: -1, rule };
 			const diff = bReset - aReset;
 			if (diff !== 0) return { diff, rule };
 		}
@@ -128,6 +129,17 @@ export function selectionReason(best: UsageCandidate, runnerUp: UsageCandidate |
 // Mapping Helpers
 // ============================================================================
 
+const regexCache = new Map<string, RegExp>();
+
+function getCachedRegex(pattern: string): RegExp {
+	let re = regexCache.get(pattern);
+	if (!re) {
+		re = new RegExp(pattern);
+		regexCache.set(pattern, re);
+	}
+	return re;
+}
+
 type MappingPredicate = (mapping: MappingEntry) => boolean;
 
 function findMappingBy(
@@ -135,28 +147,39 @@ function findMappingBy(
 	mappings: MappingEntry[],
 	predicate: MappingPredicate
 ): MappingEntry | undefined {
-	const exact = mappings.find(
-		(mapping) =>
-			predicate(mapping) &&
-			mapping.usage.provider === candidate.provider &&
-			mapping.usage.window === candidate.windowLabel
-	);
-	if (exact) return exact;
+	const matches = (m: MappingEntry) => predicate(m) && m.usage.provider === candidate.provider;
 
-	const pattern = mappings.find((mapping) => {
-		if (!predicate(mapping)) return false;
-		if (mapping.usage.provider !== candidate.provider || !mapping.usage.windowPattern) return false;
-		return new RegExp(mapping.usage.windowPattern).test(candidate.windowLabel);
-	});
-	if (pattern) return pattern;
+	// 1. Exact window matches (account first, then generic)
+	const exactAccount = mappings.find((m) => matches(m) && m.usage.account === candidate.account && m.usage.window === candidate.windowLabel);
+	if (exactAccount) return exactAccount;
 
-	return mappings.find(
-		(mapping) =>
-			predicate(mapping) &&
-			mapping.usage.provider === candidate.provider &&
-			!mapping.usage.window &&
-			!mapping.usage.windowPattern
-	);
+	const exactGeneric = mappings.find((m) => matches(m) && m.usage.account === undefined && m.usage.window === candidate.windowLabel);
+	if (exactGeneric) return exactGeneric;
+
+	// 2. Pattern matches (account first, then generic)
+	const patternMatch = (m: MappingEntry) => {
+		if (!m.usage.windowPattern) return false;
+		try {
+			return getCachedRegex(m.usage.windowPattern).test(candidate.windowLabel);
+		} catch {
+			return false;
+		}
+	};
+
+	const patternAccount = mappings.find((m) => matches(m) && m.usage.account === candidate.account && patternMatch(m));
+	if (patternAccount) return patternAccount;
+
+	const patternGeneric = mappings.find((m) => matches(m) && m.usage.account === undefined && patternMatch(m));
+	if (patternGeneric) return patternGeneric;
+
+	// 3. Catch-all matches (account first, then generic)
+	const catchAllAccount = mappings.find((m) => matches(m) && m.usage.account === candidate.account && !m.usage.window && !m.usage.windowPattern);
+	if (catchAllAccount) return catchAllAccount;
+
+	const catchAllGeneric = mappings.find((m) => matches(m) && m.usage.account === undefined && !m.usage.window && !m.usage.windowPattern);
+	if (catchAllGeneric) return catchAllGeneric;
+
+	return undefined;
 }
 
 export function findModelMapping(candidate: UsageCandidate, mappings: MappingEntry[]): MappingEntry | undefined {
@@ -168,7 +191,7 @@ export function findIgnoreMapping(candidate: UsageCandidate, mappings: MappingEn
 }
 
 export function candidateKey(candidate: UsageCandidate): string {
-	return `${candidate.provider}|${candidate.windowLabel}`;
+	return `${candidate.provider}|${candidate.account ?? ""}|${candidate.windowLabel}`;
 }
 
 export function dedupeCandidates(candidates: UsageCandidate[]): UsageCandidate[] {

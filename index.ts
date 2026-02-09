@@ -38,12 +38,26 @@ export type { MappingEntry, PriorityRule, UsageCandidate, LoadedConfig, WidgetCo
 // Helpers
 // ============================================================================
 
-function isProviderIgnored(provider: string, mappings: MappingEntry[]): boolean {
+function isProviderIgnored(provider: string, account: string | undefined, mappings: MappingEntry[]): boolean {
+	const isCatchAll = (pattern: string) => {
+		try {
+			// A catch-all pattern is one that matches almost any string.
+			// We test against several diverse strings to verify.
+			const re = new RegExp(pattern);
+			const testStrings = ["", "abc", "123", "Some Window", "---"];
+			return testStrings.every(s => re.test(s));
+		} catch {
+			return false;
+		}
+	};
+
 	return mappings.some(
 		(m) =>
 			m.usage.provider === provider &&
+			(m.usage.account === undefined || m.usage.account === account) &&
 			m.ignore === true &&
-			((!m.usage.window && !m.usage.windowPattern) || m.usage.windowPattern === ".*" || m.usage.windowPattern === "^.*$")
+			((!m.usage.window && !m.usage.windowPattern) || 
+			 (m.usage.windowPattern && isCatchAll(m.usage.windowPattern)))
 	);
 }
 
@@ -66,7 +80,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 		return;
 	}
 
-	const config = loadConfig(ctx, { requireMappings: false });
+	const config = await loadConfig(ctx, { requireMappings: false });
 	if (!config) return;
 
 	const locationLabels = [
@@ -127,7 +141,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 
 		try {
 			targetRaw.priority = selectedPriority;
-			saveConfigFile(targetPath, targetRaw);
+			await saveConfigFile(targetPath, targetRaw);
 		} catch (error) {
 			notify(ctx, "error", `Failed to write ${targetPath}: ${error}`);
 			return;
@@ -212,19 +226,24 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 				? {
 						usage: {
 							provider: selectedCandidate.provider,
+							account: selectedCandidate.account,
 							window: pattern ? undefined : selectedCandidate.windowLabel,
 							windowPattern: pattern,
 						},
 						model: { provider: selectedModel.provider, id: selectedModel.id },
 					}
 				: {
-						usage: { provider: selectedCandidate.provider, window: selectedCandidate.windowLabel },
+						usage: {
+							provider: selectedCandidate.provider,
+							account: selectedCandidate.account,
+							window: selectedCandidate.windowLabel,
+						},
 						ignore: true,
 					};
 
 			try {
 				upsertMapping(targetRaw, mappingEntry);
-				saveConfigFile(targetPath, targetRaw);
+				await saveConfigFile(targetPath, targetRaw);
 			} catch (error) {
 				notify(ctx, "error", `Failed to write ${targetPath}: ${error}`);
 				return;
@@ -284,7 +303,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 
 		try {
 			updateWidgetConfig(targetRaw, widgetUpdate);
-			saveConfigFile(targetPath, targetRaw);
+			await saveConfigFile(targetPath, targetRaw);
 		} catch (error) {
 			notify(ctx, "error", `Failed to write ${targetPath}: ${error}`);
 			return;
@@ -335,14 +354,14 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 
 		try {
 			targetRaw.debugLog = debugUpdate;
-			saveConfigFile(targetPath, targetRaw);
+			await saveConfigFile(targetPath, targetRaw);
 		} catch (error) {
 			notify(ctx, "error", `Failed to write ${targetPath}: ${error}`);
 			return;
 		}
 
 		// Reload config to apply path resolution
-		const reloaded = loadConfig(ctx, { requireMappings: false });
+		const reloaded = await loadConfig(ctx, { requireMappings: false });
 		if (reloaded) {
 			config.debugLog = reloaded.debugLog;
 			setGlobalConfig(reloaded);
@@ -351,7 +370,35 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 		notify(ctx, "info", `Debug logging ${config.debugLog?.enabled ? "enabled" : "disabled"}.`);
 	};
 
-	const menuOptions = ["Edit mappings", "Configure priority", "Configure widget", "Configure debug log", "Done"];
+	const configureAutoRun = async (): Promise<void> => {
+		const currentStatus = config.autoRun ? "enabled" : "disabled";
+		const choice = await ctx.ui.select(`Auto-run after every turn (current: ${currentStatus})`, [
+			config.autoRun ? "Disable auto-run" : "Enable auto-run",
+		]);
+		if (!choice) return;
+
+		const newValue = choice === "Enable auto-run";
+
+		const locationChoice = await ctx.ui.select("Save auto-run setting to", locationLabels);
+		if (!locationChoice) return;
+
+		const saveToProject = locationChoice === locationLabels[1];
+		const targetRaw = saveToProject ? config.raw.project : config.raw.global;
+		const targetPath = saveToProject ? config.sources.projectPath : config.sources.globalPath;
+
+		try {
+			targetRaw.autoRun = newValue;
+			await saveConfigFile(targetPath, targetRaw);
+		} catch (error) {
+			notify(ctx, "error", `Failed to write ${targetPath}: ${error}`);
+			return;
+		}
+
+		config.autoRun = newValue;
+		notify(ctx, "info", `Auto-run ${newValue ? "enabled" : "disabled"}.`);
+	};
+
+	const menuOptions = ["Edit mappings", "Configure priority", "Configure widget", "Configure auto-run", "Configure debug log", "Done"];
 
 	while (true) {
 		const action = await ctx.ui.select("Model selector configuration", menuOptions);
@@ -372,6 +419,11 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 			continue;
 		}
 
+		if (action === "Configure auto-run") {
+			await configureAutoRun();
+			continue;
+		}
+
 		if (action === "Configure debug log") {
 			await configureDebugLog();
 			continue;
@@ -386,7 +438,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 export default function modelSelectorExtension(pi: ExtensionAPI) {
 	let running = false;
 
-	const runSelector = async (ctx: ExtensionContext, reason: "startup" | "command") => {
+	const runSelector = async (ctx: ExtensionContext, reason: "startup" | "command" | "auto", preloadedConfig?: LoadedConfig) => {
 		if (running) {
 			notify(ctx, "warning", "Model selector is already running.");
 			return;
@@ -394,7 +446,7 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
 		running = true;
 
 		try {
-			const config = loadConfig(ctx);
+			const config = preloadedConfig || (await loadConfig(ctx));
 			if (!config) return;
 			setGlobalConfig(config);
 			writeDebugLog(`Running selector (reason: ${reason})`);
@@ -402,7 +454,7 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
 			const usages = await fetchAllUsages(ctx.modelRegistry, config.disabledProviders);
 
 			for (const usage of usages) {
-				if (usage.error && !isProviderIgnored(usage.provider, config.mappings)) {
+				if (usage.error && !isProviderIgnored(usage.provider, usage.account, config.mappings)) {
 					notify(ctx, "warning", `Usage check failed for ${usage.displayName}: ${usage.error}`);
 				}
 			}
@@ -434,9 +486,15 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
 
 			const mapping = findModelMapping(best, config.mappings);
 			if (!mapping || !mapping.model) {
+				const usage: any = { provider: best.provider };
+				if (best.account && best.account !== "none") {
+					usage.account = best.account;
+				}
+				usage.window = best.windowLabel;
+
 				const suggestedMapping = JSON.stringify(
 					{
-						usage: { provider: best.provider, window: best.windowLabel },
+						usage,
 						model: { provider: "<provider>", id: "<model-id>" },
 					},
 					null,
@@ -444,7 +502,7 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
 				);
 				const suggestedIgnore = JSON.stringify(
 					{
-						usage: { provider: best.provider, window: best.windowLabel },
+						usage,
 						ignore: true,
 					},
 					null,
@@ -470,7 +528,7 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
 
 			const success = await pi.setModel(model);
 			if (!success) {
-				notify(ctx, "error", `No API key available for ${mapping.model.provider}/${mapping.model.id}.`);
+				notify(ctx, "error", `Failed to set model to ${mapping.model.provider}/${mapping.model.id}. Check provider status or credentials.`);
 				return;
 			}
 
@@ -497,6 +555,13 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
 	pi.on("session_switch", async (event, ctx) => {
 		if (event.reason === "new") {
 			await runSelector(ctx, "startup");
+		}
+	});
+
+	pi.on("agent_end", async (_event, ctx) => {
+		const config = await loadConfig(ctx, { requireMappings: false });
+		if (config?.autoRun) {
+			await runSelector(ctx, "auto", config);
 		}
 	});
 

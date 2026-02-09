@@ -9,6 +9,7 @@
     "placement": "belowEditor",
     "showCount": 3
   },
+  "autoRun": true,
   "debugLog": {
     "enabled": true,
     "path": "model-selector.log"

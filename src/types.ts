@@ -1,4 +1,5 @@
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
+import * as fs from "node:fs";
 
 // ============================================================================
 // Core Types
@@ -17,10 +18,12 @@ export interface UsageSnapshot {
 	windows: RateWindow[];
 	plan?: string;
 	error?: string;
+	account?: string;
 }
 
 export interface UsageMappingKey {
 	provider: string;
+	account?: string;
 	window?: string;
 	windowPattern?: string;
 }
@@ -42,6 +45,7 @@ export interface ModelSelectorConfig {
 	mappings: MappingEntry[];
 	priority?: PriorityRule[];
 	widget?: WidgetConfig;
+	autoRun?: boolean;
 }
 
 export interface WidgetConfig {
@@ -57,12 +61,14 @@ export interface UsageCandidate {
 	usedPercent: number;
 	remainingPercent: number;
 	resetsAt?: Date;
+	account?: string;
 }
 
 export interface LoadedConfig {
 	mappings: MappingEntry[];
 	priority: PriorityRule[];
 	widget: Required<WidgetConfig>;
+	autoRun: boolean;
 	disabledProviders: string[];
 	debugLog?: {
 		enabled: boolean;
@@ -80,18 +86,40 @@ export type ProviderName = typeof ALL_PROVIDERS[number];
 // ============================================================================
 
 let currentConfig: LoadedConfig | undefined;
+let isWriting = false;
+const logQueue: string[] = [];
 
 export function setGlobalConfig(config: LoadedConfig | undefined): void {
 	currentConfig = config;
 }
 
+function processLogQueue(): void {
+	if (isWriting || logQueue.length === 0 || !currentConfig?.debugLog?.path) {
+		return;
+	}
+
+	isWriting = true;
+	const batch = logQueue.join("");
+	logQueue.length = 0;
+
+	fs.appendFile(currentConfig.debugLog.path, batch, (err) => {
+		isWriting = false;
+		if (err) {
+			console.error(`[model-selector] Failed to write to debug log: ${err}`);
+		}
+		processLogQueue();
+	});
+}
+
 export function writeDebugLog(message: string): void {
 	if (!currentConfig?.debugLog?.enabled) return;
 	try {
-		const fs = require("node:fs");
 		const timestamp = new Date().toISOString();
-		fs.appendFileSync(currentConfig.debugLog.path, `[${timestamp}] ${message}\n`);
-	} catch {}
+		logQueue.push(`[${timestamp}] ${message}\n`);
+		processLogQueue();
+	} catch (error) {
+		console.error(`[model-selector] Unexpected error in writeDebugLog: ${error}`);
+	}
 }
 
 export function notify(
@@ -114,7 +142,7 @@ export function notify(
 }
 
 export function mappingKey(entry: MappingEntry): string {
-	return `${entry.usage.provider}|${entry.usage.window ?? ""}|${entry.usage.windowPattern ?? ""}`;
+	return `${entry.usage.provider}|${entry.usage.account ?? ""}|${entry.usage.window ?? ""}|${entry.usage.windowPattern ?? ""}`;
 }
 
 export const DEFAULT_PRIORITY: PriorityRule[] = ["fullAvailability", "remainingPercent", "earliestReset"];

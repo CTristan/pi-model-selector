@@ -51,10 +51,14 @@ export function getGlobalConfigPath(): string {
 // Config File I/O
 // ============================================================================
 
-export function readConfigFile(filePath: string, errors: string[]): Record<string, any> | null {
-	if (!fs.existsSync(filePath)) return null;
+export async function readConfigFile(filePath: string, errors: string[]): Promise<Record<string, any> | null> {
 	try {
-		const raw = fs.readFileSync(filePath, "utf-8");
+		await fs.promises.access(filePath);
+	} catch {
+		return null;
+	}
+	try {
+		const raw = await fs.promises.readFile(filePath, "utf-8");
 		const parsed = JSON.parse(raw);
 		if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
 			errors.push(`Failed to read ${filePath}: expected a JSON object`);
@@ -67,15 +71,16 @@ export function readConfigFile(filePath: string, errors: string[]): Record<strin
 	}
 }
 
-export function saveConfigFile(filePath: string, raw: Record<string, any>): void {
-	fs.mkdirSync(path.dirname(filePath), { recursive: true });
+export async function saveConfigFile(filePath: string, raw: Record<string, any>): Promise<void> {
+	await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
 	const tempPath = `${filePath}.tmp.${Math.random().toString(36).slice(2)}`;
 	try {
-		fs.writeFileSync(tempPath, JSON.stringify(raw, null, 2) + "\n", "utf-8");
-		fs.renameSync(tempPath, filePath);
+		await fs.promises.writeFile(tempPath, JSON.stringify(raw, null, 2) + "\n", "utf-8");
+		await fs.promises.rename(tempPath, filePath);
 	} catch (error) {
 		try {
-			if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+			await fs.promises.access(tempPath);
+			await fs.promises.unlink(tempPath);
 		} catch {}
 		throw error;
 	}
@@ -89,6 +94,7 @@ function asConfigShape(raw: Record<string, any>): {
 	mappings?: unknown[];
 	priority?: unknown;
 	widget?: unknown;
+	autoRun?: unknown;
 	debugLog?: unknown;
 	disabledProviders?: unknown;
 } {
@@ -96,6 +102,7 @@ function asConfigShape(raw: Record<string, any>): {
 		mappings: Array.isArray(raw.mappings) ? raw.mappings : undefined,
 		priority: Array.isArray(raw.priority) ? (raw.priority as PriorityRule[]) : undefined,
 		widget: raw.widget && typeof raw.widget === "object" ? raw.widget : undefined,
+		autoRun: raw.autoRun,
 		debugLog: raw.debugLog && typeof raw.debugLog === "object" ? raw.debugLog : undefined,
 		disabledProviders: Array.isArray(raw.disabledProviders) ? raw.disabledProviders : undefined,
 	};
@@ -179,9 +186,21 @@ function normalizeWidget(
 	return Object.keys(result).length > 0 ? result : undefined;
 }
 
+function normalizeAutoRun(
+	raw: ReturnType<typeof asConfigShape>,
+	_sourceLabel: string,
+	_errors: string[]
+): boolean | undefined {
+	if (typeof raw.autoRun === "boolean") {
+		return raw.autoRun;
+	}
+	return undefined;
+}
+
 interface RawMappingItem {
 	usage?: {
 		provider?: unknown;
+		account?: unknown;
 		window?: unknown;
 		windowPattern?: unknown;
 	};
@@ -237,6 +256,7 @@ function normalizeMappings(
 		mappings.push({
 			usage: {
 				provider: usage.provider,
+				account: typeof usage.account === "string" ? usage.account : undefined,
 				window: typeof usage.window === "string" ? usage.window : undefined,
 				windowPattern: typeof usage.windowPattern === "string" ? usage.windowPattern : undefined,
 			},
@@ -274,17 +294,17 @@ function mergeWidgetConfig(
 // Config Loading
 // ============================================================================
 
-export function loadConfig(
+export async function loadConfig(
 	ctx: ExtensionContext,
 	options: { requireMappings?: boolean } = {}
-): LoadedConfig | null {
+): Promise<LoadedConfig | null> {
 	const errors: string[] = [];
 	const requireMappings = options.requireMappings ?? true;
 	const projectPath = path.join(ctx.cwd, ".pi", "model-selector.json");
 	const globalConfigPath = getGlobalConfigPath();
 
-	const globalRaw = readConfigFile(globalConfigPath, errors) ?? { mappings: [] };
-	const projectRaw = readConfigFile(projectPath, errors) ?? { mappings: [] };
+	const globalRaw = (await readConfigFile(globalConfigPath, errors)) ?? { mappings: [] };
+	const projectRaw = (await readConfigFile(projectPath, errors)) ?? { mappings: [] };
 
 	const globalConfig = asConfigShape(globalRaw);
 	const projectConfig = asConfigShape(projectRaw);
@@ -295,6 +315,8 @@ export function loadConfig(
 	const projectPriority = normalizePriority(projectConfig, projectPath, errors);
 	const globalWidget = normalizeWidget(globalConfig, globalConfigPath, errors);
 	const projectWidget = normalizeWidget(projectConfig, projectPath, errors);
+	const globalAutoRun = normalizeAutoRun(globalConfig, globalConfigPath, errors);
+	const projectAutoRun = normalizeAutoRun(projectConfig, projectPath, errors);
 	const globalDebugLog = normalizeDebugLog(globalConfig, path.dirname(globalConfigPath));
 	const projectDebugLog = normalizeDebugLog(projectConfig, ctx.cwd);
 	const globalDisabled = normalizeDisabledProviders(globalConfig, globalConfigPath, errors);
@@ -319,6 +341,7 @@ export function loadConfig(
 		mappings,
 		priority: projectPriority ?? globalPriority ?? DEFAULT_PRIORITY,
 		widget: mergeWidgetConfig(globalWidget, projectWidget),
+		autoRun: projectAutoRun ?? globalAutoRun ?? false,
 		disabledProviders: [...new Set([...globalDisabled, ...projectDisabled])],
 		debugLog: (projectRaw.debugLog ? projectDebugLog : globalDebugLog),
 		sources: { globalPath: globalConfigPath, projectPath },
@@ -335,7 +358,15 @@ export function upsertMapping(raw: Record<string, any>, mapping: MappingEntry): 
 	const targetKey = mappingKey(mapping);
 	const filtered = existing.filter((entry: any) => {
 		const usage = entry?.usage ?? {};
-		const entryKey = `${usage.provider ?? ""}|${usage.window ?? ""}|${usage.windowPattern ?? ""}`;
+		// Reconstruct a mapping-like object to use mappingKey for consistent comparison
+		const entryKey = mappingKey({
+			usage: {
+				provider: usage.provider ?? "",
+				account: usage.account ?? "",
+				window: usage.window ?? "",
+				windowPattern: usage.windowPattern ?? "",
+			},
+		} as MappingEntry);
 		return entryKey !== targetKey;
 	});
 	raw.mappings = [...filtered, mapping];
