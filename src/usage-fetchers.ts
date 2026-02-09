@@ -59,7 +59,7 @@ async function loadClaudeKeychainToken(): Promise<string | undefined> {
 	try {
 		const { stdout } = await execAsync(
 			"security find-generic-password -s \"Claude Code-credentials\" -w 2>/dev/null",
-			{ encoding: "utf-8" }
+			{ encoding: "utf-8", timeout: 5000 }
 		);
 		const keychainData = stdout.trim();
 		if (keychainData) {
@@ -121,43 +121,49 @@ export async function fetchClaudeUsage(piAuth: any = {}): Promise<UsageSnapshot>
 		const data = (await res.json()) as any;
 		const windows: RateWindow[] = [];
 
-		if (data.five_hour?.utilization !== undefined) {
-			const resetDate = safeDate(data.five_hour.resets_at);
-			windows.push({
-				label: "5h",
-				usedPercent: data.five_hour.utilization * 100,
-				resetDescription: resetDate ? formatReset(resetDate) : undefined,
-				resetsAt: resetDate,
-			});
-		}
+		const globalUtilization = Math.max(
+			data.five_hour?.utilization ?? 0,
+			data.seven_day?.utilization ?? 0
+		);
 
-		if (data.seven_day?.utilization !== undefined) {
-			const resetDate = safeDate(data.seven_day.resets_at);
+		const globalResetsAt = [data.five_hour?.resets_at, data.seven_day?.resets_at]
+			.map(safeDate)
+			.filter((d): d is Date => d !== undefined)
+			.sort((a, b) => b.getTime() - a.getTime())[0];
+
+		const addPessimisticWindow = (label: string, utilization: number, resetsAtStr?: string) => {
+			const finalUtilization = Math.max(globalUtilization, utilization);
+			let finalResetsAt = safeDate(resetsAtStr);
+
+			if (globalUtilization > utilization && globalResetsAt) {
+				if (!finalResetsAt || globalResetsAt > finalResetsAt) {
+					finalResetsAt = globalResetsAt;
+				}
+			}
+
 			windows.push({
-				label: "Week",
-				usedPercent: data.seven_day.utilization * 100,
-				resetDescription: resetDate ? formatReset(resetDate) : undefined,
-				resetsAt: resetDate,
+				label,
+				usedPercent: finalUtilization * 100,
+				resetDescription: finalResetsAt ? formatReset(finalResetsAt) : undefined,
+				resetsAt: finalResetsAt,
 			});
-		}
+		};
 
 		if (data.seven_day_sonnet?.utilization !== undefined) {
-			const resetDate = safeDate(data.seven_day_sonnet.resets_at);
-			windows.push({
-				label: "Sonnet",
-				usedPercent: data.seven_day_sonnet.utilization * 100,
-				resetDescription: resetDate ? formatReset(resetDate) : undefined,
-				resetsAt: resetDate,
-			});
+			addPessimisticWindow("Sonnet", data.seven_day_sonnet.utilization, data.seven_day_sonnet.resets_at);
 		}
 
 		if (data.seven_day_opus?.utilization !== undefined) {
-			const resetDate = safeDate(data.seven_day_opus.resets_at);
+			addPessimisticWindow("Opus", data.seven_day_opus.utilization, data.seven_day_opus.resets_at);
+		}
+
+		if (windows.length === 0 && globalUtilization > 0) {
+			const label = (data.five_hour?.utilization ?? 0) >= (data.seven_day?.utilization ?? 0) ? "5h" : "Week";
 			windows.push({
-				label: "Opus",
-				usedPercent: data.seven_day_opus.utilization * 100,
-				resetDescription: resetDate ? formatReset(resetDate) : undefined,
-				resetsAt: resetDate,
+				label,
+				usedPercent: globalUtilization * 100,
+				resetDescription: globalResetsAt ? formatReset(globalResetsAt) : undefined,
+				resetsAt: globalResetsAt,
 			});
 		}
 
@@ -191,7 +197,7 @@ export async function fetchCopilotUsage(modelRegistry: any, piAuth: any = {}): P
 				source,
 				isCopilotToken: token.startsWith("tid="),
 			});
-			writeDebugLog(`fetchCopilotUsage: added token from ${source} (prefix: ${token.substring(0, 4)}, isCopilot: ${token.startsWith("tid=")})`);
+			writeDebugLog(`fetchCopilotUsage: added token from ${source}`);
 		};
 
 		const extractFromData = (data: any, source: string) => {
@@ -223,7 +229,7 @@ export async function fetchCopilotUsage(modelRegistry: any, piAuth: any = {}): P
 		}
 
 		try {
-			const { stdout } = await execAsync("gh auth token", { encoding: "utf-8" });
+			const { stdout } = await execAsync("gh auth token", { encoding: "utf-8", timeout: 5000 });
 			if (stdout.trim()) addToken(stdout.trim(), "gh-cli");
 		} catch {}
 
@@ -262,7 +268,7 @@ export async function fetchCopilotUsage(modelRegistry: any, piAuth: any = {}): P
 				if (res.ok) {
 					const data = await res.json() as any;
 					if (data.token) {
-						writeDebugLog(`fetchCopilotUsage: exchange successful (new prefix: ${data.token.substring(0, 4)})`);
+						writeDebugLog("fetchCopilotUsage: exchange successful");
 						return { token: data.token, sku: data.sku };
 					}
 				} else {
@@ -344,7 +350,13 @@ export async function fetchCopilotUsage(modelRegistry: any, piAuth: any = {}): P
 
 			if (res.status === 401 || res.status === 403) {
 				const body = await res.text();
-				lastError = `HTTP ${res.status} from ${t.source}: ${body.slice(0, 100)}`;
+				writeDebugLog(
+					`fetchCopilotUsage: auth failure HTTP ${res.status} from ${t.source}, body (truncated): ${body.slice(
+						0,
+						100
+					)}`
+				);
+				lastError = `HTTP ${res.status} from ${t.source}`;
 			} else {
 				lastError = `HTTP ${res.status} from ${t.source}`;
 			}
@@ -490,31 +502,31 @@ export async function fetchGeminiUsage(_modelRegistry: any, piAuth: any = {}): P
 		}
 
 		const data = (await res.json()) as any;
-		const quotas: Record<string, number> = {};
+		const families: Record<string, number> = {};
 
 		for (const bucket of data.buckets || []) {
-			const model = bucket.modelId || "unknown";
+			const modelId = bucket.modelId || "unknown";
 			const frac = bucket.remainingFraction ?? 1;
-			// Pessimistic: keep the model with the LEAST remaining quota (min fraction)
-			// as all rate limits must be satisfied.
-			if (quotas[model] === undefined || frac < quotas[model]) quotas[model] = frac;
+
+			let family = "Other";
+			if (modelId.toLowerCase().includes("pro")) family = "Pro";
+			else if (modelId.toLowerCase().includes("flash")) family = "Flash";
+			else {
+				const parts = modelId.split("-");
+				if (parts.length > 0) {
+					family = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+				}
+			}
+
+			if (families[family] === undefined || frac < families[family]) {
+				families[family] = frac;
+			}
 		}
 
 		const windows: RateWindow[] = [];
-		let proMin = 2.0; // Higher than any valid fraction
-		let flashMin = 2.0;
-
-		for (const [model, frac] of Object.entries(quotas)) {
-			if (model.toLowerCase().includes("pro")) {
-				if (frac < proMin) proMin = frac;
-			}
-			if (model.toLowerCase().includes("flash")) {
-				if (frac < flashMin) flashMin = frac;
-			}
+		for (const [label, frac] of Object.entries(families)) {
+			windows.push({ label, usedPercent: (1 - frac) * 100 });
 		}
-
-		if (proMin <= 1.0) windows.push({ label: "Pro", usedPercent: (1 - proMin) * 100 });
-		if (flashMin <= 1.0) windows.push({ label: "Flash", usedPercent: (1 - flashMin) * 100 });
 
 		return { provider: "gemini", displayName: "Gemini", windows, account: "pi-auth" };
 	} catch (error) {
@@ -873,30 +885,38 @@ async function fetchCodexUsageForCredential(cred: CodexCredential): Promise<Usag
 			const data = (await res.json()) as any;
 			const windows: RateWindow[] = [];
 
-			if (data.rate_limit?.primary_window) {
-				const pw = data.rate_limit.primary_window;
-				const resetDate = pw.reset_at ? new Date(pw.reset_at * 1000) : undefined;
-				const windowHours = Math.round((pw.limit_window_seconds || 10800) / 3600);
-				const usedPercent = typeof pw.used_percent === "number" ? pw.used_percent : Number(pw.used_percent) || 0;
-				windows.push({
-					label: `${windowHours}h`,
-					usedPercent,
-					resetDescription: resetDate ? formatReset(resetDate) : undefined,
-					resetsAt: resetDate,
-				});
-			}
+			let maxUsed = -1;
+			let bestLabel = "";
+			let bestResetsAt: Date | undefined;
 
-			if (data.rate_limit?.secondary_window) {
-				const sw = data.rate_limit.secondary_window;
-				const resetDate = sw.reset_at ? new Date(sw.reset_at * 1000) : undefined;
-				const windowHours = Math.round((sw.limit_window_seconds || 86400) / 3600);
+			const checkCodex = (w: any) => {
+				if (!w) return;
+				const used = typeof w.used_percent === "number" ? w.used_percent : Number(w.used_percent) || 0;
+				const resetAt = w.reset_at ? new Date(w.reset_at * 1000) : undefined;
+				const windowHours = Math.round((w.limit_window_seconds || 10800) / 3600);
 				const label = windowHours >= 24 ? "Week" : `${windowHours}h`;
-				const usedPercent = typeof sw.used_percent === "number" ? sw.used_percent : Number(sw.used_percent) || 0;
+
+				if (used > maxUsed) {
+					maxUsed = used;
+					bestLabel = label;
+					bestResetsAt = resetAt;
+				} else if (used === maxUsed) {
+					if (resetAt && (!bestResetsAt || resetAt > bestResetsAt)) {
+						bestResetsAt = resetAt;
+						bestLabel = label;
+					}
+				}
+			};
+
+			checkCodex(data.rate_limit?.primary_window);
+			checkCodex(data.rate_limit?.secondary_window);
+
+			if (maxUsed >= 0) {
 				windows.push({
-					label,
-					usedPercent,
-					resetDescription: resetDate ? formatReset(resetDate) : undefined,
-					resetsAt: resetDate,
+					label: bestLabel,
+					usedPercent: maxUsed,
+					resetDescription: bestResetsAt ? formatReset(bestResetsAt) : undefined,
+					resetsAt: bestResetsAt,
 				});
 			}
 
@@ -997,8 +1017,8 @@ export async function fetchKiroUsage(): Promise<UsageSnapshot> {
 		}
 
 		let creditsPercent = 0;
-		// Be more specific to avoid matching random percentages
-		const percentMatch = stripped.match(/(?:█+|[#=]+|Progress:?|Usage:?)\s*(\d+)%/i);
+		// Tighten the regex to specifically target lines containing "Credits", "Usage", or "Progress"
+		const percentMatch = stripped.match(/(?:Progress|Usage|Credits|Quota|Remaining):?\s*(?:█+|[#=]+|\s+)?(\d+)%/i);
 		if (percentMatch) {
 			creditsPercent = parseInt(percentMatch[1], 10);
 		}
@@ -1016,22 +1036,41 @@ export async function fetchKiroUsage(): Promise<UsageSnapshot> {
 		const resetMatch = stripped.match(/resets\s+on\s+(\d{1,2}\/\d{1,2})/i);
 		if (resetMatch) {
 			const parts = resetMatch[1].split("/").map(Number);
-			let month = parts[0];
-			let day = parts[1];
-
-			// Heuristic for DD/MM vs MM/DD
-			if (month > 12) {
-				// Must be DD/MM
-				day = parts[0];
-				month = parts[1];
-			}
+			const first = parts[0];
+			const second = parts[1];
 
 			const now = new Date();
 			const year = now.getFullYear();
-			const d = new Date(year, month - 1, day);
-			if (!isNaN(d.getTime())) {
-				resetsAt = d;
-				// If date is in the past, assume it's next year
+
+			// Heuristic: pick the interpretation that results in the closest future date
+			const dateMD = new Date(year, first - 1, second);
+			const dateDM = new Date(year, second - 1, first);
+
+			const isValid = (d: Date) => !isNaN(d.getTime());
+
+			if (first > 12) {
+				resetsAt = dateDM; // Must be DD/MM
+			} else if (second > 12) {
+				resetsAt = dateMD; // Must be MM/DD
+			} else if (isValid(dateMD) && isValid(dateDM)) {
+				// Ambiguous. Pick the one that is in the future.
+				const diffMD = dateMD.getTime() - now.getTime();
+				const diffDM = dateDM.getTime() - now.getTime();
+				
+				if (diffMD > 0 && diffDM > 0) {
+					resetsAt = diffMD < diffDM ? dateMD : dateDM;
+				} else if (diffMD > 0) {
+					resetsAt = dateMD;
+				} else if (diffDM > 0) {
+					resetsAt = dateDM;
+				} else {
+					// Both in past, pick interpretation closer to now (likely current month)
+					resetsAt = diffMD > diffDM ? dateMD : dateDM;
+				}
+			}
+
+			if (resetsAt && isValid(resetsAt)) {
+				// If date is too far in the past, assume it's next year
 				if (resetsAt.getTime() < now.getTime() - 24 * 60 * 60 * 1000) {
 					resetsAt.setFullYear(year + 1);
 				}
@@ -1176,7 +1215,7 @@ export async function fetchAllUsages(modelRegistry: any, disabledProviders: stri
 		activeFetchers.map(f => 
 			timeout(
 				f.fetch(),
-				6000,
+				12000,
 				f.provider === "codex" 
 					? [{ provider: f.provider, displayName: f.provider, windows: [], error: "Timeout" }]
 					: { provider: f.provider, displayName: f.provider, windows: [], error: "Timeout" }

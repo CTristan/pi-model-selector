@@ -18,7 +18,7 @@ function getDirname(): string {
 	return path.dirname(fileURLToPath(import.meta.url));
 }
 
-function findGlobalConfigPath(): string {
+async function findGlobalConfigPathAsync(): Promise<string> {
 	if (cachedGlobalConfigPath) return cachedGlobalConfigPath;
 	
 	const currentDir = getDirname();
@@ -32,9 +32,12 @@ function findGlobalConfigPath(): string {
 	];
 	
 	for (const candidate of candidates) {
-		if (fs.existsSync(candidate)) {
+		try {
+			await fs.promises.access(candidate);
 			cachedGlobalConfigPath = candidate;
 			return candidate;
+		} catch {
+			// Continue to next candidate
 		}
 	}
 	
@@ -43,8 +46,8 @@ function findGlobalConfigPath(): string {
 	return cachedGlobalConfigPath;
 }
 
-export function getGlobalConfigPath(): string {
-	return findGlobalConfigPath();
+export async function getGlobalConfigPath(): Promise<string> {
+	return findGlobalConfigPathAsync();
 }
 
 // ============================================================================
@@ -54,7 +57,7 @@ export function getGlobalConfigPath(): string {
 export async function readConfigFile(filePath: string, errors: string[]): Promise<Record<string, any> | null> {
 	try {
 		await fs.promises.access(filePath);
-	} catch {
+	} catch (e) {
 		return null;
 	}
 	try {
@@ -95,7 +98,7 @@ function asConfigShape(raw: Record<string, any>): {
 	priority?: unknown;
 	widget?: unknown;
 	autoRun?: unknown;
-	debugLog?: unknown;
+	debugLog?: any;
 	disabledProviders?: unknown;
 } {
 	return {
@@ -103,13 +106,13 @@ function asConfigShape(raw: Record<string, any>): {
 		priority: Array.isArray(raw.priority) ? (raw.priority as PriorityRule[]) : undefined,
 		widget: raw.widget && typeof raw.widget === "object" ? raw.widget : undefined,
 		autoRun: raw.autoRun,
-		debugLog: raw.debugLog && typeof raw.debugLog === "object" ? raw.debugLog : undefined,
+		debugLog: raw.debugLog,
 		disabledProviders: Array.isArray(raw.disabledProviders) ? raw.disabledProviders : undefined,
 	};
 }
 
 function normalizeDebugLog(
-	raw: ReturnType<typeof asConfigShape>,
+	raw: any,
 	basePath: string
 ): { enabled: boolean; path: string } {
 	const debug = (raw.debugLog as any) || {};
@@ -244,6 +247,13 @@ function normalizeMappings(
 		const model = item.model;
 		const ignore = item.ignore === true;
 
+		if (ignore && model) {
+			errors.push(
+				`[${sourceLabel}] invalid mapping entry: cannot specify both "ignore: true" and a "model"`
+			);
+			continue;
+		}
+
 		if (!model && !ignore) {
 			continue; // Skip entries without model or ignore
 		}
@@ -301,7 +311,7 @@ export async function loadConfig(
 	const errors: string[] = [];
 	const requireMappings = options.requireMappings ?? true;
 	const projectPath = path.join(ctx.cwd, ".pi", "model-selector.json");
-	const globalConfigPath = getGlobalConfigPath();
+	const globalConfigPath = await getGlobalConfigPath();
 
 	const globalRaw = (await readConfigFile(globalConfigPath, errors)) ?? { mappings: [] };
 	const projectRaw = (await readConfigFile(projectPath, errors)) ?? { mappings: [] };
@@ -343,7 +353,7 @@ export async function loadConfig(
 		widget: mergeWidgetConfig(globalWidget, projectWidget),
 		autoRun: projectAutoRun ?? globalAutoRun ?? false,
 		disabledProviders: [...new Set([...globalDisabled, ...projectDisabled])],
-		debugLog: (projectRaw.debugLog ? projectDebugLog : globalDebugLog),
+		debugLog: (projectConfig.debugLog?.enabled ? projectDebugLog : globalDebugLog),
 		sources: { globalPath: globalConfigPath, projectPath },
 		raw: { global: globalRaw, project: projectRaw },
 	};

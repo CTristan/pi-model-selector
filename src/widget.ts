@@ -101,10 +101,13 @@ export function getWidgetState(): WidgetState | null {
 export function renderUsageWidget(ctx: ExtensionContext): void {
 	if (!ctx.hasUI) return;
 
+	const ui = ctx.ui as any;
+	if (typeof ui?.setWidget !== "function") return;
+
 	const state = currentWidgetState;
 	if (!state || !state.config.widget.enabled) {
 		// Clear widget if disabled or no state
-		ctx.ui.setWidget("model-selector", undefined);
+		ui.setWidget("model-selector", undefined);
 		return;
 	}
 
@@ -112,14 +115,30 @@ export function renderUsageWidget(ctx: ExtensionContext): void {
 	const showCount = config.widget.showCount;
 
 	if (candidates.length === 0) {
-		ctx.ui.setWidget("model-selector", undefined);
+		ui.setWidget("model-selector", undefined);
 		return;
 	}
 
-	const topCandidates = candidates.slice(0, showCount);
+	// Group and consolidate redundant candidates for the widget while preserving ranked order
+	const topCandidates: UsageCandidate[] = [];
+	const seenModels = new Set<string>();
+	const seenBuckets = new Set<string>();
 
-	const ui = ctx.ui as any;
-	if (typeof ui?.setWidget !== "function") return;
+	for (const candidate of candidates) {
+		if (topCandidates.length >= showCount) break;
+
+		const mapping = findModelMapping(candidate, config.mappings);
+		if (mapping?.model) {
+			const modelKey = `${mapping.model.provider}/${mapping.model.id}`;
+			if (seenModels.has(modelKey)) continue;
+			seenModels.add(modelKey);
+		} else {
+			const bucketKey = `${candidate.displayName}|${candidate.account || ""}`;
+			if (seenBuckets.has(bucketKey)) continue;
+			seenBuckets.add(bucketKey);
+		}
+		topCandidates.push(candidate);
+	}
 
 	ui.setWidget(
 		"model-selector",
@@ -153,6 +172,9 @@ export function renderUsageWidget(ctx: ExtensionContext): void {
 
 export function clearWidget(ctx: ExtensionContext): void {
 	if (!ctx.hasUI) return;
-	ctx.ui.setWidget("model-selector", undefined);
+	const ui = ctx.ui as any;
+	if (typeof ui?.setWidget === "function") {
+		ui.setWidget("model-selector", undefined);
+	}
 	currentWidgetState = null;
 }

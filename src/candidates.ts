@@ -108,21 +108,20 @@ export function sortCandidates(candidates: UsageCandidate[], priority: PriorityR
 export function selectionReason(best: UsageCandidate, runnerUp: UsageCandidate | undefined, priority: PriorityRule[]): string {
 	if (!runnerUp) return "only available bucket";
 	const result = compareCandidates(best, runnerUp, priority);
-	if (!result.rule || result.diff === 0) return "tied after applying priority";
+	if (!result.rule || result.diff === 0) return "tied";
 
 	if (result.rule === "fullAvailability") {
-		return `fullAvailability (${best.remainingPercent.toFixed(0)}% vs ${runnerUp.remainingPercent.toFixed(0)}%)`;
+		return `fullAvailability (vs ${runnerUp.remainingPercent.toFixed(0)}%)`;
 	}
 	if (result.rule === "remainingPercent") {
-		return `higher remainingPercent (${best.remainingPercent.toFixed(0)}% vs ${runnerUp.remainingPercent.toFixed(0)}%)`;
+		return `higher availability (vs ${runnerUp.remainingPercent.toFixed(0)}%)`;
 	}
 	if (result.rule === "earliestReset") {
-		const bestReset = best.resetsAt ? formatReset(best.resetsAt) : "unknown";
 		const runnerReset = runnerUp.resetsAt ? formatReset(runnerUp.resetsAt) : "unknown";
-		return `earlier reset (${bestReset} vs ${runnerReset})`;
+		return `earlier reset (vs ${runnerReset})`;
 	}
 
-	return "tied after applying priority";
+	return "tied";
 }
 
 // ============================================================================

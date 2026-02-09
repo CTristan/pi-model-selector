@@ -2,11 +2,15 @@
   "name": "pi-model-selector",
   "version": "1.0.0",
   "description": "A Pi extension that automatically selects the best model based on remaining usage quotas across various providers (Claude, OpenAI, Gemini, etc.).",
-  "keywords": ["pi-package"],
+  "keywords": [
+    "pi-package"
+  ],
   "type": "module",
   "main": "index.ts",
   "pi": {
-    "extensions": ["index.ts"]
+    "extensions": [
+      "index.ts"
+    ]
   },
   "peerDependencies": {
     "@mariozechner/pi-coding-agent": "*"
@@ -14,12 +18,16 @@
   "devDependencies": {
     "@mariozechner/pi-coding-agent": "latest",
     "@types/node": "^20.0.0",
-    "typescript": "^5.0.0"
+    "@vitest/coverage-v8": "^4.0.18",
+    "typescript": "^5.0.0",
+    "vitest": "^4.0.18"
   },
   "scripts": {
     "type-check": "tsc",
-    "ci": "npm run type-check",
+    "test": "vitest run --coverage",
+    "test:watch": "vitest",
+    "ci": "npm run type-check && npm run test",
     "setup-hooks": "./scripts/setup-hooks.sh",
-    "prepare": "npm run setup-hooks"
+    "prepare": "[ \"$CI\" = \"true\" ] || npm run setup-hooks"
   }
 }

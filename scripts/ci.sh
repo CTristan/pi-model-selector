@@ -17,4 +17,7 @@ fi
 echo "Running type check..."
 npm run type-check
 
+echo "Running unit tests..."
+npm run test
+
 echo "CI gate passed!"

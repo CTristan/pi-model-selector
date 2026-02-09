@@ -1,10 +1,14 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as os from "node:os";
 
 // Import from modular sources
 import type {
 	MappingEntry,
 	PriorityRule,
 	UsageCandidate,
+	UsageSnapshot,
 	LoadedConfig,
 	WidgetConfig,
 } from "./src/types.js";
@@ -23,6 +27,7 @@ import {
 	findModelMapping,
 	findIgnoreMapping,
 	dedupeCandidates,
+	candidateKey,
 } from "./src/candidates.js";
 import {
 	updateWidgetState,
@@ -39,25 +44,11 @@ export type { MappingEntry, PriorityRule, UsageCandidate, LoadedConfig, WidgetCo
 // ============================================================================
 
 function isProviderIgnored(provider: string, account: string | undefined, mappings: MappingEntry[]): boolean {
-	const isCatchAll = (pattern: string) => {
-		try {
-			// A catch-all pattern is one that matches almost any string.
-			// We test against several diverse strings to verify.
-			const re = new RegExp(pattern);
-			const testStrings = ["", "abc", "123", "Some Window", "---"];
-			return testStrings.every(s => re.test(s));
-		} catch {
-			return false;
-		}
-	};
-
 	return mappings.some(
 		(m) =>
 			m.usage.provider === provider &&
 			(m.usage.account === undefined || m.usage.account === account) &&
-			m.ignore === true &&
-			((!m.usage.window && !m.usage.windowPattern) || 
-			 (m.usage.windowPattern && isCatchAll(m.usage.windowPattern)))
+			m.ignore === true
 	);
 }
 
@@ -71,8 +62,47 @@ const priorityOptions: Array<{ label: string; value: PriorityRule[] }> = [
 ];
 
 // ============================================================================
+// Cooldown Persistence (for print-mode / automation support)
+// ============================================================================
+
+interface CooldownState {
+	cooldowns: Record<string, number>; // candidateKey -> expiry timestamp
+	lastSelected: string | null;
+}
+
+const COOLDOWN_STATE_PATH = path.join(os.homedir(), ".pi", "model-selector-cooldowns.json");
+
+async function loadCooldownState(): Promise<CooldownState> {
+	try {
+		await fs.promises.access(COOLDOWN_STATE_PATH);
+		const data = await fs.promises.readFile(COOLDOWN_STATE_PATH, "utf-8");
+		const parsed = JSON.parse(data);
+		return {
+			cooldowns: parsed.cooldowns || {},
+			lastSelected: parsed.lastSelected || null,
+		};
+	} catch (error) {
+		// Ignore read errors or missing file, start fresh
+	}
+	return { cooldowns: {}, lastSelected: null };
+}
+
+async function saveCooldownState(state: CooldownState): Promise<void> {
+	const dir = path.dirname(COOLDOWN_STATE_PATH);
+	try {
+		await fs.promises.mkdir(dir, { recursive: true });
+		const tempPath = `${COOLDOWN_STATE_PATH}.tmp.${Math.random().toString(36).slice(2)}`;
+		await fs.promises.writeFile(tempPath, JSON.stringify(state, null, 2), "utf-8");
+		await fs.promises.rename(tempPath, COOLDOWN_STATE_PATH);
+	} catch (error) {
+		console.error(`[model-selector] Failed to save cooldown state: ${error}`);
+	}
+}
+
+// ============================================================================
 // Mapping Wizard
 // ============================================================================
+
 
 async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 	if (!ctx.hasUI) {
@@ -436,9 +466,53 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 // ============================================================================
 
 export default function modelSelectorExtension(pi: ExtensionAPI) {
+	// Cooldown State - backed by file for cross-invocation persistence
+	const modelCooldowns = new Map<string, number>();
+	const COOLDOWN_DURATION = 60 * 60 * 1000; // 1 hour
+	let lastSelectedCandidateKey: string | null = null;
+
+	// Load persisted cooldown state from file
+	const loadPersistedCooldowns = async (): Promise<void> => {
+		const state = await loadCooldownState();
+		const now = Date.now();
+		
+		// Load non-expired cooldowns into the Map
+		for (const [key, expiry] of Object.entries(state.cooldowns)) {
+			if (expiry > now) {
+				modelCooldowns.set(key, expiry);
+			}
+		}
+		
+		// Restore last selected (useful for /model-skip in print mode)
+		if (state.lastSelected) {
+			lastSelectedCandidateKey = state.lastSelected;
+		}
+	};
+
+	// Save current cooldown state to file
+	const persistCooldowns = async (): Promise<void> => {
+		const cooldowns: Record<string, number> = {};
+		const now = Date.now();
+		
+		for (const [key, expiry] of modelCooldowns) {
+			if (expiry > now) {
+				cooldowns[key] = expiry;
+			}
+		}
+		
+		await saveCooldownState({
+			cooldowns,
+			lastSelected: lastSelectedCandidateKey,
+		});
+	};
+
 	let running = false;
 
-	const runSelector = async (ctx: ExtensionContext, reason: "startup" | "command" | "auto", preloadedConfig?: LoadedConfig) => {
+	const runSelector = async (
+		ctx: ExtensionContext,
+		reason: "startup" | "command" | "auto",
+		options: { preloadedConfig?: LoadedConfig; preloadedUsages?: UsageSnapshot[] } = {}
+	) => {
 		if (running) {
 			notify(ctx, "warning", "Model selector is already running.");
 			return;
@@ -446,12 +520,17 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
 		running = true;
 
 		try {
-			const config = preloadedConfig || (await loadConfig(ctx));
+			// Load persisted cooldowns on startup (for print-mode support)
+			if (reason === "startup") {
+				await loadPersistedCooldowns();
+			}
+
+			const config = options.preloadedConfig || (await loadConfig(ctx));
 			if (!config) return;
 			setGlobalConfig(config);
 			writeDebugLog(`Running selector (reason: ${reason})`);
 
-			const usages = await fetchAllUsages(ctx.modelRegistry, config.disabledProviders);
+			const usages = options.preloadedUsages || (await fetchAllUsages(ctx.modelRegistry, config.disabledProviders));
 
 			for (const usage of usages) {
 				if (usage.error && !isProviderIgnored(usage.provider, usage.account, config.mappings)) {
@@ -459,16 +538,38 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
 				}
 			}
 
+			// Clean up expired cooldowns
+			const now = Date.now();
+			for (const [key, expiry] of modelCooldowns) {
+				if (expiry < now) modelCooldowns.delete(key);
+			}
+
 			const candidates = buildCandidates(usages);
-			const eligibleCandidates = candidates.filter((candidate) => !findIgnoreMapping(candidate, config.mappings));
+			let eligibleCandidates = candidates.filter((candidate) => !findIgnoreMapping(candidate, config.mappings));
+
+			// Filter out cooldowns
+			const cooldownCount = eligibleCandidates.filter(c => modelCooldowns.has(candidateKey(c))).length;
+			if (cooldownCount > 0) {
+				eligibleCandidates = eligibleCandidates.filter(c => !modelCooldowns.has(candidateKey(c)));
+				if (reason === "command") {
+					notify(ctx, "info", `${cooldownCount} usage bucket(s) skipped due to temporary cooldown.`);
+				}
+			}
 
 			if (eligibleCandidates.length === 0) {
-				const detail = candidates.length === 0
-					? "No usage windows found. Check provider credentials and connectivity."
-					: "All usage buckets are ignored. Remove an ignore mapping or add a model mapping.";
-				notify(ctx, "error", detail);
-				clearWidget(ctx);
-				return;
+				if (cooldownCount > 0) {
+					notify(ctx, "warning", "All eligible candidates are on cooldown. Resetting cooldowns.");
+					modelCooldowns.clear();
+					await persistCooldowns();
+					eligibleCandidates = candidates.filter((candidate) => !findIgnoreMapping(candidate, config.mappings));
+				} else {
+					const detail = candidates.length === 0
+						? "No usage windows found. Check provider credentials and connectivity."
+						: "All usage buckets are ignored. Remove an ignore mapping or add a model mapping.";
+					notify(ctx, "error", detail);
+					clearWidget(ctx);
+					return;
+				}
 			}
 
 			const rankedCandidates = sortCandidates(eligibleCandidates, config.priority);
@@ -482,6 +583,8 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
 				notify(ctx, "error", "Unable to determine a best usage window.");
 				return;
 			}
+			lastSelectedCandidateKey = candidateKey(best);
+			await persistCooldowns(); // Save state for print-mode support
 			const runnerUp = rankedCandidates[1];
 
 			const mapping = findModelMapping(best, config.mappings);
@@ -526,23 +629,21 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
 			const isAlreadySelected =
 				current && current.provider === mapping.model.provider && current.id === mapping.model.id;
 
-			const success = await pi.setModel(model);
-			if (!success) {
-				notify(ctx, "error", `Failed to set model to ${mapping.model.provider}/${mapping.model.id}. Check provider status or credentials.`);
-				return;
+			if (!isAlreadySelected) {
+				const success = await pi.setModel(model);
+				if (!success) {
+					notify(ctx, "error", `Failed to set model to ${mapping.model.provider}/${mapping.model.id}. Check provider status or credentials.`);
+					return;
+				}
 			}
 
-			const priorityLabel = config.priority.join(" → ");
 			const reasonDetail = runnerUp ? selectionReason(best, runnerUp, config.priority) : "Only one candidate available";
+			const selectionMsg = isAlreadySelected 
+				? `Already using ${mapping.model.provider}/${mapping.model.id}`
+				: `Set model to ${mapping.model.provider}/${mapping.model.id}`;
+			const bucketMsg = `${best.displayName}/${best.windowLabel} (${best.remainingPercent.toFixed(0)}% left)`;
 			
-			const baseMessage = isAlreadySelected 
-				? `Model already set to ${mapping.model.provider}/${mapping.model.id}.`
-				: `Selected ${mapping.model.provider}/${mapping.model.id}.`;
-				
-			const bucketInfo = `Using ${best.displayName} ${best.windowLabel} (${best.remainingPercent.toFixed(0)}% remaining).`;
-			const selectionInfo = `Priority: ${priorityLabel}. Reason: ${reasonDetail}.`;
-
-			notify(ctx, "info", `${baseMessage} ${bucketInfo} ${selectionInfo}`);
+			notify(ctx, "info", `${selectionMsg} via ${bucketMsg}. Reason: ${reasonDetail}.`);
 		} finally {
 			running = false;
 		}
@@ -553,7 +654,7 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
 	});
 
 	pi.on("session_switch", async (event, ctx) => {
-		if (event.reason === "new") {
+		if (event.reason === "new" || event.reason === "resume") {
 			await runSelector(ctx, "startup");
 		}
 	});
@@ -561,7 +662,7 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
 	pi.on("agent_end", async (_event, ctx) => {
 		const config = await loadConfig(ctx, { requireMappings: false });
 		if (config?.autoRun) {
-			await runSelector(ctx, "auto", config);
+			await runSelector(ctx, "auto", { preloadedConfig: config });
 		}
 	});
 
@@ -576,6 +677,39 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
 		description: "Configure usage-to-model mappings and widget settings",
 		handler: async (_args, ctx) => {
 			await runMappingWizard(ctx);
+		},
+	});
+
+	pi.registerCommand("model-skip", {
+		description: "Skip the current best model for 1 hour and select the next best",
+		handler: async (_args, ctx) => {
+			// Load persisted state first (for print-mode support)
+			await loadPersistedCooldowns();
+
+			const config = await loadConfig(ctx);
+			if (!config) return;
+
+			const usages = await fetchAllUsages(ctx.modelRegistry, config.disabledProviders);
+
+			if (!lastSelectedCandidateKey) {
+				const candidates = buildCandidates(usages);
+				const eligible = candidates.filter(c => !findIgnoreMapping(c, config.mappings));
+				const ranked = sortCandidates(eligible, config.priority);
+				if (ranked.length > 0) {
+					lastSelectedCandidateKey = candidateKey(ranked[0]);
+				}
+			}
+
+			if (lastSelectedCandidateKey) {
+				modelCooldowns.set(lastSelectedCandidateKey, Date.now() + COOLDOWN_DURATION);
+				await persistCooldowns(); // Save to file immediately
+				notify(ctx, "info", `Added temporary cooldown (1h) for usage bucket: ${lastSelectedCandidateKey}`);
+				lastSelectedCandidateKey = null;
+				// Run selector with pre-fetched usages to avoid second network roundtrip
+				await runSelector(ctx, "command", { preloadedConfig: config, preloadedUsages: usages });
+			} else {
+				notify(ctx, "error", "Could not determine a candidate to skip.");
+			}
 		},
 	});
 }

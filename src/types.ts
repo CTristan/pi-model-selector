@@ -1,5 +1,6 @@
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 import * as fs from "node:fs";
+import * as path from "node:path";
 
 // ============================================================================
 // Core Types
@@ -102,12 +103,30 @@ function processLogQueue(): void {
 	const batch = logQueue.join("");
 	logQueue.length = 0;
 
-	fs.appendFile(currentConfig.debugLog.path, batch, (err) => {
-		isWriting = false;
-		if (err) {
-			console.error(`[model-selector] Failed to write to debug log: ${err}`);
+	const logPath = currentConfig.debugLog.path;
+	const logDir = path.dirname(logPath);
+
+	fs.mkdir(logDir, { recursive: true }, (mkdirErr) => {
+		if (mkdirErr) {
+			isWriting = false;
+			console.error(`[model-selector] Failed to create log directory ${logDir}: ${mkdirErr}`);
+			if (currentConfig?.debugLog) {
+				currentConfig.debugLog.enabled = false;
+			}
+			return;
 		}
-		processLogQueue();
+
+		fs.appendFile(logPath, batch, (err) => {
+			isWriting = false;
+			if (err) {
+				console.error(`[model-selector] Failed to write to debug log ${logPath}: ${err}`);
+				// Disable logging after failure to avoid noisy loops
+				if (currentConfig?.debugLog) {
+					currentConfig.debugLog.enabled = false;
+				}
+			}
+			processLogQueue();
+		});
 	});
 }
 

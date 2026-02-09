@@ -8,7 +8,7 @@
 ## Key Files
 
 ### Entry Point
-- **`index.ts`**: Main extension entry point. Wires together all modules, registers commands (`/model-select`, `/model-select-config`), and handles session events.
+- **`index.ts`**: Main extension entry point. Wires together all modules, registers commands (`/model-select`, `/model-select-config`, `/model-skip`), and handles session events. Implements the model cooldown persistence logic.
 
 ### Source Modules (`src/`)
 - **`src/types.ts`**: Core TypeScript interfaces and types (`UsageSnapshot`, `RateWindow`, `UsageCandidate`, `MappingEntry`, `LoadedConfig`, `WidgetConfig`). Also exports utility functions like `notify()` and default constants.
@@ -24,10 +24,15 @@
     - **`mappings`**: Links usage windows to model IDs or marks them as ignored.
 
 ### CI/CD
-- **`scripts/ci.sh`**: CI gate script for local and automated checks (type checking).
+- **`scripts/ci.sh`**: CI gate script for local and automated checks (type checking, unit tests).
 - **`scripts/setup-hooks.sh`**: Script to install and configure the Git pre-commit hook.
 - **`.github/workflows/ci.yml`**: GitHub Actions workflow for running the CI gate on push/PR.
 - **`.git/hooks/pre-commit`**: Local Git hook that runs `ci.sh` before every commit.
+
+### Testing
+- **`tests/*.test.ts`**: Unit tests using Vitest. Run with `npm run test`.
+- **`npm run test`**: Generate test coverage report.
+- **Performance Requirement**: All unit tests must complete within **one second**. Tests exceeding this limit must be updated, refactored, or removed.
 
 ## Data Flow
 1. **Trigger**: Extension runs on session start or `/model-select` command.
@@ -36,6 +41,12 @@
 4. **Candidate Evaluation**: Builds candidates, filters ignored, sorts by priority.
 5. **Widget Update**: Updates the visual widget with top N candidates.
 6. **Model Selection**: Selects best candidate, looks up mapping, calls `pi.setModel()`.
+
+## Cooldown Mechanism
+To handle transient "No capacity" (503) errors that aren't reflected in quota usage:
+1. **`/model-skip` Command**: Manually triggers a 1-hour cooldown for the most recently selected usage bucket.
+2. **Persistence**: Cooldown state and the last selected model key are persisted to `~/.pi/model-selector-cooldowns.json`. This ensures cooldowns survive across Pi invocations (critical for print-mode automation).
+3. **Filtering**: `runSelector` filters out any candidates currently on cooldown before ranking.
 
 ## Configuration Schema
 

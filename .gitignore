@@ -1,5 +1,14 @@
-node_modules
+# Dependencies
+node_modules/
+
+# Build and Output
+*.log
+coverage/
+
+# OS and IDEs
 .DS_Store
-.idea
+.idea/
+
+# Tools
 .fix-die-repeat/
 .ralph/

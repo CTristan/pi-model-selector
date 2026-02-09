@@ -11,7 +11,7 @@
   },
   "autoRun": true,
   "debugLog": {
-    "enabled": true,
+    "enabled": false,
     "path": "model-selector.log"
   },
   "disabledProviders": [
