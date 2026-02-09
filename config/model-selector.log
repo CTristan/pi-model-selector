@@ -1,0 +1,58 @@
+[2026-02-09T01:31:21.224Z] Running selector (reason: startup)
+[2026-02-09T01:31:21.250Z] fetchCopilotUsage: starting token discovery
+[2026-02-09T01:31:21.258Z] fetchCopilotUsage: found access token in modelRegistry(github-copilot) via getApiKey
+[2026-02-09T01:31:21.258Z] fetchCopilotUsage: using token with prefix tid=
+[2026-02-09T01:31:21.258Z] fetchCopilotUsage: attempting fetch to copilot_internal/user with header Bearer tid...
+[2026-02-09T01:31:21.522Z] fetchCopilotUsage: initial fetch status: 401
+[2026-02-09T01:31:21.523Z] fetchCopilotUsage: attempting fetch to copilot_internal/user with header token tid=...
+[2026-02-09T01:31:21.787Z] fetchCopilotUsage: initial fetch (retry with 'token ') status: 401
+[2026-02-09T01:31:21.788Z] fetchCopilotUsage: final error body: {
+  "message": "Bad credentials",
+  "documentation_url": "https://docs.github.com/rest",
+  "status": "401"
+}
+[2026-02-09T01:38:39.917Z] Running selector (reason: startup)
+[2026-02-09T01:38:39.947Z] fetchCopilotUsage: starting token discovery
+[2026-02-09T01:38:39.953Z] fetchCopilotUsage: added token from registry:github-copilot:apiKey (prefix: tid=, isCopilot: true)
+[2026-02-09T01:38:40.197Z] fetchCopilotUsage: added token from gh-cli (prefix: gho_, isCopilot: false)
+[2026-02-09T01:38:40.197Z] fetchCopilotUsage: trying token from registry:github-copilot:apiKey
+[2026-02-09T01:38:40.480Z] fetchCopilotUsage: fetch with registry:github-copilot:apiKey (Bearer) status: 401
+[2026-02-09T01:38:40.481Z] fetchCopilotUsage: trying token from gh-cli
+[2026-02-09T01:38:40.876Z] fetchCopilotUsage: fetch with gh-cli (token) status: 200
+[2026-02-09T01:38:40.877Z] fetchCopilotUsage: success with token from gh-cli
+[2026-02-09T01:47:58.489Z] Running selector (reason: startup)
+[2026-02-09T01:47:58.518Z] fetchCopilotUsage: starting token discovery
+[2026-02-09T01:47:59.270Z] fetchCopilotUsage: added token from registry:github-copilot:apiKey (prefix: tid=, isCopilot: true)
+[2026-02-09T01:47:59.380Z] fetchCopilotUsage: added token from gh-cli (prefix: gho_, isCopilot: false)
+[2026-02-09T01:47:59.380Z] fetchCopilotUsage: trying token from registry:github-copilot:apiKey
+[2026-02-09T01:47:59.803Z] fetchCopilotUsage: fetch with registry:github-copilot:apiKey (Bearer) status: 401
+[2026-02-09T01:47:59.805Z] fetchCopilotUsage: trying token from gh-cli
+[2026-02-09T01:48:00.253Z] fetchCopilotUsage: fetch with gh-cli (token) status: 200
+[2026-02-09T01:48:00.254Z] fetchCopilotUsage: success with token from gh-cli
+[2026-02-09T01:51:05.005Z] Running selector (reason: startup)
+[2026-02-09T01:51:05.035Z] fetchCopilotUsage: starting token discovery
+[2026-02-09T01:51:05.039Z] fetchCopilotUsage: added token from registry:github-copilot:apiKey (prefix: tid=, isCopilot: true)
+[2026-02-09T01:51:05.190Z] fetchCopilotUsage: added token from gh-cli (prefix: gho_, isCopilot: false)
+[2026-02-09T01:51:05.191Z] fetchCopilotUsage: trying token from registry:github-copilot:apiKey
+[2026-02-09T01:51:05.486Z] fetchCopilotUsage: fetch with registry:github-copilot:apiKey (Bearer) status: 401
+[2026-02-09T01:51:05.488Z] fetchCopilotUsage: trying token from gh-cli
+[2026-02-09T01:51:05.908Z] fetchCopilotUsage: fetch with gh-cli (token) status: 200
+[2026-02-09T01:51:05.909Z] fetchCopilotUsage: success with token from gh-cli
+[2026-02-09T01:55:39.563Z] Running selector (reason: startup)
+[2026-02-09T01:55:39.599Z] fetchCopilotUsage: starting token discovery
+[2026-02-09T01:55:39.603Z] fetchCopilotUsage: added token from registry:github-copilot:apiKey (prefix: tid=, isCopilot: true)
+[2026-02-09T01:55:39.729Z] fetchCopilotUsage: added token from gh-cli (prefix: gho_, isCopilot: false)
+[2026-02-09T01:55:39.729Z] fetchCopilotUsage: trying token from registry:github-copilot:apiKey
+[2026-02-09T01:55:40.014Z] fetchCopilotUsage: fetch with registry:github-copilot:apiKey (Bearer) status: 401
+[2026-02-09T01:55:40.017Z] fetchCopilotUsage: trying token from gh-cli
+[2026-02-09T01:55:40.426Z] fetchCopilotUsage: fetch with gh-cli (token) status: 200
+[2026-02-09T01:55:40.427Z] fetchCopilotUsage: success with token from gh-cli
+[2026-02-09T02:14:58.868Z] Running selector (reason: startup)
+[2026-02-09T02:14:58.897Z] fetchCopilotUsage: starting token discovery
+[2026-02-09T02:14:59.390Z] fetchCopilotUsage: added token from registry:github-copilot:apiKey (prefix: tid=, isCopilot: true)
+[2026-02-09T02:14:59.477Z] fetchCopilotUsage: added token from gh-cli (prefix: gho_, isCopilot: false)
+[2026-02-09T02:14:59.477Z] fetchCopilotUsage: trying token from registry:github-copilot:apiKey
+[2026-02-09T02:14:59.581Z] fetchCopilotUsage: fetch with registry:github-copilot:apiKey (Bearer) status: 401
+[2026-02-09T02:14:59.583Z] fetchCopilotUsage: trying token from gh-cli
+[2026-02-09T02:15:00.015Z] fetchCopilotUsage: fetch with gh-cli (token) status: 200
+[2026-02-09T02:15:00.016Z] fetchCopilotUsage: success with token from gh-cli

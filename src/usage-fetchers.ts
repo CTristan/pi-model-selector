@@ -4,6 +4,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { promisify } from "node:util";
 import type { RateWindow, UsageSnapshot } from "./types.js";
+import { writeDebugLog } from "./types.js";
 
 const execAsync = promisify(exec);
 
@@ -182,29 +183,79 @@ function loadCopilotAuth(): { access?: string; refresh?: string } | undefined {
 	return undefined;
 }
 
-export async function fetchCopilotUsage(_modelRegistry: any): Promise<UsageSnapshot> {
-	const auth = loadCopilotAuth();
-	if (!auth?.access && !auth?.refresh) {
-		return { provider: "copilot", displayName: "Copilot", windows: [], error: "No token" };
+export async function fetchCopilotUsage(modelRegistry: any): Promise<UsageSnapshot> {
+	writeDebugLog("fetchCopilotUsage: starting token discovery");
+
+	interface TokenInfo {
+		token: string;
+		source: string;
+		isCopilotToken: boolean;
+	}
+
+	const tokens: TokenInfo[] = [];
+
+	const addToken = (token: any, source: string) => {
+		if (typeof token !== "string" || !token) return;
+		if (tokens.some((t) => t.token === token)) return;
+		tokens.push({
+			token,
+			source,
+			isCopilotToken: token.startsWith("tid="),
+		});
+		writeDebugLog(`fetchCopilotUsage: added token from ${source} (prefix: ${token.substring(0, 4)}, isCopilot: ${token.startsWith("tid=")})`);
+	};
+
+	const extractFromData = (data: any, source: string) => {
+		if (!data || typeof data !== "object") return;
+		addToken(data.access || data.accessToken || data.access_token, `${source}.access`);
+		addToken(data.token, `${source}.token`);
+	};
+
+	// 1. Discovery
+	try {
+		const gcpKey = await Promise.resolve(modelRegistry?.authStorage?.getApiKey?.("github-copilot"));
+		addToken(gcpKey, "registry:github-copilot:apiKey");
+		
+		const gcpData = await Promise.resolve(modelRegistry?.authStorage?.get?.("github-copilot"));
+		extractFromData(gcpData, "registry:github-copilot:data");
+
+		const ghKey = await Promise.resolve(modelRegistry?.authStorage?.getApiKey?.("github"));
+		addToken(ghKey, "registry:github:apiKey");
+
+		const ghData = await Promise.resolve(modelRegistry?.authStorage?.get?.("github"));
+		extractFromData(ghData, "registry:github:data");
+	} catch (e) {
+		writeDebugLog(`fetchCopilotUsage: registry error: ${e}`);
+	}
+
+	const authJson = loadCopilotAuth();
+	if (authJson) {
+		addToken(authJson.access, "auth.json");
+	}
+
+	try {
+		const { stdout } = await execAsync("gh auth token", { encoding: "utf-8" });
+		if (stdout.trim()) addToken(stdout.trim(), "gh-cli");
+	} catch {}
+
+	if (tokens.length === 0) {
+		writeDebugLog("fetchCopilotUsage: no tokens found");
+		return { provider: "copilot", displayName: "Copilot", windows: [], error: "No token found" };
 	}
 
 	const headersBase = {
-		"Editor-Version": "vscode/1.96.2",
-		"User-Agent": "GitHubCopilotChat/0.26.7",
-		"X-Github-Api-Version": "2025-04-01",
+		"Editor-Version": "vscode/1.97.0",
+		"Editor-Plugin-Version": "copilot/1.160.0",
+		"User-Agent": "GitHubCopilot/1.160.0",
 		Accept: "application/json",
 	};
 
 	const tryFetch = async (authHeader: string) => {
 		const controller = new AbortController();
 		const timer = setTimeout(() => controller.abort(), 5000);
-
 		try {
 			return await fetch("https://api.github.com/copilot_internal/user", {
-				headers: {
-					...headersBase,
-					Authorization: authHeader,
-				},
+				headers: { ...headersBase, Authorization: authHeader },
 				signal: controller.signal,
 			});
 		} finally {
@@ -212,61 +263,108 @@ export async function fetchCopilotUsage(_modelRegistry: any): Promise<UsageSnaps
 		}
 	};
 
-	try {
-		let res: Response | undefined;
-		if (auth.access) {
-			res = await tryFetch(`Bearer ${auth.access}`);
+	const tryExchange = async (githubToken: string): Promise<{ token: string; sku?: string } | null> => {
+		writeDebugLog(`fetchCopilotUsage: attempting exchange for token from ${tokens.find(t => t.token === githubToken)?.source || "unknown"}`);
+		try {
+			const res = await fetch("https://api.github.com/copilot_internal/v2/token", {
+				headers: { ...headersBase, Authorization: `token ${githubToken}` },
+				signal: AbortSignal.timeout(5000),
+			});
+			if (res.ok) {
+				const data = await res.json() as any;
+				if (data.token) {
+					writeDebugLog(`fetchCopilotUsage: exchange successful (new prefix: ${data.token.substring(0, 4)})`);
+					return { token: data.token, sku: data.sku };
+				}
+			} else {
+				writeDebugLog(`fetchCopilotUsage: exchange failed: ${res.status} ${await res.text()}`);
+			}
+		} catch (e) {
+			writeDebugLog(`fetchCopilotUsage: exchange error: ${e}`);
+		}
+		return null;
+	};
+
+	// 2. Execution
+	let lastError: string | undefined;
+	let skuFound: string | undefined;
+
+	for (const t of tokens) {
+		writeDebugLog(`fetchCopilotUsage: trying token from ${t.source}`);
+		
+		let tokenToUse = t.token;
+		let authHeader = t.isCopilotToken ? `Bearer ${tokenToUse}` : `token ${tokenToUse}`;
+
+		let res = await tryFetch(authHeader);
+		writeDebugLog(`fetchCopilotUsage: fetch with ${t.source} (${t.isCopilotToken ? 'Bearer' : 'token'}) status: ${res.status}`);
+
+		if (res.status === 401 && !t.isCopilotToken) {
+			res = await tryFetch(`Bearer ${tokenToUse}`);
+			writeDebugLog(`fetchCopilotUsage: fetch with ${t.source} (Bearer fallback) status: ${res.status}`);
 		}
 
-		if ((!res || !res.ok) && auth.access) {
-			if (!res || res.status === 401 || res.status === 403) {
-				res = await tryFetch(`token ${auth.access}`);
+		if (res.status === 401 && !t.isCopilotToken) {
+			const exchanged = await tryExchange(tokenToUse);
+			if (exchanged) {
+				tokenToUse = exchanged.token;
+				skuFound = exchanged.sku;
+				res = await tryFetch(`Bearer ${tokenToUse}`);
+				writeDebugLog(`fetchCopilotUsage: fetch with exchanged ${t.source} status: ${res.status}`);
 			}
 		}
 
-		if (!res || !res.ok) {
-			const status = res?.status ?? 0;
-			return { provider: "copilot", displayName: "Copilot", windows: [], error: `HTTP ${status}` };
+		if (res.ok || res.status === 304) {
+			writeDebugLog(`fetchCopilotUsage: success with token from ${t.source}`);
+			const data = await res.json() as any;
+			const windows: RateWindow[] = [];
+			const resetDate = safeDate(data.quota_reset_date_utc);
+			const resetDesc = resetDate ? formatReset(resetDate) : undefined;
+
+			if (data.quota_snapshots?.premium_interactions) {
+				const pi = data.quota_snapshots.premium_interactions;
+				const remaining = pi.remaining ?? 0;
+				const entitlement = pi.entitlement ?? 0;
+				const usedPercent = Math.max(0, 100 - (pi.percent_remaining || 0));
+				windows.push({
+					label: "Premium",
+					usedPercent,
+					resetDescription: resetDesc ? `${resetDesc} (${remaining}/${entitlement})` : `${remaining}/${entitlement}`,
+					resetsAt: resetDate,
+				});
+			}
+
+			if (data.quota_snapshots?.chat && !data.quota_snapshots.chat.unlimited) {
+				const chat = data.quota_snapshots.chat;
+				windows.push({
+					label: "Chat",
+					usedPercent: Math.max(0, 100 - (chat.percent_remaining || 0)),
+					resetDescription: resetDesc,
+					resetsAt: resetDate,
+				});
+			}
+
+			return { provider: "copilot", displayName: "Copilot", windows, plan: data.copilot_plan || skuFound };
 		}
 
-		const data = (await res.json()) as any;
-		const windows: RateWindow[] = [];
-
-		const resetDate = safeDate(data.quota_reset_date_utc);
-		const resetDesc = resetDate ? formatReset(resetDate) : undefined;
-
-		if (data.quota_snapshots?.premium_interactions) {
-			const pi = data.quota_snapshots.premium_interactions;
-			const remaining = pi.remaining ?? 0;
-			const entitlement = pi.entitlement ?? 0;
-			const usedPercent = Math.max(0, 100 - (pi.percent_remaining || 0));
-			windows.push({
-				label: "Premium",
-				usedPercent,
-				resetDescription: resetDesc ? `${resetDesc} (${remaining}/${entitlement})` : `${remaining}/${entitlement}`,
-				resetsAt: resetDate,
-			});
+		if (res.status === 401 || res.status === 403) {
+			const body = await res.text();
+			lastError = `HTTP ${res.status} from ${t.source}: ${body.slice(0, 100)}`;
+		} else {
+			lastError = `HTTP ${res.status} from ${t.source}`;
 		}
+	}
 
-		if (data.quota_snapshots?.chat && !data.quota_snapshots.chat.unlimited) {
-			const chat = data.quota_snapshots.chat;
-			windows.push({
-				label: "Chat",
-				usedPercent: Math.max(0, 100 - (chat.percent_remaining || 0)),
-				resetDescription: resetDesc,
-				resetsAt: resetDate,
-			});
-		}
-
+	if (skuFound) {
+		writeDebugLog("fetchCopilotUsage: all fetch attempts failed but we have a SKU, falling back to Active");
 		return {
 			provider: "copilot",
 			displayName: "Copilot",
-			windows,
-			plan: data.copilot_plan,
+			windows: [{ label: "Access", usedPercent: 0, resetDescription: "Active" }],
+			plan: skuFound,
 		};
-	} catch (error) {
-		return { provider: "copilot", displayName: "Copilot", windows: [], error: String(error) };
 	}
+
+	return { provider: "copilot", displayName: "Copilot", windows: [], error: lastError || "All tokens failed" };
 }
 
 // ============================================================================
@@ -1047,7 +1145,9 @@ export async function fetchZaiUsage(): Promise<UsageSnapshot> {
 // Usage Aggregation
 // ============================================================================
 
-export async function fetchAllUsages(modelRegistry: any): Promise<UsageSnapshot[]> {
+export async function fetchAllUsages(modelRegistry: any, disabledProviders: string[] = []): Promise<UsageSnapshot[]> {
+	const disabled = new Set(disabledProviders.map(p => p.toLowerCase()));
+	
 	const timeout = <T>(promise: Promise<T>, ms: number, fallback: T) => {
 		let timer: NodeJS.Timeout;
 		const timeoutPromise = new Promise<T>((resolve) => {
@@ -1058,15 +1158,29 @@ export async function fetchAllUsages(modelRegistry: any): Promise<UsageSnapshot[
 		});
 	};
 
-	const [claude, copilot, gemini, codexResults, antigravity, kiro, zai] = await Promise.all([
-		timeout(fetchClaudeUsage(), 6000, { provider: "anthropic", displayName: "Claude", windows: [], error: "Timeout" }),
-		timeout(fetchCopilotUsage(modelRegistry), 6000, { provider: "copilot", displayName: "Copilot", windows: [], error: "Timeout" }),
-		timeout(fetchGeminiUsage(modelRegistry), 6000, { provider: "gemini", displayName: "Gemini", windows: [], error: "Timeout" }),
-		timeout(fetchAllCodexUsages(modelRegistry), 6000, [{ provider: "codex", displayName: "Codex", windows: [], error: "Timeout" }]),
-		timeout(fetchAntigravityUsage(modelRegistry), 6000, { provider: "antigravity", displayName: "Antigravity", windows: [], error: "Timeout" }),
-		timeout(fetchKiroUsage(), 6000, { provider: "kiro", displayName: "Kiro", windows: [], error: "Timeout" }),
-		timeout(fetchZaiUsage(), 6000, { provider: "zai", displayName: "z.ai", windows: [], error: "Timeout" }),
-	]);
+	const fetchers: { provider: string; fetch: () => Promise<UsageSnapshot | UsageSnapshot[]> }[] = [
+		{ provider: "anthropic", fetch: () => fetchClaudeUsage() },
+		{ provider: "copilot", fetch: () => fetchCopilotUsage(modelRegistry) },
+		{ provider: "gemini", fetch: () => fetchGeminiUsage(modelRegistry) },
+		{ provider: "codex", fetch: () => fetchAllCodexUsages(modelRegistry) },
+		{ provider: "antigravity", fetch: () => fetchAntigravityUsage(modelRegistry) },
+		{ provider: "kiro", fetch: () => fetchKiroUsage() },
+		{ provider: "zai", fetch: () => fetchZaiUsage() },
+	];
 
-	return [claude, copilot, gemini, ...codexResults, antigravity, kiro, zai];
+	const activeFetchers = fetchers.filter(f => !disabled.has(f.provider));
+	
+	const results = await Promise.all(
+		activeFetchers.map(f => 
+			timeout(
+				f.fetch(),
+				6000,
+				f.provider === "codex" 
+					? [{ provider: f.provider, displayName: f.provider, windows: [], error: "Timeout" }]
+					: { provider: f.provider, displayName: f.provider, windows: [], error: "Timeout" }
+			)
+		)
+	);
+
+	return results.flat() as UsageSnapshot[];
 }

@@ -9,6 +9,14 @@
     "placement": "belowEditor",
     "showCount": 3
   },
+  "debugLog": {
+    "enabled": true,
+    "path": "model-selector.log"
+  },
+  "disabledProviders": [
+    "kiro",
+    "zai"
+  ],
   "mappings": [
     {
       "usage": {

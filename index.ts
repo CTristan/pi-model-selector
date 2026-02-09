@@ -8,7 +8,7 @@ import type {
 	LoadedConfig,
 	WidgetConfig,
 } from "./src/types.js";
-import { notify, mappingKey } from "./src/types.js";
+import { notify, mappingKey, setGlobalConfig, writeDebugLog } from "./src/types.js";
 import { fetchAllUsages } from "./src/usage-fetchers.js";
 import {
 	loadConfig,
@@ -79,7 +79,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 
 	const loadCandidates = async (): Promise<UsageCandidate[] | null> => {
 		if (cachedCandidates) return cachedCandidates;
-		const usages = await fetchAllUsages(ctx.modelRegistry);
+		const usages = await fetchAllUsages(ctx.modelRegistry, config.disabledProviders);
 		const candidates = dedupeCandidates(buildCandidates(usages));
 		if (candidates.length === 0) {
 			notify(ctx, "error", "No usage windows found. Check provider credentials and connectivity.");
@@ -304,7 +304,54 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 		renderUsageWidget(ctx);
 	};
 
-	const menuOptions = ["Edit mappings", "Configure priority", "Configure widget", "Done"];
+	const configureDebugLog = async (): Promise<void> => {
+		const currentLog = config.debugLog?.path || "model-selector.log";
+		const currentStatus = config.debugLog?.enabled ? "enabled" : "disabled";
+		
+		const choice = await ctx.ui.select(`Debug logging (current: ${currentStatus}, path: ${currentLog})`, [
+			config.debugLog?.enabled ? "Disable logging" : "Enable logging",
+			"Change log file path",
+		]);
+		if (!choice) return;
+
+		let debugUpdate: any = { ...config.debugLog };
+
+		if (choice === "Enable logging") {
+			debugUpdate.enabled = true;
+		} else if (choice === "Disable logging") {
+			debugUpdate.enabled = false;
+		} else if (choice === "Change log file path") {
+			const newPath = await ctx.ui.input("Enter log file path (relative to project or absolute)");
+			if (!newPath) return;
+			debugUpdate.path = newPath;
+		}
+
+		const locationChoice = await ctx.ui.select("Save debug log setting to", locationLabels);
+		if (!locationChoice) return;
+
+		const saveToProject = locationChoice === locationLabels[1];
+		const targetRaw = saveToProject ? config.raw.project : config.raw.global;
+		const targetPath = saveToProject ? config.sources.projectPath : config.sources.globalPath;
+
+		try {
+			targetRaw.debugLog = debugUpdate;
+			saveConfigFile(targetPath, targetRaw);
+		} catch (error) {
+			notify(ctx, "error", `Failed to write ${targetPath}: ${error}`);
+			return;
+		}
+
+		// Reload config to apply path resolution
+		const reloaded = loadConfig(ctx, { requireMappings: false });
+		if (reloaded) {
+			config.debugLog = reloaded.debugLog;
+			setGlobalConfig(reloaded);
+		}
+		
+		notify(ctx, "info", `Debug logging ${config.debugLog?.enabled ? "enabled" : "disabled"}.`);
+	};
+
+	const menuOptions = ["Edit mappings", "Configure priority", "Configure widget", "Configure debug log", "Done"];
 
 	while (true) {
 		const action = await ctx.ui.select("Model selector configuration", menuOptions);
@@ -322,6 +369,11 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 
 		if (action === "Configure widget") {
 			await configureWidget();
+			continue;
+		}
+
+		if (action === "Configure debug log") {
+			await configureDebugLog();
 			continue;
 		}
 	}
@@ -344,8 +396,10 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
 		try {
 			const config = loadConfig(ctx);
 			if (!config) return;
+			setGlobalConfig(config);
+			writeDebugLog(`Running selector (reason: ${reason})`);
 
-			const usages = await fetchAllUsages(ctx.modelRegistry);
+			const usages = await fetchAllUsages(ctx.modelRegistry, config.disabledProviders);
 
 			for (const usage of usages) {
 				if (usage.error && !isProviderIgnored(usage.provider, config.mappings)) {

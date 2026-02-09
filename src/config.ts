@@ -89,12 +89,40 @@ function asConfigShape(raw: Record<string, any>): {
 	mappings?: unknown[];
 	priority?: unknown;
 	widget?: unknown;
+	debugLog?: unknown;
+	disabledProviders?: unknown;
 } {
 	return {
 		mappings: Array.isArray(raw.mappings) ? raw.mappings : undefined,
 		priority: Array.isArray(raw.priority) ? (raw.priority as PriorityRule[]) : undefined,
 		widget: raw.widget && typeof raw.widget === "object" ? raw.widget : undefined,
+		debugLog: raw.debugLog && typeof raw.debugLog === "object" ? raw.debugLog : undefined,
+		disabledProviders: Array.isArray(raw.disabledProviders) ? raw.disabledProviders : undefined,
 	};
+}
+
+function normalizeDebugLog(
+	raw: ReturnType<typeof asConfigShape>,
+	basePath: string
+): { enabled: boolean; path: string } {
+	const debug = (raw.debugLog as any) || {};
+	const enabled = debug.enabled === true;
+	let logPath = debug.path || "model-selector.log";
+
+	if (!path.isAbsolute(logPath)) {
+		logPath = path.resolve(basePath, logPath);
+	}
+
+	return { enabled, path: logPath };
+}
+
+function normalizeDisabledProviders(
+	raw: ReturnType<typeof asConfigShape>,
+	_sourceLabel: string,
+	_errors: string[]
+): string[] {
+	if (!raw.disabledProviders || !Array.isArray(raw.disabledProviders)) return [];
+	return raw.disabledProviders.filter((p): p is string => typeof p === "string");
 }
 
 function normalizePriority(
@@ -267,6 +295,10 @@ export function loadConfig(
 	const projectPriority = normalizePriority(projectConfig, projectPath, errors);
 	const globalWidget = normalizeWidget(globalConfig, globalConfigPath, errors);
 	const projectWidget = normalizeWidget(projectConfig, projectPath, errors);
+	const globalDebugLog = normalizeDebugLog(globalConfig, path.dirname(globalConfigPath));
+	const projectDebugLog = normalizeDebugLog(projectConfig, ctx.cwd);
+	const globalDisabled = normalizeDisabledProviders(globalConfig, globalConfigPath, errors);
+	const projectDisabled = normalizeDisabledProviders(projectConfig, projectPath, errors);
 
 	if (errors.length > 0) {
 		notify(ctx, "error", errors.join("\n"));
@@ -287,6 +319,8 @@ export function loadConfig(
 		mappings,
 		priority: projectPriority ?? globalPriority ?? DEFAULT_PRIORITY,
 		widget: mergeWidgetConfig(globalWidget, projectWidget),
+		disabledProviders: [...new Set([...globalDisabled, ...projectDisabled])],
+		debugLog: (projectRaw.debugLog ? projectDebugLog : globalDebugLog),
 		sources: { globalPath: globalConfigPath, projectPath },
 		raw: { global: globalRaw, project: projectRaw },
 	};

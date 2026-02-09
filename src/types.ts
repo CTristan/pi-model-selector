@@ -63,13 +63,36 @@ export interface LoadedConfig {
 	mappings: MappingEntry[];
 	priority: PriorityRule[];
 	widget: Required<WidgetConfig>;
+	disabledProviders: string[];
+	debugLog?: {
+		enabled: boolean;
+		path: string;
+	};
 	sources: { globalPath: string; projectPath: string };
 	raw: { global: Record<string, any>; project: Record<string, any> };
 }
 
+export const ALL_PROVIDERS = ["anthropic", "copilot", "gemini", "codex", "antigravity", "kiro", "zai"] as const;
+export type ProviderName = typeof ALL_PROVIDERS[number];
+
 // ============================================================================
 // Utility Functions
 // ============================================================================
+
+let currentConfig: LoadedConfig | undefined;
+
+export function setGlobalConfig(config: LoadedConfig | undefined): void {
+	currentConfig = config;
+}
+
+export function writeDebugLog(message: string): void {
+	if (!currentConfig?.debugLog?.enabled) return;
+	try {
+		const fs = require("node:fs");
+		const timestamp = new Date().toISOString();
+		fs.appendFileSync(currentConfig.debugLog.path, `[${timestamp}] ${message}\n`);
+	} catch {}
+}
 
 export function notify(
 	ctx: ExtensionContext,
