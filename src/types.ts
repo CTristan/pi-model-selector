@@ -90,6 +90,10 @@ export function notify(
 	}
 }
 
+export function mappingKey(entry: MappingEntry): string {
+	return `${entry.usage.provider}|${entry.usage.window ?? ""}|${entry.usage.windowPattern ?? ""}`;
+}
+
 export const DEFAULT_PRIORITY: PriorityRule[] = ["fullAvailability", "remainingPercent", "earliestReset"];
 
 export const DEFAULT_WIDGET_CONFIG: Required<WidgetConfig> = {

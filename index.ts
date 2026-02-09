@@ -8,14 +8,13 @@ import type {
 	LoadedConfig,
 	WidgetConfig,
 } from "./src/types.js";
-import { notify, DEFAULT_PRIORITY } from "./src/types.js";
+import { notify, mappingKey } from "./src/types.js";
 import { fetchAllUsages } from "./src/usage-fetchers.js";
 import {
 	loadConfig,
 	saveConfigFile,
 	upsertMapping,
 	updateWidgetConfig,
-	getGlobalConfigPath,
 } from "./src/config.js";
 import {
 	buildCandidates,
@@ -27,6 +26,7 @@ import {
 } from "./src/candidates.js";
 import {
 	updateWidgetState,
+	getWidgetState,
 	renderUsageWidget,
 	clearWidget,
 } from "./src/widget.js";
@@ -35,20 +35,8 @@ import {
 export type { MappingEntry, PriorityRule, UsageCandidate, LoadedConfig, WidgetConfig };
 
 // ============================================================================
-// Auth Error Detection
+// Helpers
 // ============================================================================
-
-function isAuthError(error: string): boolean {
-	const lower = error.toLowerCase();
-	return (
-		lower.includes("401") ||
-		lower.includes("403") ||
-		lower.includes("unauthorized") ||
-		lower.includes("token expired") ||
-		lower.includes("invalid token") ||
-		lower.includes("not logged in")
-	);
-}
 
 function isProviderIgnored(provider: string, mappings: MappingEntry[]): boolean {
 	return mappings.some(
@@ -59,10 +47,6 @@ function isProviderIgnored(provider: string, mappings: MappingEntry[]): boolean 
 	);
 }
 
-// ============================================================================
-// Mapping Wizard
-// ============================================================================
-
 const priorityOptions: Array<{ label: string; value: PriorityRule[] }> = [
 	{ label: "fullAvailability → remainingPercent → earliestReset", value: ["fullAvailability", "remainingPercent", "earliestReset"] },
 	{ label: "fullAvailability → earliestReset → remainingPercent", value: ["fullAvailability", "earliestReset", "remainingPercent"] },
@@ -72,9 +56,9 @@ const priorityOptions: Array<{ label: string; value: PriorityRule[] }> = [
 	{ label: "earliestReset → remainingPercent → fullAvailability", value: ["earliestReset", "remainingPercent", "fullAvailability"] },
 ];
 
-function mappingKey(entry: MappingEntry): string {
-	return `${entry.usage.provider}|${entry.usage.window ?? ""}|${entry.usage.windowPattern ?? ""}`;
-}
+// ============================================================================
+// Mapping Wizard
+// ============================================================================
 
 async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 	if (!ctx.hasUI) {
@@ -188,14 +172,26 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 
 			const actionChoice = await ctx.ui.select(
 				`Select action for ${selectedCandidate.provider}/${selectedCandidate.windowLabel}`,
-				["Map to model", "Ignore bucket"]
+				["Map to model", "Map by pattern", "Ignore bucket"]
 			);
 			if (!actionChoice) return;
 
+			let pattern: string | undefined;
+			if (actionChoice === "Map by pattern") {
+				pattern = await ctx.ui.input(`Enter regex pattern (e.g. ^${selectedCandidate.windowLabel}$)`);
+				if (!pattern) return;
+				try {
+					new RegExp(pattern);
+				} catch (e) {
+					notify(ctx, "error", `Invalid regex: ${e}`);
+					return;
+				}
+			}
+
 			let selectedModel: { provider: string; id: string } | undefined;
-			if (actionChoice === "Map to model") {
+			if (actionChoice === "Map to model" || actionChoice === "Map by pattern") {
 				const modelChoice = await ctx.ui.select(
-					`Select model for ${selectedCandidate.provider}/${selectedCandidate.windowLabel}`,
+					`Select model for ${selectedCandidate.provider}/${pattern || selectedCandidate.windowLabel}`,
 					modelLabels
 				);
 				if (!modelChoice) return;
@@ -214,7 +210,11 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 
 			const mappingEntry: MappingEntry = selectedModel
 				? {
-						usage: { provider: selectedCandidate.provider, window: selectedCandidate.windowLabel },
+						usage: {
+							provider: selectedCandidate.provider,
+							window: pattern ? undefined : selectedCandidate.windowLabel,
+							windowPattern: pattern,
+						},
 						model: { provider: selectedModel.provider, id: selectedModel.id },
 					}
 				: {
@@ -235,7 +235,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 
 			const actionSummary = mappingEntry.ignore
 				? `Ignored ${selectedCandidate.provider}/${selectedCandidate.windowLabel}.`
-				: `Mapped ${selectedCandidate.provider}/${selectedCandidate.windowLabel} to ${mappingEntry.model?.provider}/${mappingEntry.model?.id}.`;
+				: `Mapped ${selectedCandidate.provider}/${pattern || selectedCandidate.windowLabel} to ${mappingEntry.model?.provider}/${mappingEntry.model?.id}.`;
 			notify(ctx, "info", actionSummary);
 
 			const addMore = await ctx.ui.confirm("Add another mapping?", "Do you want to map another usage bucket?");
@@ -294,6 +294,12 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 		config.widget = { ...config.widget, ...widgetUpdate };
 		notify(ctx, "info", `Widget settings updated.`);
 
+		// Update widget state with new config if it exists
+		const state = getWidgetState();
+		if (state) {
+			updateWidgetState({ ...state, config });
+		}
+
 		// Refresh widget display
 		renderUsageWidget(ctx);
 	};
@@ -342,7 +348,7 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
 			const usages = await fetchAllUsages(ctx.modelRegistry);
 
 			for (const usage of usages) {
-				if (usage.error && isAuthError(usage.error) && !isProviderIgnored(usage.provider, config.mappings)) {
+				if (usage.error && !isProviderIgnored(usage.provider, config.mappings)) {
 					notify(ctx, "warning", `Usage check failed for ${usage.displayName}: ${usage.error}`);
 				}
 			}
@@ -407,9 +413,6 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
 			const current = ctx.model;
 			const isAlreadySelected =
 				current && current.provider === mapping.model.provider && current.id === mapping.model.id;
-			if (isAlreadySelected && reason === "command") {
-				notify(ctx, "info", `Model already set to ${mapping.model.provider}/${mapping.model.id}.`);
-			}
 
 			const success = await pi.setModel(model);
 			if (!success) {
@@ -418,22 +421,16 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
 			}
 
 			const priorityLabel = config.priority.join(" → ");
-			const reasonDetail = selectionReason(best, runnerUp, config.priority);
-			if (isAlreadySelected) {
-				const message = `Model already set to ${mapping.model.provider}/${mapping.model.id}. Selected bucket: ${best.displayName} ${best.windowLabel} (${best.remainingPercent.toFixed(0)}% remaining). Priority: ${priorityLabel}. Reason: ${reasonDetail}.`;
-				notify(ctx, "info", message);
-				return;
-			}
+			const reasonDetail = runnerUp ? selectionReason(best, runnerUp, config.priority) : "Only one candidate available";
+			
+			const baseMessage = isAlreadySelected 
+				? `Model already set to ${mapping.model.provider}/${mapping.model.id}.`
+				: `Selected ${mapping.model.provider}/${mapping.model.id}.`;
+				
+			const bucketInfo = `Using ${best.displayName} ${best.windowLabel} (${best.remainingPercent.toFixed(0)}% remaining).`;
+			const selectionInfo = `Priority: ${priorityLabel}. Reason: ${reasonDetail}.`;
 
-			const baseMessage = `Selected ${mapping.model.provider}/${mapping.model.id} using ${best.displayName} ${best.windowLabel} (${best.remainingPercent.toFixed(0)}% remaining).`;
-			const detail = `Priority: ${priorityLabel}. Reason: ${reasonDetail}.`;
-
-			if (reason === "startup") {
-				notify(ctx, "info", `${baseMessage} ${detail}`);
-				return;
-			}
-
-			notify(ctx, "info", `${baseMessage} ${detail}`);
+			notify(ctx, "info", `${baseMessage} ${bucketInfo} ${selectionInfo}`);
 		} finally {
 			running = false;
 		}

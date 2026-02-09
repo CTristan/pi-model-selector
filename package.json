@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "description": "A Pi extension that automatically selects the best model based on remaining usage quotas across various providers (Claude, OpenAI, Gemini, etc.).",
   "keywords": ["pi-package"],
+  "type": "module",
   "main": "index.ts",
   "pi": {
     "extensions": ["index.ts"]

@@ -1,14 +1,24 @@
-import { execSync } from "node:child_process";
+import { exec, execSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { promisify } from "node:util";
 import type { RateWindow, UsageSnapshot } from "./types.js";
+
+const execAsync = promisify(exec);
 
 // ============================================================================
 // Utility Functions
 // ============================================================================
 
+export function safeDate(value: any): Date | undefined {
+	if (!value) return undefined;
+	const d = new Date(value);
+	return isNaN(d.getTime()) ? undefined : d;
+}
+
 export function formatReset(date: Date): string {
+	if (isNaN(date.getTime())) return "";
 	const diffMs = date.getTime() - Date.now();
 	if (diffMs < 0) return "now";
 
@@ -22,7 +32,11 @@ export function formatReset(date: Date): string {
 	const days = Math.floor(hours / 24);
 	if (days < 7) return `${days}d ${hours % 24}h`;
 
-	return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(date);
+	try {
+		return new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" }).format(date);
+	} catch {
+		return "";
+	}
 }
 
 // ============================================================================
@@ -40,12 +54,14 @@ function loadClaudeAuthToken(): string | undefined {
 	return undefined;
 }
 
-function loadClaudeKeychainToken(): string | undefined {
+async function loadClaudeKeychainToken(): Promise<string | undefined> {
+	if (os.platform() !== "darwin") return undefined;
 	try {
-		const keychainData = execSync(
+		const { stdout } = await execAsync(
 			"security find-generic-password -s \"Claude Code-credentials\" -w 2>/dev/null",
-			{ encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }
-		).trim();
+			{ encoding: "utf-8" }
+		);
+		const keychainData = stdout.trim();
 		if (keychainData) {
 			const parsed = JSON.parse(keychainData);
 			const scopes = parsed.claudeAiOauth?.scopes || [];
@@ -62,7 +78,7 @@ export async function fetchClaudeUsage(): Promise<UsageSnapshot> {
 	let source = "auth.json";
 
 	if (!token) {
-		token = loadClaudeKeychainToken();
+		token = await loadClaudeKeychainToken();
 		source = "keychain";
 	}
 
@@ -72,22 +88,25 @@ export async function fetchClaudeUsage(): Promise<UsageSnapshot> {
 
 	const doFetch = async (accessToken: string) => {
 		const controller = new AbortController();
-		setTimeout(() => controller.abort(), 5000);
-
-		return fetch("https://api.anthropic.com/api/oauth/usage", {
-			headers: {
-				Authorization: `Bearer ${accessToken}`,
-				"anthropic-beta": "oauth-2025-04-20",
-			},
-			signal: controller.signal,
-		});
+		const timer = setTimeout(() => controller.abort(), 5000);
+		try {
+			return await fetch("https://api.anthropic.com/api/oauth/usage", {
+				headers: {
+					Authorization: `Bearer ${accessToken}`,
+					"anthropic-beta": "oauth-2025-04-20",
+				},
+				signal: controller.signal,
+			});
+		} finally {
+			clearTimeout(timer);
+		}
 	};
 
 	try {
 		let res = await doFetch(token);
 
 		if ((res.status === 401 || res.status === 403) && source === "auth.json") {
-			const keychainToken = loadClaudeKeychainToken();
+			const keychainToken = await loadClaudeKeychainToken();
 			if (keychainToken && keychainToken !== token) {
 				token = keychainToken;
 				res = await doFetch(token);
@@ -102,30 +121,36 @@ export async function fetchClaudeUsage(): Promise<UsageSnapshot> {
 		const windows: RateWindow[] = [];
 
 		if (data.five_hour?.utilization !== undefined) {
-			const resetDate = data.five_hour.resets_at ? new Date(data.five_hour.resets_at) : undefined;
+			const resetDate = safeDate(data.five_hour.resets_at);
 			windows.push({
 				label: "5h",
-				usedPercent: data.five_hour.utilization,
+				usedPercent: data.five_hour.utilization * 100,
 				resetDescription: resetDate ? formatReset(resetDate) : undefined,
 				resetsAt: resetDate,
 			});
 		}
 
 		if (data.seven_day?.utilization !== undefined) {
-			const resetDate = data.seven_day.resets_at ? new Date(data.seven_day.resets_at) : undefined;
+			const resetDate = safeDate(data.seven_day.resets_at);
 			windows.push({
 				label: "Week",
-				usedPercent: data.seven_day.utilization,
+				usedPercent: data.seven_day.utilization * 100,
 				resetDescription: resetDate ? formatReset(resetDate) : undefined,
 				resetsAt: resetDate,
 			});
 		}
 
-		const modelWindow = data.seven_day_sonnet || data.seven_day_opus;
-		if (modelWindow?.utilization !== undefined) {
+		if (data.seven_day_sonnet?.utilization !== undefined) {
 			windows.push({
-				label: data.seven_day_sonnet ? "Sonnet" : "Opus",
-				usedPercent: modelWindow.utilization,
+				label: "Sonnet",
+				usedPercent: data.seven_day_sonnet.utilization * 100,
+			});
+		}
+
+		if (data.seven_day_opus?.utilization !== undefined) {
+			windows.push({
+				label: "Opus",
+				usedPercent: data.seven_day_opus.utilization * 100,
 			});
 		}
 
@@ -139,12 +164,18 @@ export async function fetchClaudeUsage(): Promise<UsageSnapshot> {
 // Copilot Usage
 // ============================================================================
 
-function loadCopilotRefreshToken(): string | undefined {
+function loadCopilotAuth(): { access?: string; refresh?: string } | undefined {
 	const authPath = path.join(os.homedir(), ".pi", "agent", "auth.json");
 	try {
 		if (fs.existsSync(authPath)) {
 			const data = JSON.parse(fs.readFileSync(authPath, "utf-8"));
-			if (data["github-copilot"]?.refresh) return data["github-copilot"].refresh;
+			const copilot = data["github-copilot"];
+			if (copilot) {
+				return {
+					access: typeof copilot.access === "string" ? copilot.access : undefined,
+					refresh: typeof copilot.refresh === "string" ? copilot.refresh : undefined,
+				};
+			}
 		}
 	} catch {}
 
@@ -152,8 +183,8 @@ function loadCopilotRefreshToken(): string | undefined {
 }
 
 export async function fetchCopilotUsage(_modelRegistry: any): Promise<UsageSnapshot> {
-	const token = loadCopilotRefreshToken();
-	if (!token) {
+	const auth = loadCopilotAuth();
+	if (!auth?.access && !auth?.refresh) {
 		return { provider: "copilot", displayName: "Copilot", windows: [], error: "No token" };
 	}
 
@@ -166,40 +197,42 @@ export async function fetchCopilotUsage(_modelRegistry: any): Promise<UsageSnaps
 
 	const tryFetch = async (authHeader: string) => {
 		const controller = new AbortController();
-		setTimeout(() => controller.abort(), 5000);
+		const timer = setTimeout(() => controller.abort(), 5000);
 
-		const res = await fetch("https://api.github.com/copilot_internal/user", {
-			headers: {
-				...headersBase,
-				Authorization: authHeader,
-			},
-			signal: controller.signal,
-		});
-		return res;
+		try {
+			return await fetch("https://api.github.com/copilot_internal/user", {
+				headers: {
+					...headersBase,
+					Authorization: authHeader,
+				},
+				signal: controller.signal,
+			});
+		} finally {
+			clearTimeout(timer);
+		}
 	};
 
 	try {
-		const attempts = [`token ${token}`];
-		let lastStatus: number | undefined;
 		let res: Response | undefined;
+		if (auth.access) {
+			res = await tryFetch(`Bearer ${auth.access}`);
+		}
 
-		for (const auth of attempts) {
-			res = await tryFetch(auth);
-			lastStatus = res.status;
-			if (res.ok) break;
-			if (res.status === 401 || res.status === 403) continue;
-			break;
+		if ((!res || !res.ok) && auth.access) {
+			if (!res || res.status === 401 || res.status === 403) {
+				res = await tryFetch(`token ${auth.access}`);
+			}
 		}
 
 		if (!res || !res.ok) {
-			const status = lastStatus ?? 0;
+			const status = res?.status ?? 0;
 			return { provider: "copilot", displayName: "Copilot", windows: [], error: `HTTP ${status}` };
 		}
 
 		const data = (await res.json()) as any;
 		const windows: RateWindow[] = [];
 
-		const resetDate = data.quota_reset_date_utc ? new Date(data.quota_reset_date_utc) : undefined;
+		const resetDate = safeDate(data.quota_reset_date_utc);
 		const resetDesc = resetDate ? formatReset(resetDate) : undefined;
 
 		if (data.quota_snapshots?.premium_interactions) {
@@ -241,6 +274,8 @@ export async function fetchCopilotUsage(_modelRegistry: any): Promise<UsageSnaps
 // ============================================================================
 
 export async function refreshGoogleToken(refreshToken: string): Promise<{ accessToken: string; expiresAt?: number } | null> {
+	const controller = new AbortController();
+	const timer = setTimeout(() => controller.abort(), 10000);
 	try {
 		const res = await fetch("https://oauth2.googleapis.com/token", {
 			method: "POST",
@@ -250,6 +285,7 @@ export async function refreshGoogleToken(refreshToken: string): Promise<{ access
 				refresh_token: refreshToken,
 				grant_type: "refresh_token",
 			}),
+			signal: controller.signal,
 		});
 
 		if (!res.ok) return null;
@@ -263,6 +299,8 @@ export async function refreshGoogleToken(refreshToken: string): Promise<{ access
 		};
 	} catch {
 		return null;
+	} finally {
+		clearTimeout(timer);
 	}
 }
 
@@ -300,16 +338,24 @@ export async function fetchGeminiUsage(_modelRegistry: any): Promise<UsageSnapsh
 		return { provider: "gemini", displayName: "Gemini", windows: [], error: "No credentials" };
 	}
 
+	if (!projectId) {
+		return { provider: "gemini", displayName: "Gemini", windows: [], error: "Missing projectId" };
+	}
+
 	const doFetch = async (accessToken: string) => {
 		const controller = new AbortController();
-		setTimeout(() => controller.abort(), 5000);
+		const timer = setTimeout(() => controller.abort(), 5000);
 
-		return fetch("https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota", {
-			method: "POST",
-			headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
-			body: JSON.stringify({ project: projectId }),
-			signal: controller.signal,
-		});
+		try {
+			return await fetch("https://cloudcode-pa.googleapis.com/v1internal:retrieveUserQuota", {
+				method: "POST",
+				headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" },
+				body: JSON.stringify({ project: projectId }),
+				signal: controller.signal,
+			});
+		} finally {
+			clearTimeout(timer);
+		}
 	};
 
 	try {
@@ -334,7 +380,6 @@ export async function fetchGeminiUsage(_modelRegistry: any): Promise<UsageSnapsh
 						const data = JSON.parse(fs.readFileSync(credPath, "utf-8"));
 						if (data.access_token && data.access_token !== token) {
 							const newToken: string = data.access_token;
-							token = newToken;
 							res = await doFetch(newToken);
 						}
 					}
@@ -352,7 +397,7 @@ export async function fetchGeminiUsage(_modelRegistry: any): Promise<UsageSnapsh
 		for (const bucket of data.buckets || []) {
 			const model = bucket.modelId || "unknown";
 			const frac = bucket.remainingFraction ?? 1;
-			if (!quotas[model] || frac < quotas[model]) quotas[model] = frac;
+			if (quotas[model] === undefined || frac < quotas[model]) quotas[model] = frac;
 		}
 
 		const windows: RateWindow[] = [];
@@ -458,20 +503,24 @@ export async function fetchAntigravityUsage(modelRegistry: any): Promise<UsageSn
 
 	const fetchModels = async (token: string): Promise<Response> => {
 		const controller = new AbortController();
-		setTimeout(() => controller.abort(), 5000);
+		const timer = setTimeout(() => controller.abort(), 5000);
 
-		return fetch("https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels", {
-			method: "POST",
-			headers: {
-				Authorization: `Bearer ${token}`,
-				"Content-Type": "application/json",
-				"User-Agent": "antigravity/1.12.4",
-				"X-Goog-Api-Client": "google-cloud-sdk vscode_cloudshelleditor/0.1",
-				Accept: "application/json",
-			},
-			body: JSON.stringify({ project: auth.projectId }),
-			signal: controller.signal,
-		});
+		try {
+			return await fetch("https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels", {
+				method: "POST",
+				headers: {
+					Authorization: `Bearer ${token}`,
+					"Content-Type": "application/json",
+					"User-Agent": "antigravity/1.12.4",
+					"X-Goog-Api-Client": "google-cloud-sdk vscode_cloudshelleditor/0.1",
+					Accept: "application/json",
+				},
+				body: JSON.stringify({ project: auth.projectId }),
+				signal: controller.signal,
+			});
+		} finally {
+			clearTimeout(timer);
+		}
 	};
 
 	try {
@@ -703,69 +752,73 @@ async function fetchCodexUsageForCredential(cred: CodexCredential): Promise<Usag
 
 	try {
 		const controller = new AbortController();
-		setTimeout(() => controller.abort(), 5000);
+		const timer = setTimeout(() => controller.abort(), 5000);
 
-		const headers: Record<string, string> = {
-			Authorization: `Bearer ${cred.accessToken}`,
-			"User-Agent": "CodexBar",
-			Accept: "application/json",
-		};
+		try {
+			const headers: Record<string, string> = {
+				Authorization: `Bearer ${cred.accessToken}`,
+				"User-Agent": "CodexBar",
+				Accept: "application/json",
+			};
 
-		if (cred.accountId) {
-			headers["ChatGPT-Account-Id"] = cred.accountId;
-		}
+			if (cred.accountId) {
+				headers["ChatGPT-Account-Id"] = cred.accountId;
+			}
 
-		const res = await fetch("https://chatgpt.com/backend-api/wham/usage", {
-			method: "GET",
-			headers,
-			signal: controller.signal,
-		});
-
-		if (res.status === 401 || res.status === 403) {
-			return { provider: "codex", displayName, windows: [], error: "Token expired" };
-		}
-
-		if (!res.ok) {
-			return { provider: "codex", displayName, windows: [], error: `HTTP ${res.status}` };
-		}
-
-		const data = (await res.json()) as any;
-		const windows: RateWindow[] = [];
-
-		if (data.rate_limit?.primary_window) {
-			const pw = data.rate_limit.primary_window;
-			const resetDate = pw.reset_at ? new Date(pw.reset_at * 1000) : undefined;
-			const windowHours = Math.round((pw.limit_window_seconds || 10800) / 3600);
-			const usedPercent = typeof pw.used_percent === "number" ? pw.used_percent : Number(pw.used_percent) || 0;
-			windows.push({
-				label: `${windowHours}h`,
-				usedPercent,
-				resetDescription: resetDate ? formatReset(resetDate) : undefined,
-				resetsAt: resetDate,
+			const res = await fetch("https://chatgpt.com/backend-api/wham/usage", {
+				method: "GET",
+				headers,
+				signal: controller.signal,
 			});
-		}
 
-		if (data.rate_limit?.secondary_window) {
-			const sw = data.rate_limit.secondary_window;
-			const resetDate = sw.reset_at ? new Date(sw.reset_at * 1000) : undefined;
-			const windowHours = Math.round((sw.limit_window_seconds || 86400) / 3600);
-			const label = windowHours >= 24 ? "Week" : `${windowHours}h`;
-			const usedPercent = typeof sw.used_percent === "number" ? sw.used_percent : Number(sw.used_percent) || 0;
-			windows.push({
-				label,
-				usedPercent,
-				resetDescription: resetDate ? formatReset(resetDate) : undefined,
-				resetsAt: resetDate,
-			});
-		}
+			if (res.status === 401 || res.status === 403) {
+				return { provider: "codex", displayName, windows: [], error: "Token expired" };
+			}
 
-		let plan = data.plan_type;
-		if (data.credits?.balance !== undefined && data.credits.balance !== null) {
-			const balance = typeof data.credits.balance === "number" ? data.credits.balance : parseFloat(data.credits.balance) || 0;
-			plan = plan ? `${plan} ($${balance.toFixed(2)})` : `$${balance.toFixed(2)}`;
-		}
+			if (!res.ok) {
+				return { provider: "codex", displayName, windows: [], error: `HTTP ${res.status}` };
+			}
 
-		return { provider: "codex", displayName, windows, plan };
+			const data = (await res.json()) as any;
+			const windows: RateWindow[] = [];
+
+			if (data.rate_limit?.primary_window) {
+				const pw = data.rate_limit.primary_window;
+				const resetDate = pw.reset_at ? new Date(pw.reset_at * 1000) : undefined;
+				const windowHours = Math.round((pw.limit_window_seconds || 10800) / 3600);
+				const usedPercent = typeof pw.used_percent === "number" ? pw.used_percent : Number(pw.used_percent) || 0;
+				windows.push({
+					label: `${windowHours}h`,
+					usedPercent,
+					resetDescription: resetDate ? formatReset(resetDate) : undefined,
+					resetsAt: resetDate,
+				});
+			}
+
+			if (data.rate_limit?.secondary_window) {
+				const sw = data.rate_limit.secondary_window;
+				const resetDate = sw.reset_at ? new Date(sw.reset_at * 1000) : undefined;
+				const windowHours = Math.round((sw.limit_window_seconds || 86400) / 3600);
+				const label = windowHours >= 24 ? "Week" : `${windowHours}h`;
+				const usedPercent = typeof sw.used_percent === "number" ? sw.used_percent : Number(sw.used_percent) || 0;
+				windows.push({
+					label,
+					usedPercent,
+					resetDescription: resetDate ? formatReset(resetDate) : undefined,
+					resetsAt: resetDate,
+				});
+			}
+
+			let plan = data.plan_type;
+			if (data.credits?.balance !== undefined && data.credits.balance !== null) {
+				const balance = typeof data.credits.balance === "number" ? data.credits.balance : parseFloat(data.credits.balance) || 0;
+				plan = plan ? `${plan} ($${balance.toFixed(2)})` : `$${balance.toFixed(2)}`;
+			}
+
+			return { provider: "codex", displayName, windows, plan };
+		} finally {
+			clearTimeout(timer);
+		}
 	} catch (error) {
 		return { provider: "codex", displayName, windows: [], error: String(error) };
 	}
@@ -780,7 +833,7 @@ function usageFingerprint(snapshot: UsageSnapshot): string | null {
 		const resetTs = w.resetsAt ? w.resetsAt.getTime() : "";
 		return `${w.label}:${pct}:${resetTs}`;
 	});
-	return parts.sort().join("|");
+	return `${snapshot.displayName}|${parts.sort().join("|")}`;
 }
 
 export async function fetchAllCodexUsages(modelRegistry: any): Promise<UsageSnapshot[]> {
@@ -816,29 +869,29 @@ function stripAnsi(text: string): string {
 	return text.replace(/\x1B\[[0-9;?]*[A-Za-z]|\x1B\].*?\x07/g, "");
 }
 
-function whichSync(cmd: string): string | null {
+async function whichAsync(cmd: string): Promise<string | null> {
 	try {
-		return execSync(`which ${cmd}`, { encoding: "utf-8" }).trim();
+		const { stdout } = await execAsync(`which ${cmd}`, { encoding: "utf-8" });
+		return stdout.trim();
 	} catch {
 		return null;
 	}
 }
 
 export async function fetchKiroUsage(): Promise<UsageSnapshot> {
-	const kiroBinary = whichSync("kiro-cli");
+	const kiroBinary = await whichAsync("kiro-cli");
 	if (!kiroBinary) {
 		return { provider: "kiro", displayName: "Kiro", windows: [], error: "kiro-cli not found" };
 	}
 
 	try {
 		try {
-			execSync("kiro-cli whoami", { encoding: "utf-8", timeout: 5000 });
+			await execAsync("kiro-cli whoami", { timeout: 5000 });
 		} catch {
 			return { provider: "kiro", displayName: "Kiro", windows: [], error: "Not logged in" };
 		}
 
-		const output = execSync("kiro-cli chat --no-interactive /usage", {
-			encoding: "utf-8",
+		const { stdout: output } = await execAsync("kiro-cli chat --no-interactive /usage", {
 			timeout: 10000,
 			env: { ...process.env, TERM: "xterm-256color" },
 		});
@@ -853,30 +906,32 @@ export async function fetchKiroUsage(): Promise<UsageSnapshot> {
 		}
 
 		let creditsPercent = 0;
-		const percentMatch = stripped.match(/█+\s*(\d+)%/);
+		// Be more flexible with progress bar matching
+		const percentMatch = stripped.match(/(?:█+|[#=]+|Progress:?)\s*(\d+)%/) || stripped.match(/(\d+)%/);
 		if (percentMatch) {
 			creditsPercent = parseInt(percentMatch[1], 10);
 		}
 
-		let creditsUsed = 0;
-		let creditsTotal = 50;
-		const creditsMatch = stripped.match(/\((\d+\.?\d*)\s+of\s+(\d+)\s+covered/);
+		const creditsMatch = stripped.match(/\(?(\d+\.?\d*)\s*(?:\/|of)\s*(\d+\.?\d*)\)?/i);
 		if (creditsMatch) {
-			creditsUsed = parseFloat(creditsMatch[1]);
-			creditsTotal = parseFloat(creditsMatch[2]);
+			const creditsUsed = parseFloat(creditsMatch[1]);
+			const creditsTotal = parseFloat(creditsMatch[2]);
 			if (!percentMatch && creditsTotal > 0) {
 				creditsPercent = (creditsUsed / creditsTotal) * 100;
 			}
 		}
 
 		let resetsAt: Date | undefined;
-		const resetMatch = stripped.match(/resets on (\d{2}\/\d{2})/);
+		const resetMatch = stripped.match(/resets\s+on\s+(\d{1,2}\/\d{1,2})/i);
 		if (resetMatch) {
 			const [month, day] = resetMatch[1].split("/").map(Number);
 			const now = new Date();
 			const year = now.getFullYear();
-			resetsAt = new Date(year, month - 1, day);
-			if (resetsAt < now) resetsAt.setFullYear(year + 1);
+			const d = new Date(year, month - 1, day);
+			if (!isNaN(d.getTime())) {
+				resetsAt = d;
+				if (resetsAt < now) resetsAt.setFullYear(year + 1);
+			}
 		}
 
 		windows.push({
@@ -886,12 +941,12 @@ export async function fetchKiroUsage(): Promise<UsageSnapshot> {
 			resetsAt,
 		});
 
-		const bonusMatch = stripped.match(/Bonus credits:\s*(\d+\.?\d*)\/(\d+)/);
+		const bonusMatch = stripped.match(/Bonus\s*credits:?\s*(\d+(?:\.\d+)?)\s*\/\s*(\d+(?:\.\d+)?)/i);
 		if (bonusMatch) {
 			const bonusUsed = parseFloat(bonusMatch[1]);
 			const bonusTotal = parseFloat(bonusMatch[2]);
 			const bonusPercent = bonusTotal > 0 ? (bonusUsed / bonusTotal) * 100 : 0;
-			const expiryMatch = stripped.match(/expires in (\d+) days?/);
+			const expiryMatch = stripped.match(/expires\s+in\s+(\d+)\s+days?/i);
 			windows.push({
 				label: "Bonus",
 				usedPercent: bonusPercent,
@@ -928,57 +983,61 @@ export async function fetchZaiUsage(): Promise<UsageSnapshot> {
 
 	try {
 		const controller = new AbortController();
-		setTimeout(() => controller.abort(), 5000);
+		const timer = setTimeout(() => controller.abort(), 5000);
 
-		const res = await fetch("https://api.z.ai/api/monitor/usage/quota/limit", {
-			method: "GET",
-			headers: {
-				Authorization: `Bearer ${apiKey}`,
-				Accept: "application/json",
-			},
-			signal: controller.signal,
-		});
+		try {
+			const res = await fetch("https://api.z.ai/api/monitor/usage/quota/limit", {
+				method: "GET",
+				headers: {
+					Authorization: `Bearer ${apiKey}`,
+					Accept: "application/json",
+				},
+				signal: controller.signal,
+			});
 
-		if (!res.ok) {
-			return { provider: "zai", displayName: "z.ai", windows: [], error: `HTTP ${res.status}` };
-		}
-
-		const data = (await res.json()) as any;
-		if (!data.success || data.code !== 200) {
-			return { provider: "zai", displayName: "z.ai", windows: [], error: data.msg || "API error" };
-		}
-
-		const windows: RateWindow[] = [];
-		const limits = data.data?.limits || [];
-
-		for (const limit of limits) {
-			const percent = limit.percentage || 0;
-			const nextReset = limit.nextResetTime ? new Date(limit.nextResetTime) : undefined;
-
-			let windowLabel = "Limit";
-			if (limit.unit === 1) windowLabel = `${limit.number}d`;
-			else if (limit.unit === 3) windowLabel = `${limit.number}h`;
-			else if (limit.unit === 5) windowLabel = `${limit.number}m`;
-
-			if (limit.type === "TOKENS_LIMIT") {
-				windows.push({
-					label: `Tokens (${windowLabel})`,
-					usedPercent: percent,
-					resetDescription: nextReset ? formatReset(nextReset) : undefined,
-					resetsAt: nextReset,
-				});
-			} else if (limit.type === "TIME_LIMIT") {
-				windows.push({
-					label: "Monthly",
-					usedPercent: percent,
-					resetDescription: nextReset ? formatReset(nextReset) : undefined,
-					resetsAt: nextReset,
-				});
+			if (!res.ok) {
+				return { provider: "zai", displayName: "z.ai", windows: [], error: `HTTP ${res.status}` };
 			}
-		}
 
-		const planName = data.data?.planName || data.data?.plan || undefined;
-		return { provider: "zai", displayName: "z.ai", windows, plan: planName };
+			const data = (await res.json()) as any;
+			if (!data.success || data.code !== 200) {
+				return { provider: "zai", displayName: "z.ai", windows: [], error: data.msg || "API error" };
+			}
+
+			const windows: RateWindow[] = [];
+			const limits = data.data?.limits || [];
+
+			for (const limit of limits) {
+				const percent = limit.percentage || 0;
+				const nextReset = limit.nextResetTime ? new Date(limit.nextResetTime) : undefined;
+
+				let windowLabel = "Limit";
+				if (limit.unit === 1) windowLabel = `${limit.number}d`;
+				else if (limit.unit === 3) windowLabel = `${limit.number}h`;
+				else if (limit.unit === 5) windowLabel = `${limit.number}m`;
+
+				if (limit.type === "TOKENS_LIMIT") {
+					windows.push({
+						label: `Tokens (${windowLabel})`,
+						usedPercent: percent,
+						resetDescription: nextReset ? formatReset(nextReset) : undefined,
+						resetsAt: nextReset,
+					});
+				} else if (limit.type === "TIME_LIMIT") {
+					windows.push({
+						label: "Monthly",
+						usedPercent: percent,
+						resetDescription: nextReset ? formatReset(nextReset) : undefined,
+						resetsAt: nextReset,
+					});
+				}
+			}
+
+			const planName = data.data?.planName || data.data?.plan || undefined;
+			return { provider: "zai", displayName: "z.ai", windows, plan: planName };
+		} finally {
+			clearTimeout(timer);
+		}
 	} catch (error) {
 		return { provider: "zai", displayName: "z.ai", windows: [], error: String(error) };
 	}
@@ -989,8 +1048,15 @@ export async function fetchZaiUsage(): Promise<UsageSnapshot> {
 // ============================================================================
 
 export async function fetchAllUsages(modelRegistry: any): Promise<UsageSnapshot[]> {
-	const timeout = <T>(promise: Promise<T>, ms: number, fallback: T) =>
-		Promise.race([promise, new Promise<T>((resolve) => setTimeout(() => resolve(fallback), ms))]);
+	const timeout = <T>(promise: Promise<T>, ms: number, fallback: T) => {
+		let timer: NodeJS.Timeout;
+		const timeoutPromise = new Promise<T>((resolve) => {
+			timer = setTimeout(() => resolve(fallback), ms);
+		});
+		return Promise.race([promise, timeoutPromise]).finally(() => {
+			if (timer) clearTimeout(timer);
+		});
+	};
 
 	const [claude, copilot, gemini, codexResults, antigravity, kiro, zai] = await Promise.all([
 		timeout(fetchClaudeUsage(), 6000, { provider: "anthropic", displayName: "Claude", windows: [], error: "Timeout" }),

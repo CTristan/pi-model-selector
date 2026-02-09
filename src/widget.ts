@@ -1,4 +1,5 @@
 import type { ExtensionContext, Theme } from "@mariozechner/pi-coding-agent";
+import { truncateToWidth } from "@mariozechner/pi-tui";
 import type { UsageCandidate, LoadedConfig, MappingEntry } from "./types.js";
 import { formatReset } from "./usage-fetchers.js";
 import { findModelMapping, findIgnoreMapping } from "./candidates.js";
@@ -117,21 +118,21 @@ export function renderUsageWidget(ctx: ExtensionContext): void {
 
 	const topCandidates = candidates.slice(0, showCount);
 
-	const setWidgetWithPlacement = (ctx.ui as unknown as { setWidget: (...args: unknown[]) => void }).setWidget;
-	setWidgetWithPlacement(
+	const ui = ctx.ui as any;
+	if (typeof ui?.setWidget !== "function") return;
+
+	ui.setWidget(
 		"model-selector",
-		(_tui: unknown, theme: Theme) => ({
+		(_: unknown, theme: Theme) => ({
 			render(width: number) {
 				const safeWidth = Math.max(1, width);
 				const paddingLeft = 1;
-				const paddingRight = 1;
-				const contentWidth = Math.max(1, safeWidth - paddingLeft - paddingRight);
 
 				// Compact horizontal format
 				const separator = theme.fg("dim", " │ ");
 				const barWidth = 6;
-				
-				const formattedCandidates = topCandidates.map(c => 
+
+				const formattedCandidates = topCandidates.map((c) =>
 					formatCandidate(c, config.mappings, theme, barWidth)
 				);
 
@@ -139,7 +140,7 @@ export function renderUsageWidget(ctx: ExtensionContext): void {
 
 				const lines: string[] = [];
 				lines.push(theme.fg("dim", "─".repeat(safeWidth)));
-				lines.push(" ".repeat(paddingLeft) + contentLine);
+				lines.push(truncateToWidth(" ".repeat(paddingLeft) + contentLine, safeWidth));
 				lines.push(theme.fg("dim", "─".repeat(safeWidth)));
 
 				return lines;

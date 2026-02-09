@@ -7,8 +7,8 @@ echo "Setting up pre-commit hook..."
 
 # Ensure the .git directory exists
 if [ ! -d ".git" ]; then
-  echo "Error: .git directory not found. Are you in the root of the repository?"
-  exit 1
+  echo "No .git directory found, skipping hook installation."
+  exit 0
 fi
 
 # Create the pre-commit hook
@@ -35,6 +35,8 @@ EOF
 chmod +x "$HOOK_PATH"
 
 # Ensure Git is configured to use the hooks directory
-git config core.hooksPath .git/hooks
+if git rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+  git config core.hooksPath .git/hooks
+fi
 
 echo "Pre-commit hook installed successfully at $HOOK_PATH"

@@ -7,14 +7,15 @@ import type {
 	LoadedConfig,
 	WidgetConfig,
 } from "./types.js";
-import { notify, DEFAULT_PRIORITY, DEFAULT_WIDGET_CONFIG } from "./types.js";
+import { notify, DEFAULT_PRIORITY, DEFAULT_WIDGET_CONFIG, mappingKey } from "./types.js";
+import { fileURLToPath } from "node:url";
 
 // We'll determine the config path dynamically
 let cachedGlobalConfigPath: string | null = null;
 
 function getDirname(): string {
 	if (typeof __dirname !== "undefined") return __dirname;
-	return process.cwd();
+	return path.dirname(fileURLToPath(import.meta.url));
 }
 
 function findGlobalConfigPath(): string {
@@ -68,7 +69,16 @@ export function readConfigFile(filePath: string, errors: string[]): Record<strin
 
 export function saveConfigFile(filePath: string, raw: Record<string, any>): void {
 	fs.mkdirSync(path.dirname(filePath), { recursive: true });
-	fs.writeFileSync(filePath, JSON.stringify(raw, null, 2) + "\n", "utf-8");
+	const tempPath = `${filePath}.tmp.${Math.random().toString(36).slice(2)}`;
+	try {
+		fs.writeFileSync(tempPath, JSON.stringify(raw, null, 2) + "\n", "utf-8");
+		fs.renameSync(tempPath, filePath);
+	} catch (error) {
+		try {
+			if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+		} catch {}
+		throw error;
+	}
 }
 
 // ============================================================================
@@ -175,6 +185,15 @@ function normalizeMappings(
 			continue;
 		}
 
+		if (usage.windowPattern !== undefined && typeof usage.windowPattern === "string") {
+			try {
+				new RegExp(usage.windowPattern);
+			} catch (e) {
+				errors.push(`[${sourceLabel}] invalid windowPattern "${usage.windowPattern}": ${e}`);
+				continue;
+			}
+		}
+
 		const model = item.model;
 		const ignore = item.ignore === true;
 
@@ -199,10 +218,6 @@ function normalizeMappings(
 	}
 
 	return mappings;
-}
-
-export function mappingKey(entry: MappingEntry): string {
-	return `${entry.usage.provider}|${entry.usage.window ?? ""}|${entry.usage.windowPattern ?? ""}`;
 }
 
 function mergeMappings(globalMappings: MappingEntry[], projectMappings: MappingEntry[]): MappingEntry[] {
