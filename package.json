@@ -18,16 +18,27 @@
   "devDependencies": {
     "@mariozechner/pi-coding-agent": "latest",
     "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.55.0",
+    "@typescript-eslint/parser": "^8.55.0",
     "@vitest/coverage-v8": "^4.0.18",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.3.0",
+    "prettier": "^3.8.1",
     "typescript": "^5.0.0",
+    "typescript-eslint": "^8.55.0",
     "vitest": "^4.0.18"
   },
   "scripts": {
     "type-check": "tsc",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format:check": "prettier --check .",
+    "format:fix": "prettier --write .",
     "test": "vitest run --coverage",
     "test:watch": "vitest",
     "ci": "npm run type-check && npm run test",
-    "setup-hooks": "./scripts/setup-hooks.sh",
+    "setup-hooks": "node scripts/setup-hooks.js",
     "prepare": "node scripts/prepare.js"
   }
 }

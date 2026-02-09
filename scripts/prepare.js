@@ -1,8 +1,9 @@
-if (process.env.CI !== 'true') {
-  const { execSync } = require('child_process');
+import { execSync } from "node:child_process";
+
+if (process.env.CI !== "true") {
   try {
-    execSync('npm run setup-hooks', { stdio: 'inherit' });
-  } catch (e) {
+    execSync("npm run setup-hooks", { stdio: "inherit" });
+  } catch {
     process.exit(1);
   }
 }

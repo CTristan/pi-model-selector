@@ -48,15 +48,19 @@ The extension runs automatically when you start a new session. You can also use 
 Configuration is stored in `config/model-selector.json` (bundled defaults), `~/.pi/model-selector.json` (global user config), or `.pi/model-selector.json` (project-specific config).
 
 ### Priority Rules
+
 You can prioritize candidates based on:
+
 - `fullAvailability`: Prefer models with 100% quota remaining.
 - `remainingPercent`: Prefer models with the highest percentage of quota remaining.
 - `earliestReset`: Prefer models that reset the soonest.
 
 ### Mappings
+
 Map a provider's usage window to a specific Pi model ID.
 
 Example `model-selector.json`:
+
 ```json
 {
   "priority": ["fullAvailability", "remainingPercent", "earliestReset"],

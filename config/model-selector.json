@@ -1,9 +1,5 @@
 {
-  "priority": [
-    "fullAvailability",
-    "earliestReset",
-    "remainingPercent"
-  ],
+  "priority": ["fullAvailability", "earliestReset", "remainingPercent"],
   "widget": {
     "enabled": true,
     "placement": "belowEditor",
@@ -14,10 +10,7 @@
     "enabled": false,
     "path": "model-selector.log"
   },
-  "disabledProviders": [
-    "kiro",
-    "zai"
-  ],
+  "disabledProviders": ["kiro", "zai"],
   "mappings": [
     {
       "usage": {
