@@ -1,9 +1,22 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fetchCopilotUsage } from "../src/fetchers/copilot.js";
+import { execAsync } from "../src/fetchers/common.js";
+
+vi.mock("../src/fetchers/common.js", async () => {
+  const actual = await vi.importActual<
+    typeof import("../src/fetchers/common.js")
+  >("../src/fetchers/common.js");
+  return {
+    ...actual,
+    execAsync: vi.fn(),
+  };
+});
 
 describe("Copilot Deduplication", () => {
   beforeEach(() => {
+    vi.resetAllMocks();
     vi.stubGlobal("fetch", vi.fn());
+    vi.mocked(execAsync).mockResolvedValue({ stdout: "", stderr: "" });
   });
 
   it("should deduplicate by account, preferring success over error", async () => {
