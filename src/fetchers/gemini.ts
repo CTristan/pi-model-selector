@@ -5,6 +5,31 @@ import type { RateWindow, UsageSnapshot } from "../types.js";
 import { writeDebugLog } from "../types.js";
 import { fetchWithTimeout, refreshGoogleToken, URLS } from "./common.js";
 
+interface GeminiTokenInfo {
+  token?: string;
+  refreshToken?: string;
+  projectId?: string;
+  clientId?: string;
+  clientSecret?: string;
+  expiresAt?: number;
+  sources: string[];
+}
+
+function parseEpochMillis(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    if (/^\d+$/.test(value)) {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : undefined;
+    }
+    const parsedDate = Date.parse(value);
+    return Number.isNaN(parsedDate) ? undefined : parsedDate;
+  }
+  return undefined;
+}
+
 export async function fetchGeminiUsage(
   modelRegistry: unknown,
   piAuth: Record<string, unknown> = {},
@@ -19,20 +44,14 @@ export async function fetchGeminiUsage(
       };
     };
 
-    interface GeminiTokenInfo {
-      token?: string;
-      refreshToken?: string;
-      projectId?: string;
-      clientId?: string;
-      sources: string[];
-    }
-
     const discoveredProjectIds = new Set<string>();
     const discoveredCredentials: Array<{
       token?: string;
       refreshToken?: string;
       projectId?: string;
       clientId?: string;
+      clientSecret?: string;
+      expiresAt?: number;
       source: string;
     }> = [];
 
@@ -42,6 +61,8 @@ export async function fetchGeminiUsage(
       refreshToken?: string,
       projectId?: string,
       clientId?: string,
+      clientSecret?: string,
+      expiresAt?: number,
     ) => {
       if (projectId) discoveredProjectIds.add(projectId);
       if (token || refreshToken || projectId) {
@@ -50,6 +71,8 @@ export async function fetchGeminiUsage(
           refreshToken,
           projectId,
           clientId,
+          clientSecret,
+          expiresAt,
           source,
         });
         writeDebugLog(`fetchGeminiUsage: discovered fragment from ${source}`);
@@ -63,6 +86,17 @@ export async function fetchGeminiUsage(
       const refresh = d.refresh || d.refresh_token;
       const project = d.projectId || d.project_id;
       const client = d.clientId || d.client_id;
+      const clientSecret = d.clientSecret || d.client_secret;
+      const expiresAt =
+        parseEpochMillis(
+          d.expires || d.expiresAt || d.expiry_date || d.expiryDate,
+        ) ??
+        (typeof d.expires_in === "number" && Number.isFinite(d.expires_in)
+          ? Date.now() + d.expires_in * 1000
+          : typeof d.expires_in === "string" && /^\d+$/.test(d.expires_in)
+            ? Date.now() + Number(d.expires_in) * 1000
+            : undefined);
+
       if (
         typeof token === "string" ||
         typeof refresh === "string" ||
@@ -74,20 +108,30 @@ export async function fetchGeminiUsage(
           typeof refresh === "string" ? refresh : undefined,
           typeof project === "string" ? project : undefined,
           typeof client === "string" ? client : undefined,
+          typeof clientSecret === "string" ? clientSecret : undefined,
+          expiresAt,
         );
       }
     };
 
     // 1. Discovery
     try {
-      const gKey = await mr?.authStorage?.getApiKey?.("google-gemini");
-      if (gKey) addFragment("registry:google-gemini:apiKey", gKey);
+      const discoverRegistry = async (id: string) => {
+        const key = await mr?.authStorage?.getApiKey?.(id);
+        if (key) addFragment(`registry:${id}:apiKey`, key);
 
-      const gData = await mr?.authStorage?.get?.("google-gemini");
-      extractFromData(gData, "registry:google-gemini:data");
+        const data = await mr?.authStorage?.get?.(id);
+        extractFromData(data, `registry:${id}:data`);
+      };
 
-      const cliData = piAuth["google-gemini-cli"];
-      extractFromData(cliData, "auth.json:google-gemini-cli");
+      await discoverRegistry("google-gemini");
+      await discoverRegistry("google-gemini-cli");
+
+      extractFromData(
+        piAuth["google-gemini-cli"],
+        "auth.json:google-gemini-cli",
+      );
+      extractFromData(piAuth["google-gemini"], "auth.json:google-gemini");
     } catch (e: unknown) {
       writeDebugLog(`fetchGeminiUsage: registry error: ${String(e)}`);
     }
@@ -105,31 +149,38 @@ export async function fetchGeminiUsage(
     }
 
     // Merging logic:
-    // 1. Group credentials by their auth content (token, refreshToken, clientId)
+    // 1. Group credentials by their auth content.
     const groupedAuth = new Map<
       string,
       {
         token?: string;
         refreshToken?: string;
         clientId?: string;
+        clientSecret?: string;
+        expiresAt?: number;
         projectIds: Set<string>;
         sources: Set<string>;
       }
     >();
 
     for (const cred of discoveredCredentials) {
-      const key = `${cred.token || ""}|${cred.refreshToken || ""}|${cred.clientId || ""}`;
+      const key = `${cred.token || ""}|${cred.refreshToken || ""}|${cred.clientId || ""}|${cred.clientSecret || ""}`;
       if (!groupedAuth.has(key)) {
         groupedAuth.set(key, {
           token: cred.token,
           refreshToken: cred.refreshToken,
           clientId: cred.clientId,
+          clientSecret: cred.clientSecret,
+          expiresAt: cred.expiresAt,
           projectIds: new Set(),
           sources: new Set(),
         });
       }
       const group = groupedAuth.get(key)!;
       if (cred.projectId) group.projectIds.add(cred.projectId);
+      if (cred.expiresAt) {
+        group.expiresAt = Math.max(group.expiresAt ?? 0, cred.expiresAt);
+      }
       group.sources.add(cred.source);
     }
 
@@ -153,7 +204,7 @@ export async function fetchGeminiUsage(
         if (group.projectIds.has(pid) || group.projectIds.size === 0) {
           if (!group.token && !group.refreshToken) continue;
 
-          // Merge sources from the project discovery and the auth group
+          // Merge sources from the project discovery and the auth group.
           const combinedSources = new Set([
             ...Array.from(sourcesForPid),
             ...Array.from(group.sources),
@@ -164,6 +215,8 @@ export async function fetchGeminiUsage(
             token: group.token,
             refreshToken: group.refreshToken,
             clientId: group.clientId,
+            clientSecret: group.clientSecret,
+            expiresAt: group.expiresAt,
             sources: Array.from(combinedSources),
           });
         }
@@ -178,7 +231,8 @@ export async function fetchGeminiUsage(
         (c) =>
           c.token === group.token &&
           c.refreshToken === group.refreshToken &&
-          c.clientId === group.clientId,
+          c.clientId === group.clientId &&
+          c.clientSecret === group.clientSecret,
       );
 
       if (!alreadyUsed) {
@@ -186,6 +240,8 @@ export async function fetchGeminiUsage(
           token: group.token,
           refreshToken: group.refreshToken,
           clientId: group.clientId,
+          clientSecret: group.clientSecret,
+          expiresAt: group.expiresAt,
           sources: Array.from(group.sources),
         });
       }
@@ -221,13 +277,6 @@ export async function fetchGeminiUsage(
 
           for (const cfg of groupConfigs) {
             try {
-              let currentToken = cfg.token;
-
-              // Skip if we already tried this token and it failed
-              if (currentToken && triedTokensInProject.has(currentToken)) {
-                continue;
-              }
-
               if (projectId === "no-project") {
                 lastSnapshot = {
                   provider: "gemini",
@@ -252,6 +301,30 @@ export async function fetchGeminiUsage(
                 });
               };
 
+              let currentToken = cfg.token;
+
+              // Proactively refresh expired/missing access tokens when possible.
+              if (
+                cfg.refreshToken &&
+                (!currentToken ||
+                  (cfg.expiresAt !== undefined &&
+                    cfg.expiresAt < Date.now() + 60_000))
+              ) {
+                const refreshed = await refreshGoogleToken(
+                  cfg.refreshToken,
+                  cfg.clientId,
+                  cfg.clientSecret,
+                );
+                if (refreshed?.accessToken) {
+                  currentToken = refreshed.accessToken;
+                }
+              }
+
+              if (currentToken && triedTokensInProject.has(currentToken)) {
+                // Skip if we already tried this token and it failed.
+                continue;
+              }
+
               let res: Response;
               let data: unknown;
 
@@ -268,11 +341,12 @@ export async function fetchGeminiUsage(
                 const refreshed = await refreshGoogleToken(
                   cfg.refreshToken,
                   cfg.clientId,
+                  cfg.clientSecret,
                 );
                 if (refreshed?.accessToken) {
                   currentToken = refreshed.accessToken;
                   if (triedTokensInProject.has(currentToken)) {
-                    // Already tried this refreshed token from another source
+                    // Already tried this refreshed token from another source.
                     continue;
                   }
                   ({ res, data } = await doFetch(currentToken));
@@ -304,9 +378,9 @@ export async function fetchGeminiUsage(
 
                 let family = "Other";
                 if (modelId.toLowerCase().includes("pro")) family = "Pro";
-                else if (modelId.toLowerCase().includes("flash"))
+                else if (modelId.toLowerCase().includes("flash")) {
                   family = "Flash";
-                else {
+                } else {
                   const parts = modelId.split("-");
                   if (parts.length > 0 && parts[0]) {
                     family =
@@ -381,7 +455,7 @@ export async function fetchGeminiUsage(
             );
             continue;
           }
-          // Suppress anonymous errors if a single account/project succeeded
+          // Suppress anonymous errors if a single account/project succeeded.
           if (
             isSingleAccountSuccess &&
             (accountKey.includes(":") ||

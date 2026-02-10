@@ -54,7 +54,10 @@ export async function fetchAllUsages(
       provider: string;
       fetch: () => Promise<UsageSnapshot | UsageSnapshot[]>;
     }[] = [
-      { provider: "anthropic", fetch: () => fetchClaudeUsage(piAuth) },
+      {
+        provider: "anthropic",
+        fetch: () => fetchClaudeUsage(piAuth, modelRegistry),
+      },
       {
         provider: "copilot",
         fetch: () => fetchCopilotUsage(modelRegistry, piAuth),

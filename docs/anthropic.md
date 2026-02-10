@@ -6,10 +6,15 @@ The Anthropic provider fetches usage information for Claude models. It primarily
 
 ## Authentication
 
-The extension discovers credentials in the following order:
+The extension discovers credentials from multiple sources and retries on auth failures:
 
-1. **`auth.json`**: Looks for `piAuth.anthropic.access`.
-2. **macOS Keychain**: Attempts to find "Claude Code-credentials" and extract the `accessToken` (requires `user:profile` scope).
+1. **Pi model registry (`authStorage`)**: Tries `anthropic` API key/data when available.
+2. **`auth.json`**: Looks for `piAuth.anthropic.access`.
+3. **macOS Keychain**: Attempts to find `Claude Code-credentials`.
+   - Supports the Claude JSON payload format (`claudeAiOauth.accessToken` with `user:profile` scope).
+   - Also supports plain token values for environments that store only the raw token.
+
+If one credential returns `401/403`, the extension automatically tries the next discovered credential source before failing.
 
 ## API Endpoint
 
@@ -32,3 +37,4 @@ The provider tracks several utilization metrics:
 - **Raw Windows**: The `5h` and `Week` windows always reflect their true raw utilization and reset times to provide accurate information to the user.
 - **Pessimistic Windows**: For model-specific windows (`Sonnet`, `Opus`) and the `Shared` fallback window, the extension uses a pessimistic approach. It sets the utilization to the maximum of the specific window's value and the global utilization. This ensures that whichever limit is stricter (short-term or long-term) is reflected in the window the selector likely uses.
 - **Resets**: It tracks the `resets_at` timestamp to determine when the quota will refresh. For pessimistic windows, the reset time is also set to the maximum (latest) between the specific window and the limiting global window.
+- **Stale Token Handling**: When multiple Anthropic credentials are present, expired credentials are deprioritized (when an expiry hint is available) and `401/403` responses trigger automatic fallback to the next source.

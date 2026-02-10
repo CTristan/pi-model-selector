@@ -110,6 +110,7 @@ export async function fetchWithTimeout(
 export async function refreshGoogleToken(
   refreshToken: string,
   clientId?: string,
+  clientSecret?: string,
 ): Promise<{ accessToken: string; expiresAt?: number } | null> {
   const tryClientIds = clientId
     ? [clientId]
@@ -123,10 +124,14 @@ export async function refreshGoogleToken(
           refresh_token: refreshToken,
           grant_type: "refresh_token",
         }),
-        normalizedClientId = candidateClientId?.trim();
+        normalizedClientId = candidateClientId?.trim(),
+        normalizedClientSecret = clientSecret?.trim();
 
       if (normalizedClientId) {
         params.set("client_id", normalizedClientId);
+      }
+      if (normalizedClientSecret) {
+        params.set("client_secret", normalizedClientSecret);
       }
 
       const res = await fetch(URLS.GOOGLE_TOKEN, {
