@@ -142,7 +142,7 @@ export function renderUsageWidget(ctx: ExtensionContext): void {
       if (seenModels.has(modelKey)) continue;
       seenModels.add(modelKey);
     } else {
-      const bucketKey = `${candidate.displayName}|${candidate.account || ""}`;
+      const bucketKey = `${candidate.provider}|${candidate.displayName}|${candidate.account || ""}`;
       if (seenBuckets.has(bucketKey)) continue;
       seenBuckets.add(bucketKey);
     }

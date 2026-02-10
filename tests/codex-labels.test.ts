@@ -1,9 +1,13 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fetchAllCodexUsages } from "../src/fetchers/codex.js";
 
 describe("Codex Window Labels", () => {
   beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it("should label 24h window as '1d' or '24h' (not 'Week')", async () => {

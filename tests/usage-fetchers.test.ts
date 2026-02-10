@@ -87,6 +87,7 @@ describe("Usage Fetchers Utilities", () => {
 
   afterEach(() => {
     vi.useRealTimers();
+    vi.unstubAllGlobals();
   });
 
   it("safeDate should handle invalid input", () => {

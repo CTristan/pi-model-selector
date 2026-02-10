@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fetchCopilotUsage } from "../src/fetchers/copilot.js";
 import { execAsync, URLS } from "../src/fetchers/common.js";
 
@@ -16,6 +16,10 @@ describe("Copilot 401 Error Regression", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     vi.stubGlobal("fetch", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it("should retry with Bearer in tryExchange if token header fails with 401", async () => {

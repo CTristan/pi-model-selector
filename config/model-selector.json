@@ -8,7 +8,7 @@
   "autoRun": true,
   "debugLog": {
     "enabled": false,
-    "path": "/Users/chris/projects/pi-model-selector/config/model-selector.log"
+    "path": ".pi/model-selector.log"
   },
   "disabledProviders": ["kiro", "zai"],
   "mappings": [
@@ -69,7 +69,7 @@
     {
       "usage": {
         "provider": "codex",
-        "window": "Week"
+        "window": "1w"
       },
       "model": {
         "provider": "openai-codex",
@@ -104,17 +104,6 @@
       "model": {
         "provider": "google-antigravity",
         "id": "claude-opus-4-6-thinking"
-      }
-    },
-    {
-      "usage": {
-        "provider": "codex",
-        "account": "YOUR-ACCOUNT-UUID-HERE",
-        "window": "1w"
-      },
-      "model": {
-        "provider": "openai-codex",
-        "id": "gpt-5.3-codex"
       }
     }
   ],

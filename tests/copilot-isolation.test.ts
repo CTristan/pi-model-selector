@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fetchCopilotUsage } from "../src/fetchers/copilot.js";
 import { execAsync } from "../src/fetchers/common.js";
 
@@ -15,6 +15,10 @@ vi.mock("../src/fetchers/common.js", async () => {
 describe("Copilot Token Fetch Isolation & Uniqueness", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it("should isolate failures so one throwing token doesn't crash all", async () => {
