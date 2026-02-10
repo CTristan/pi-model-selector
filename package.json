@@ -2,10 +2,15 @@
   "name": "pi-model-selector",
   "version": "1.0.0",
   "description": "A Pi extension that automatically selects the best model based on remaining usage quotas across various providers (Claude, OpenAI, Gemini, etc.).",
-  "keywords": ["pi-package"],
+  "keywords": [
+    "pi-package"
+  ],
+  "type": "module",
   "main": "index.ts",
   "pi": {
-    "extensions": ["index.ts"]
+    "extensions": [
+      "index.ts"
+    ]
   },
   "peerDependencies": {
     "@mariozechner/pi-coding-agent": "*"
@@ -13,6 +18,27 @@
   "devDependencies": {
     "@mariozechner/pi-coding-agent": "latest",
     "@types/node": "^20.0.0",
-    "typescript": "^5.0.0"
+    "@typescript-eslint/eslint-plugin": "^8.55.0",
+    "@typescript-eslint/parser": "^8.55.0",
+    "@vitest/coverage-v8": "^4.0.18",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^17.3.0",
+    "prettier": "^3.8.1",
+    "typescript": "^5.0.0",
+    "typescript-eslint": "^8.55.0",
+    "vitest": "^4.0.18"
+  },
+  "scripts": {
+    "type-check": "tsc",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format:check": "prettier --check .",
+    "format:fix": "prettier --write .",
+    "test": "vitest run --coverage",
+    "test:watch": "vitest",
+    "ci": "./scripts/ci.sh",
+    "setup-hooks": "./scripts/setup-hooks.sh",
+    "prepare": "node scripts/prepare.js"
   }
 }
