@@ -1,9 +1,16 @@
 {
-  "priority": [
-    "fullAvailability",
-    "earliestReset",
-    "remainingPercent"
-  ],
+  "priority": ["fullAvailability", "earliestReset", "remainingPercent"],
+  "widget": {
+    "enabled": true,
+    "placement": "belowEditor",
+    "showCount": 3
+  },
+  "autoRun": true,
+  "debugLog": {
+    "enabled": false,
+    "path": ".pi/model-selector.log"
+  },
+  "disabledProviders": ["kiro", "zai"],
   "mappings": [
     {
       "usage": {
@@ -62,7 +69,7 @@
     {
       "usage": {
         "provider": "codex",
-        "window": "Week"
+        "window": "1w"
       },
       "model": {
         "provider": "openai-codex",
@@ -96,7 +103,7 @@
       },
       "model": {
         "provider": "google-antigravity",
-        "id": "claude-opus-4-5-thinking"
+        "id": "claude-opus-4-6-thinking"
       }
     }
   ],
