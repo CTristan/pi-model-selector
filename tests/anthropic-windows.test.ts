@@ -140,4 +140,38 @@ describe("Anthropic Window Logic", () => {
     const shared = result.windows.find((w) => w.label === "Shared");
     expect(shared?.usedPercent).toBe(10); // max(0, 0.1) * 100
   });
+
+  it("should retain reset time in Shared window even if utilization is 0", async () => {
+    const futureDate = new Date(Date.now() + 3600 * 1000);
+    const laterDate = new Date(Date.now() + 7200 * 1000);
+    const mockResponse = {
+      five_hour: {
+        utilization: 0,
+        resets_at: futureDate.toISOString(),
+      },
+      seven_day: {
+        utilization: 0,
+        resets_at: laterDate.toISOString(),
+      },
+    };
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve(mockResponse),
+      }),
+    );
+
+    const result = await fetchClaudeUsage({
+      anthropic: { access: "fake-token" },
+    });
+
+    const shared = result.windows.find((w) => w.label === "Shared");
+    expect(shared?.usedPercent).toBe(0);
+    expect(shared?.resetsAt).toBeDefined();
+    // It should pick the latest reset time by default if utilization is equal (both 0)
+    expect(shared?.resetsAt?.getTime()).toBe(laterDate.getTime());
+  });
 });

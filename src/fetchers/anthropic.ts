@@ -101,21 +101,16 @@ export async function fetchClaudeUsage(
       fiveHourUtil = dataTyped.five_hour?.utilization ?? 0,
       sevenDayUtil = dataTyped.seven_day?.utilization ?? 0,
       globalUtilization = Math.max(fiveHourUtil, sevenDayUtil),
-      globalResetsAt =
-        globalUtilization > 0
-          ? (fiveHourUtil > sevenDayUtil
-              ? [dataTyped.five_hour?.resets_at]
-              : sevenDayUtil > fiveHourUtil
-                ? [dataTyped.seven_day?.resets_at]
-                : [
-                    dataTyped.five_hour?.resets_at,
-                    dataTyped.seven_day?.resets_at,
-                  ]
-            )
-              .map(safeDate)
-              .filter((d): d is Date => d !== undefined)
-              .sort((a, b) => b.getTime() - a.getTime())[0]
-          : undefined,
+      globalResetsAt = (
+        fiveHourUtil > sevenDayUtil
+          ? [dataTyped.five_hour?.resets_at]
+          : sevenDayUtil > fiveHourUtil
+            ? [dataTyped.seven_day?.resets_at]
+            : [dataTyped.five_hour?.resets_at, dataTyped.seven_day?.resets_at]
+      )
+        .map(safeDate)
+        .filter((d): d is Date => d !== undefined)
+        .sort((a, b) => b.getTime() - a.getTime())[0],
       addPessimisticWindow = (
         label: string,
         utilization: number,

@@ -14,6 +14,8 @@ import {
   DEFAULT_WIDGET_CONFIG,
   DEFAULT_MAPPINGS,
   DEFAULT_DISABLED_PROVIDERS,
+  ALL_PROVIDERS,
+  type ProviderName,
   mappingKey,
   notify,
 } from "./types.js";
@@ -48,7 +50,14 @@ export async function readConfigFile(
 ): Promise<Record<string, unknown> | null> {
   try {
     await fs.promises.access(filePath);
-  } catch {
+  } catch (err) {
+    const error = err as { code?: string; message?: string };
+    if (error.code === "ENOENT") {
+      return null;
+    }
+    errors.push(
+      `Could not access ${filePath}: ${error.message ?? String(err)}`,
+    );
     return null;
   }
   try {
@@ -133,11 +142,12 @@ function normalizeDebugLog(
 
 function normalizeDisabledProviders(
   raw: ReturnType<typeof asConfigShape>,
-): string[] {
+): ProviderName[] {
   if (!raw.disabledProviders || !Array.isArray(raw.disabledProviders))
     return [];
+  const validProviders = new Set<string>(ALL_PROVIDERS);
   return raw.disabledProviders.filter(
-    (p): p is string => typeof p === "string",
+    (p): p is ProviderName => typeof p === "string" && validProviders.has(p),
   );
 }
 
@@ -367,7 +377,16 @@ export async function loadConfig(
       mappings: DEFAULT_MAPPINGS,
       disabledProviders: DEFAULT_DISABLED_PROVIDERS,
     };
-    await saveConfigFile(globalConfigPath, globalRaw).catch(() => {});
+    try {
+      await saveConfigFile(globalConfigPath, globalRaw);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      notify(
+        ctx,
+        "error",
+        `Failed to seed global config to ${globalConfigPath}: ${message}`,
+      );
+    }
   }
 
   const projectRaw = (await readConfigFile(projectPath, errors)) ?? {

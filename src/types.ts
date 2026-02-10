@@ -73,7 +73,7 @@ export interface LoadedConfig {
   priority: PriorityRule[];
   widget: Required<WidgetConfig>;
   autoRun: boolean;
-  disabledProviders: string[];
+  disabledProviders: ProviderName[];
   debugLog?: {
     enabled: boolean;
     path: string;
@@ -93,7 +93,10 @@ export const ALL_PROVIDERS = [
 ] as const;
 export type ProviderName = (typeof ALL_PROVIDERS)[number];
 
-export const DEFAULT_DISABLED_PROVIDERS: string[] = ["kiro", "zai"];
+export const DEFAULT_DISABLED_PROVIDERS: readonly ProviderName[] = [
+  "kiro",
+  "zai",
+];
 
 // ============================================================================
 // Utility Functions

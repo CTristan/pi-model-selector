@@ -77,7 +77,8 @@ describe("Config Loading", () => {
   });
 
   it("should handle missing files and return default values", async () => {
-    vi.mocked(fs.promises.access).mockRejectedValue(new Error("ENOENT"));
+    const enoent = Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+    vi.mocked(fs.promises.access).mockRejectedValue(enoent);
 
     const config = await loadConfig(mockCtx, { requireMappings: false });
     expect(config).not.toBeNull();
@@ -196,7 +197,8 @@ describe("Config Loading", () => {
 
     vi.mocked(fs.promises.access).mockImplementation(() => {
       // Global and project configs don't exist
-      return Promise.reject(new Error("ENOENT"));
+      const enoent = Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+      return Promise.reject(enoent);
     });
 
     vi.mocked(fs.promises.readFile).mockImplementation(() => {
