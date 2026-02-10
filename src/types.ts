@@ -233,11 +233,11 @@ export const DEFAULT_MAPPINGS: MappingEntry[] = [
   },
   {
     usage: { provider: "copilot", window: "Chat" },
-    model: { provider: "openai", id: "gpt-4o" },
+    model: { provider: "github-copilot", id: "gpt-4o" },
   },
   {
     usage: { provider: "codex", window: "1w" },
-    model: { provider: "openai", id: "gpt-4o" },
+    model: { provider: "openai-codex", id: "gpt-4o" },
   },
   {
     usage: { provider: "antigravity", window: "Claude" },

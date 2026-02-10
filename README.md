@@ -64,6 +64,8 @@ You can prioritize candidates based on:
 
 Map a provider's usage window to a specific Pi model ID.
 
+> **Note**: The `model.provider` and `model.id` must match the names used in the Pi model registry (e.g., `github-copilot`, `anthropic`, `google`).
+
 Example `model-selector.json`:
 
 ```json

@@ -364,29 +364,19 @@ export async function loadConfig(
     projectPath = path.join(ctx.cwd, ".pi", "model-selector.json"),
     globalConfigPath = await getGlobalConfigPath();
 
-  let globalRaw = await readConfigFile(globalConfigPath, errors);
+  let globalRaw = await readConfigFile(globalConfigPath, errors),
+    shouldSeedGlobal = false;
+
   if (globalRaw === null && errors.length === 0) {
-    // Seed global config from hardcoded defaults if global doesn't exist.
-    // We only do this if globalRaw is null AND errors is empty, which
-    // indicates the file was missing. If errors is not empty, it means
-    // the file exists but failed to parse; in that case we avoid overwriting
-    // it to prevent data loss.
+    // We only seed if globalRaw is null AND errors is empty, which
+    // indicates the file was missing.
+    shouldSeedGlobal = true;
     globalRaw = {
       priority: DEFAULT_PRIORITY,
       widget: DEFAULT_WIDGET_CONFIG,
       mappings: DEFAULT_MAPPINGS,
       disabledProviders: DEFAULT_DISABLED_PROVIDERS,
     };
-    try {
-      await saveConfigFile(globalConfigPath, globalRaw);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      notify(
-        ctx,
-        "error",
-        `Failed to seed global config to ${globalConfigPath}: ${message}`,
-      );
-    }
   }
 
   const projectRaw = (await readConfigFile(projectPath, errors)) ?? {
@@ -422,6 +412,7 @@ export async function loadConfig(
   }
 
   const mappings = mergeMappings(globalMappings, projectMappings);
+  // Ensure we have mappings before proceeding
   if (requireMappings && mappings.length === 0) {
     notify(
       ctx,
@@ -429,6 +420,21 @@ export async function loadConfig(
       `No model selector mappings found. Add mappings to ${globalConfigPath} or ${projectPath}. See config/model-selector.example.json for a reference, or run /model-select-config.`,
     );
     return null;
+  }
+
+  // Final check: only seed the global config if everything is valid
+  // and we actually reached this point without errors.
+  if (shouldSeedGlobal && globalRaw) {
+    try {
+      await saveConfigFile(globalConfigPath, globalRaw);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      notify(
+        ctx,
+        "error",
+        `Failed to seed global config to ${globalConfigPath}: ${message}`,
+      );
+    }
   }
 
   return {

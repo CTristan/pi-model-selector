@@ -72,7 +72,7 @@
         "window": "Chat"
       },
       "model": {
-        "provider": "openai",
+        "provider": "github-copilot",
         "id": "gpt-4o"
       }
     },
@@ -82,7 +82,7 @@
         "window": "1w"
       },
       "model": {
-        "provider": "openai",
+        "provider": "openai-codex",
         "id": "gpt-4o"
       }
     },

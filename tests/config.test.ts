@@ -228,6 +228,28 @@ describe("Config Loading", () => {
     );
   });
 
+  it("should NOT seed global config if global is missing but project config is invalid", async () => {
+    vi.mocked(fs.promises.access).mockImplementation(() => {
+      return Promise.resolve(undefined);
+    });
+
+    vi.mocked(fs.promises.readFile).mockImplementation((path) => {
+      if (typeof path === "string" && !path.includes("/mock/cwd")) {
+        // Global config missing
+        const enoent = Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+        return Promise.reject(enoent);
+      }
+      // Project config (in /mock/cwd) is invalid
+      return Promise.resolve("invalid { json");
+    });
+    vi.mocked(fs.promises.writeFile).mockReset();
+
+    const config = await loadConfig(mockCtx);
+
+    expect(config).toBeNull();
+    expect(fs.promises.writeFile).not.toHaveBeenCalled();
+  });
+
   it("should save config files and handle errors", async () => {
     vi.mocked(fs.promises.mkdir).mockResolvedValue(undefined);
     vi.mocked(fs.promises.writeFile).mockResolvedValue(undefined);
