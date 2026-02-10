@@ -42,8 +42,8 @@ describe("Types / Utilities", () => {
   it("should have default priority", () => {
     expect(DEFAULT_PRIORITY).toEqual([
       "fullAvailability",
-      "remainingPercent",
       "earliestReset",
+      "remainingPercent",
     ]);
   });
 

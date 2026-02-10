@@ -185,10 +185,13 @@ describe("Usage Fetchers", () => {
         }),
       );
       const result = await fetchClaudeUsage({ anthropic: { access: "mock" } });
-      expect(result.windows).toHaveLength(2);
+      expect(result.windows).toHaveLength(3);
       expect(
         result.windows.find((w) => w.label === "Sonnet")?.usedPercent,
       ).toBe(50);
+      expect(result.windows.find((w) => w.label === "5h")?.usedPercent).toBe(
+        50,
+      );
     });
 
     it("should include fallback window even if global utilization is zero", async () => {
@@ -203,8 +206,15 @@ describe("Usage Fetchers", () => {
         }),
       );
       const result = await fetchClaudeUsage({ anthropic: { access: "mock" } });
-      expect(result.windows).toHaveLength(1);
-      expect(result.windows[0].usedPercent).toBe(0);
+      // Returns 5h, Week, and Shared
+      expect(result.windows).toHaveLength(3);
+      expect(result.windows.find((w) => w.label === "5h")?.usedPercent).toBe(0);
+      expect(result.windows.find((w) => w.label === "Week")?.usedPercent).toBe(
+        0,
+      );
+      expect(
+        result.windows.find((w) => w.label === "Shared")?.usedPercent,
+      ).toBe(0);
     });
   });
 

@@ -779,6 +779,7 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
       const rankedCandidates = sortCandidates(
         eligibleCandidates,
         config.priority,
+        config.mappings,
       );
 
       // Update widget with ranked candidates
@@ -857,7 +858,7 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
       }
 
       const reasonDetail = runnerUp
-          ? selectionReason(best, runnerUp, config.priority)
+          ? selectionReason(best, runnerUp, config.priority, config.mappings)
           : "Only one candidate available",
         selectionMsg = isAlreadySelected
           ? `Already using ${mapping.model.provider}/${mapping.model.id}`
@@ -925,7 +926,7 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
           eligible = candidates.filter(
             (c) => !findIgnoreMapping(c, config.mappings),
           ),
-          ranked = sortCandidates(eligible, config.priority);
+          ranked = sortCandidates(eligible, config.priority, config.mappings);
         if (ranked.length > 0) {
           lastSelectedCandidateKey = candidateKey(ranked[0]);
         }

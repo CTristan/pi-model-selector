@@ -151,14 +151,33 @@ export async function fetchClaudeUsage(
       );
     }
 
-    if (windows.length === 0 && (globalUtilization >= 0 || globalResetsAt)) {
-      const label =
-        (dataTyped.five_hour?.utilization ?? 0) >=
-        (dataTyped.seven_day?.utilization ?? 0)
-          ? "5h"
-          : "Week";
+    // Always add the raw global windows with their true utilization and reset times
+    // to avoid misleading users about the status of these specific windows.
+    if (dataTyped.five_hour) {
+      const resetsAt = safeDate(dataTyped.five_hour.resets_at);
       windows.push({
-        label,
+        label: "5h",
+        usedPercent: (dataTyped.five_hour.utilization ?? 0) * 100,
+        resetDescription: resetsAt ? formatReset(resetsAt) : undefined,
+        resetsAt,
+      });
+    }
+
+    if (dataTyped.seven_day) {
+      const resetsAt = safeDate(dataTyped.seven_day.resets_at);
+      windows.push({
+        label: "Week",
+        usedPercent: (dataTyped.seven_day.utilization ?? 0) * 100,
+        resetDescription: resetsAt ? formatReset(resetsAt) : undefined,
+        resetsAt,
+      });
+    }
+
+    // If no model-specific windows were found, add a pessimistic "Shared" window
+    // that the selector can use as a reliable bottleneck.
+    if (!windows.some((w) => w.label === "Sonnet" || w.label === "Opus")) {
+      windows.push({
+        label: "Shared",
         usedPercent: globalUtilization * 100,
         resetDescription: globalResetsAt
           ? formatReset(globalResetsAt)

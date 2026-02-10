@@ -1,6 +1,8 @@
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import * as os from "node:os";
+
 import type {
   LoadedConfig,
   MappingEntry,
@@ -10,48 +12,32 @@ import type {
 import {
   DEFAULT_PRIORITY,
   DEFAULT_WIDGET_CONFIG,
+  DEFAULT_MAPPINGS,
+  DEFAULT_DISABLED_PROVIDERS,
+  ALL_PROVIDERS,
+  type ProviderName,
   mappingKey,
   notify,
 } from "./types.js";
-import { fileURLToPath } from "node:url";
 
 // We'll determine the config path dynamically
 let cachedGlobalConfigPath: string | null = null;
 
-function getDirname(): string {
-  if (typeof __dirname !== "undefined") return __dirname;
-  return path.dirname(fileURLToPath(import.meta.url));
-}
-
-async function findGlobalConfigPathAsync(): Promise<string> {
+function findGlobalConfigPath(): string {
   if (cachedGlobalConfigPath) return cachedGlobalConfigPath;
 
-  const currentDir = getDirname(),
-    // Check common locations in order of preference
-    candidates = [
-      // When installed as a package, config is in the extension directory
-      path.join(currentDir, "..", "config", "model-selector.json"),
-      // Fallback for development
-      path.join(process.cwd(), "config", "model-selector.json"),
-    ];
-
-  for (const candidate of candidates) {
-    try {
-      await fs.promises.access(candidate);
-      cachedGlobalConfigPath = candidate;
-      return candidate;
-    } catch {
-      // Continue to next candidate
-    }
-  }
-
-  // Default to the first candidate even if it doesn't exist
-  cachedGlobalConfigPath = candidates[0];
+  // The global config is now stored in the user's home directory
+  // to avoid conflicts with the extension source or project files.
+  cachedGlobalConfigPath = path.join(
+    os.homedir(),
+    ".pi",
+    "model-selector.json",
+  );
   return cachedGlobalConfigPath;
 }
 
-export async function getGlobalConfigPath(): Promise<string> {
-  return findGlobalConfigPathAsync();
+export function getGlobalConfigPath(): Promise<string> {
+  return Promise.resolve(findGlobalConfigPath());
 }
 
 // ============================================================================
@@ -64,7 +50,14 @@ export async function readConfigFile(
 ): Promise<Record<string, unknown> | null> {
   try {
     await fs.promises.access(filePath);
-  } catch {
+  } catch (err) {
+    const error = err as { code?: string; message?: string };
+    if (error.code === "ENOENT") {
+      return null;
+    }
+    errors.push(
+      `Could not access ${filePath}: ${error.message ?? String(err)}`,
+    );
     return null;
   }
   try {
@@ -149,11 +142,12 @@ function normalizeDebugLog(
 
 function normalizeDisabledProviders(
   raw: ReturnType<typeof asConfigShape>,
-): string[] {
+): ProviderName[] {
   if (!raw.disabledProviders || !Array.isArray(raw.disabledProviders))
     return [];
+  const validProviders = new Set<string>(ALL_PROVIDERS);
   return raw.disabledProviders.filter(
-    (p): p is string => typeof p === "string",
+    (p): p is ProviderName => typeof p === "string" && validProviders.has(p),
   );
 }
 
@@ -368,14 +362,33 @@ export async function loadConfig(
   const errors: string[] = [],
     requireMappings = options.requireMappings ?? true,
     projectPath = path.join(ctx.cwd, ".pi", "model-selector.json"),
-    globalConfigPath = await getGlobalConfigPath(),
-    globalRaw = (await readConfigFile(globalConfigPath, errors)) ?? {
-      mappings: [],
-    },
-    projectRaw = (await readConfigFile(projectPath, errors)) ?? {
-      mappings: [],
-    },
-    globalConfig = asConfigShape(globalRaw),
+    globalConfigPath = await getGlobalConfigPath();
+
+  let globalRaw = await readConfigFile(globalConfigPath, errors),
+    shouldSeedGlobal = false;
+
+  if (globalRaw === null && errors.length === 0) {
+    // We only seed if globalRaw is null AND errors is empty, which
+    // indicates the file was missing.
+    shouldSeedGlobal = true;
+    globalRaw = {
+      priority: DEFAULT_PRIORITY,
+      widget: DEFAULT_WIDGET_CONFIG,
+      mappings: DEFAULT_MAPPINGS,
+      disabledProviders: DEFAULT_DISABLED_PROVIDERS,
+    };
+  }
+
+  const projectRaw = (await readConfigFile(projectPath, errors)) ?? {
+    mappings: [],
+  };
+
+  if (errors.length > 0) {
+    notify(ctx, "error", errors.join("\n"));
+    return null;
+  }
+
+  const globalConfig = asConfigShape(globalRaw!),
     projectConfig = asConfigShape(projectRaw),
     globalMappings = normalizeMappings(globalConfig, globalConfigPath, errors),
     projectMappings = normalizeMappings(projectConfig, projectPath, errors),
@@ -399,13 +412,29 @@ export async function loadConfig(
   }
 
   const mappings = mergeMappings(globalMappings, projectMappings);
+  // Ensure we have mappings before proceeding
   if (requireMappings && mappings.length === 0) {
     notify(
       ctx,
       "error",
-      `No model selector mappings found. Add mappings to ${globalConfigPath} or ${projectPath}, or run /model-select-config.`,
+      `No model selector mappings found. Add mappings to ${globalConfigPath} or ${projectPath}. See config/model-selector.example.json for a reference, or run /model-select-config.`,
     );
     return null;
+  }
+
+  // Final check: only seed the global config if everything is valid
+  // and we actually reached this point without errors.
+  if (shouldSeedGlobal && globalRaw) {
+    try {
+      await saveConfigFile(globalConfigPath, globalRaw);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      notify(
+        ctx,
+        "error",
+        `Failed to seed global config to ${globalConfigPath}: ${message}`,
+      );
+    }
   }
 
   return {
@@ -416,7 +445,7 @@ export async function loadConfig(
     disabledProviders: [...new Set([...globalDisabled, ...projectDisabled])],
     debugLog: projectConfig.debugLog ? projectDebugLog : globalDebugLog,
     sources: { globalPath: globalConfigPath, projectPath },
-    raw: { global: globalRaw, project: projectRaw },
+    raw: { global: globalRaw!, project: projectRaw },
   };
 }
 

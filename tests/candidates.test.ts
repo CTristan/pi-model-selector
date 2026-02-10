@@ -78,18 +78,18 @@ describe("Candidate Logic", () => {
     // availability diff branch
     const a0: UsageCandidate = { remainingPercent: 0 } as UsageCandidate;
     const b50: UsageCandidate = { remainingPercent: 50 } as UsageCandidate;
-    expect(compareCandidates(a0, b50, []).diff).toBeLessThan(0);
+    expect(compareCandidates(a0, b50, [], []).diff).toBeLessThan(0);
 
     // remainingPercent branch
-    expect(compareCandidates(a, b, ["remainingPercent"]).diff).toBeGreaterThan(
-      0,
-    );
+    expect(
+      compareCandidates(a, b, ["remainingPercent"], []).diff,
+    ).toBeGreaterThan(0);
 
     // fullAvailability branch
     const aFull: UsageCandidate = { remainingPercent: 100 } as UsageCandidate;
     const bNotFull: UsageCandidate = { remainingPercent: 99 } as UsageCandidate;
     expect(
-      compareCandidates(aFull, bNotFull, ["fullAvailability"]).diff,
+      compareCandidates(aFull, bNotFull, ["fullAvailability"], []).diff,
     ).toBeGreaterThan(0);
 
     // earliestReset branches
@@ -107,27 +107,89 @@ describe("Candidate Logic", () => {
     } as UsageCandidate;
 
     expect(
-      compareCandidates(aReset, bReset, ["earliestReset"]).diff,
+      compareCandidates(aReset, bReset, ["earliestReset"], []).diff,
     ).toBeLessThan(0); // b is better
     expect(
-      compareCandidates(aReset, cNoReset, ["earliestReset"]).diff,
+      compareCandidates(aReset, cNoReset, ["earliestReset"], []).diff,
     ).toBeLessThan(0); // a is better than no reset
     expect(
-      compareCandidates(cNoReset, aReset, ["earliestReset"]).diff,
+      compareCandidates(cNoReset, aReset, ["earliestReset"], []).diff,
     ).toBeGreaterThan(0); // a is better than no reset
   });
 
   it("should handle selection reasons and tie rules", () => {
     const tied: UsageCandidate = { remainingPercent: 50 } as UsageCandidate;
-    expect(selectionReason(tied, tied, ["remainingPercent"])).toBe("tied");
+    expect(selectionReason(tied, tied, ["remainingPercent"], [])).toBe("tied");
 
     const best: UsageCandidate = { remainingPercent: 100 } as UsageCandidate;
     const runnerUp: UsageCandidate = {
       remainingPercent: 50,
     } as UsageCandidate;
-    expect(selectionReason(best, runnerUp, ["remainingPercent"])).toContain(
+    expect(selectionReason(best, runnerUp, ["remainingPercent"], [])).toContain(
       "higher availability",
     );
+  });
+
+  it("should prefer mapped candidates over unmapped ones", () => {
+    const mapped: UsageCandidate = {
+      provider: "p1",
+      windowLabel: "mapped",
+      remainingPercent: 10,
+    } as UsageCandidate;
+    const unmapped: UsageCandidate = {
+      provider: "p1",
+      windowLabel: "unmapped",
+      remainingPercent: 100,
+    } as UsageCandidate;
+    const mappings: MappingEntry[] = [
+      {
+        usage: { provider: "p1", window: "mapped" },
+        model: { provider: "m1", id: "i1" },
+      },
+    ];
+
+    const result = compareCandidates(
+      mapped,
+      unmapped,
+      ["remainingPercent"],
+      mappings,
+    );
+    expect(result.rule).toBe("isMapped");
+    expect(result.diff).toBeGreaterThan(0);
+
+    expect(
+      selectionReason(mapped, unmapped, ["remainingPercent"], mappings),
+    ).toBe("has model mapping");
+  });
+
+  it("should prefer unmapped available candidate over mapped rate-limited candidate (Priority Inversion Fix)", () => {
+    const mappedRateLimited: UsageCandidate = {
+      provider: "p1",
+      windowLabel: "w1",
+      remainingPercent: 0,
+    } as UsageCandidate;
+
+    const unmappedAvailable: UsageCandidate = {
+      provider: "p2",
+      windowLabel: "w2",
+      remainingPercent: 100,
+    } as UsageCandidate;
+
+    const mappings: MappingEntry[] = [
+      {
+        usage: { provider: "p1", window: "w1" },
+        model: { provider: "m1", id: "i1" },
+      },
+    ];
+
+    const result = compareCandidates(
+      unmappedAvailable,
+      mappedRateLimited,
+      ["remainingPercent"],
+      mappings,
+    );
+    expect(result.diff).toBeGreaterThan(0);
+    expect(result.rule).toBe("remainingPercent");
   });
 
   it("should prefer specific account mappings over generic ones", () => {

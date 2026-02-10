@@ -19,9 +19,9 @@ describe("Candidates Branch Coverage", () => {
       } as unknown as UsageCandidate;
 
       // a has full, b does not
-      expect(compareCandidates(a, b, ["fullAvailability"]).diff).toBe(1);
-      expect(compareCandidates(b, a, ["fullAvailability"]).diff).toBe(-1);
-      expect(compareCandidates(a, a, ["fullAvailability"]).diff).toBe(0);
+      expect(compareCandidates(a, b, ["fullAvailability"], []).diff).toBe(1);
+      expect(compareCandidates(b, a, ["fullAvailability"], []).diff).toBe(-1);
+      expect(compareCandidates(a, a, ["fullAvailability"], []).diff).toBe(0);
     });
 
     it("should handle earliestReset rule branches", () => {
@@ -37,9 +37,9 @@ describe("Candidates Branch Coverage", () => {
       } as unknown as UsageCandidate;
 
       // Both defined
-      expect(compareCandidates(a, b, ["earliestReset"]).diff).toBeGreaterThan(
-        0,
-      ); // a is earlier (better)
+      expect(
+        compareCandidates(a, b, ["earliestReset"], []).diff,
+      ).toBeGreaterThan(0); // a is earlier (better)
 
       // One undefined
       // If one has undefined reset (e.g. infinite quota), it is preferred (diff < 0 means b preferred over a?)
@@ -47,11 +47,11 @@ describe("Candidates Branch Coverage", () => {
       // If diff > 0, a comes first.
       // If a has reset, b has none. bReset is undefined -> returns -1.
       // So b comes first. So undefined reset is better than defined reset.
-      expect(compareCandidates(a, none, ["earliestReset"]).diff).toBe(-1);
-      expect(compareCandidates(none, a, ["earliestReset"]).diff).toBe(1);
+      expect(compareCandidates(a, none, ["earliestReset"], []).diff).toBe(-1);
+      expect(compareCandidates(none, a, ["earliestReset"], []).diff).toBe(1);
 
       // Both undefined
-      expect(compareCandidates(none, none, ["earliestReset"]).diff).toBe(0);
+      expect(compareCandidates(none, none, ["earliestReset"], []).diff).toBe(0);
     });
   });
 
@@ -67,7 +67,7 @@ describe("Candidates Branch Coverage", () => {
       } as unknown as UsageCandidate;
 
       // fullAvailability
-      expect(selectionReason(best, runner, ["fullAvailability"])).toContain(
+      expect(selectionReason(best, runner, ["fullAvailability"], [])).toContain(
         "fullAvailability",
       );
 
@@ -81,7 +81,7 @@ describe("Candidates Branch Coverage", () => {
         resetsAt: new Date(Date.now() + 10000),
       } as unknown as UsageCandidate;
       expect(
-        selectionReason(bestReset, runnerReset, ["earliestReset"]),
+        selectionReason(bestReset, runnerReset, ["earliestReset"], []),
       ).toContain("earlier reset");
 
       // remainingPercent
@@ -92,11 +92,11 @@ describe("Candidates Branch Coverage", () => {
         remainingPercent: 40,
       } as unknown as UsageCandidate;
       expect(
-        selectionReason(bestRem, runnerRem, ["remainingPercent"]),
+        selectionReason(bestRem, runnerRem, ["remainingPercent"], []),
       ).toContain("higher availability");
 
       // Tied
-      expect(selectionReason(bestRem, bestRem, ["remainingPercent"])).toBe(
+      expect(selectionReason(bestRem, bestRem, ["remainingPercent"], [])).toBe(
         "tied",
       );
     });
@@ -105,7 +105,7 @@ describe("Candidates Branch Coverage", () => {
       const best: UsageCandidate = {
         remainingPercent: 100,
       } as unknown as UsageCandidate;
-      expect(selectionReason(best, undefined, [])).toBe(
+      expect(selectionReason(best, undefined, [], [])).toBe(
         "only available bucket",
       );
     });

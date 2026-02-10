@@ -47,12 +47,20 @@ export function compareCandidates(
   a: UsageCandidate,
   b: UsageCandidate,
   priority: PriorityRule[],
-): { diff: number; rule?: PriorityRule } {
-  // Hard rule: any availability is better than no availability
+  mappings: MappingEntry[],
+): { diff: number; rule?: PriorityRule | "isMapped" } {
+  // Hard rule 1: Any availability is better than no availability
   const aHasAvail = a.remainingPercent > 0 ? 1 : 0,
     bHasAvail = b.remainingPercent > 0 ? 1 : 0;
   if (aHasAvail !== bHasAvail) {
     return { diff: aHasAvail - bHasAvail, rule: "remainingPercent" };
+  }
+
+  // Hard rule 2: Mapped candidates are better than unmapped candidates
+  const aMapped = findModelMapping(a, mappings) ? 1 : 0,
+    bMapped = findModelMapping(b, mappings) ? 1 : 0;
+  if (aMapped !== bMapped) {
+    return { diff: aMapped - bMapped, rule: "isMapped" };
   }
 
   for (const rule of priority) {
@@ -87,16 +95,18 @@ function compareByPriority(
   a: UsageCandidate,
   b: UsageCandidate,
   priority: PriorityRule[],
+  mappings: MappingEntry[],
 ): number {
-  return compareCandidates(a, b, priority).diff;
+  return compareCandidates(a, b, priority, mappings).diff;
 }
 
 export function sortCandidates(
   candidates: UsageCandidate[],
   priority: PriorityRule[],
+  mappings: MappingEntry[],
 ): UsageCandidate[] {
   return [...candidates].sort((a, b) => {
-    const diff = compareByPriority(a, b, priority);
+    const diff = compareByPriority(a, b, priority, mappings);
     if (diff === 0) return 0;
     return diff > 0 ? -1 : 1;
   });
@@ -106,10 +116,15 @@ export function selectionReason(
   best: UsageCandidate,
   runnerUp: UsageCandidate | undefined,
   priority: PriorityRule[],
+  mappings: MappingEntry[],
 ): string {
   if (!runnerUp) return "only available bucket";
-  const result = compareCandidates(best, runnerUp, priority);
+  const result = compareCandidates(best, runnerUp, priority, mappings);
   if (!result.rule || result.diff === 0) return "tied";
+
+  if (result.rule === "isMapped") {
+    return "has model mapping";
+  }
 
   if (result.rule === "fullAvailability") {
     return `fullAvailability (vs ${runnerUp.remainingPercent.toFixed(0)}%)`;

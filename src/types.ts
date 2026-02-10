@@ -73,7 +73,7 @@ export interface LoadedConfig {
   priority: PriorityRule[];
   widget: Required<WidgetConfig>;
   autoRun: boolean;
-  disabledProviders: string[];
+  disabledProviders: ProviderName[];
   debugLog?: {
     enabled: boolean;
     path: string;
@@ -92,6 +92,11 @@ export const ALL_PROVIDERS = [
   "zai",
 ] as const;
 export type ProviderName = (typeof ALL_PROVIDERS)[number];
+
+export const DEFAULT_DISABLED_PROVIDERS: readonly ProviderName[] = [
+  "kiro",
+  "zai",
+];
 
 // ============================================================================
 // Utility Functions
@@ -191,8 +196,8 @@ export function mappingKey(entry: MappingEntry): string {
 
 export const DEFAULT_PRIORITY: PriorityRule[] = [
   "fullAvailability",
-  "remainingPercent",
   "earliestReset",
+  "remainingPercent",
 ];
 
 export const DEFAULT_WIDGET_CONFIG: Required<WidgetConfig> = {
@@ -200,3 +205,50 @@ export const DEFAULT_WIDGET_CONFIG: Required<WidgetConfig> = {
   placement: "belowEditor",
   showCount: 3,
 };
+
+export const DEFAULT_MAPPINGS: MappingEntry[] = [
+  {
+    usage: { provider: "anthropic", window: "Sonnet" },
+    model: { provider: "anthropic", id: "claude-3-5-sonnet-latest" },
+  },
+  {
+    usage: { provider: "anthropic", window: "Opus" },
+    model: { provider: "anthropic", id: "claude-3-opus-latest" },
+  },
+  {
+    usage: { provider: "anthropic", window: "Shared" },
+    model: { provider: "anthropic", id: "claude-3-5-sonnet-latest" },
+  },
+  {
+    usage: { provider: "anthropic", window: "5h" },
+    ignore: true,
+  },
+  {
+    usage: { provider: "anthropic", window: "Week" },
+    ignore: true,
+  },
+  {
+    usage: { provider: "gemini", window: "Flash" },
+    model: { provider: "google", id: "gemini-1.5-flash" },
+  },
+  {
+    usage: { provider: "copilot", window: "Chat" },
+    model: { provider: "github-copilot", id: "gpt-4o" },
+  },
+  {
+    usage: { provider: "codex", window: "1w" },
+    model: { provider: "openai-codex", id: "gpt-4o" },
+  },
+  {
+    usage: { provider: "antigravity", window: "Claude" },
+    model: { provider: "google", id: "claude-sonnet-4-5" },
+  },
+  {
+    usage: { provider: "kiro" },
+    model: { provider: "google", id: "gemini-1.5-flash" },
+  },
+  {
+    usage: { provider: "zai" },
+    model: { provider: "openai", id: "gpt-4o" },
+  },
+];

@@ -45,7 +45,12 @@ The extension runs automatically when you start a new session. You can also use 
 
 ## Configuration
 
-Configuration is loaded from `config/model-selector.json` (bundled defaults) and `.pi/model-selector.json` (project-specific overrides).
+Configuration is merged from two sources:
+
+1.  **Global Config**: `~/.pi/model-selector.json` (stored in your home directory). Use this for your personal model mappings and preferences.
+2.  **Project Config**: `.pi/model-selector.json` (inside your project directory). Use this for project-specific overrides.
+
+A template for the global configuration can be found in `config/model-selector.example.json`.
 
 ### Priority Rules
 
@@ -58,6 +63,8 @@ You can prioritize candidates based on:
 ### Mappings
 
 Map a provider's usage window to a specific Pi model ID.
+
+> **Note**: The `model.provider` and `model.id` must match the names used in the Pi model registry (e.g., `github-copilot`, `anthropic`, `google`).
 
 Example `model-selector.json`:
 
