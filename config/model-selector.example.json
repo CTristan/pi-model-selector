@@ -1,0 +1,118 @@
+{
+  "priority": ["fullAvailability", "earliestReset", "remainingPercent"],
+  "widget": {
+    "enabled": true,
+    "placement": "belowEditor",
+    "showCount": 3
+  },
+  "autoRun": true,
+  "debugLog": {
+    "enabled": false,
+    "path": ".pi/model-selector.log"
+  },
+  "disabledProviders": ["kiro", "zai"],
+  "mappings": [
+    {
+      "usage": {
+        "provider": "anthropic",
+        "window": "Sonnet"
+      },
+      "model": {
+        "provider": "anthropic",
+        "id": "claude-3-5-sonnet-latest"
+      }
+    },
+    {
+      "usage": {
+        "provider": "anthropic",
+        "window": "Opus"
+      },
+      "model": {
+        "provider": "anthropic",
+        "id": "claude-3-opus-latest"
+      }
+    },
+    {
+      "usage": {
+        "provider": "anthropic",
+        "window": "Shared"
+      },
+      "model": {
+        "provider": "anthropic",
+        "id": "claude-3-5-sonnet-latest"
+      }
+    },
+    {
+      "usage": {
+        "provider": "anthropic",
+        "window": "5h"
+      },
+      "ignore": true
+    },
+    {
+      "usage": {
+        "provider": "anthropic",
+        "window": "Week"
+      },
+      "ignore": true
+    },
+    {
+      "usage": {
+        "provider": "gemini",
+        "window": "Flash"
+      },
+      "model": {
+        "provider": "google",
+        "id": "gemini-1.5-flash"
+      }
+    },
+    {
+      "usage": {
+        "provider": "copilot",
+        "window": "Chat"
+      },
+      "model": {
+        "provider": "openai",
+        "id": "gpt-4o"
+      }
+    },
+    {
+      "usage": {
+        "provider": "codex",
+        "window": "1w"
+      },
+      "model": {
+        "provider": "openai",
+        "id": "gpt-4o"
+      }
+    },
+    {
+      "usage": {
+        "provider": "antigravity",
+        "window": "Claude"
+      },
+      "model": {
+        "provider": "google",
+        "id": "claude-sonnet-4-5"
+      }
+    },
+    {
+      "usage": {
+        "provider": "kiro"
+      },
+      "model": {
+        "provider": "google",
+        "id": "gemini-1.5-flash"
+      }
+    },
+    {
+      "usage": {
+        "provider": "zai"
+      },
+      "model": {
+        "provider": "openai",
+        "id": "gpt-4o"
+      }
+    }
+  ]
+}

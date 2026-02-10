@@ -28,10 +28,9 @@
 
 ### Configuration
 
-- **`config/model-selector.json`**: Default configuration including:
-  - **`priority`**: Ordered list of ranking rules.
-  - **`widget`**: Widget display settings (enabled, placement, showCount).
-  - **`mappings`**: Links usage windows to model IDs or marks them as ignored.
+- **`~/.pi/model-selector.json`**: Global user configuration. Contains provider-specific mappings and preferences. This file is not tracked by Git.
+- **`config/model-selector.example.json`**: Template for global configuration.
+- **`.pi/model-selector.json`**: Project-specific overrides (optional).
 
 ### CI/CD
 

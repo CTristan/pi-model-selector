@@ -83,8 +83,8 @@ describe("Config Loading", () => {
     expect(config).not.toBeNull();
     expect(config?.priority).toEqual([
       "fullAvailability",
-      "remainingPercent",
       "earliestReset",
+      "remainingPercent",
     ]);
   });
 
@@ -128,7 +128,7 @@ describe("Config Loading", () => {
   });
 
   it("should skip incomplete mappings", async () => {
-    vi.mocked(fs.promises.readFile).mockResolvedValueOnce("{}"); // global
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce("{}"); // Global
     vi.mocked(fs.promises.readFile).mockResolvedValueOnce(
       JSON.stringify({
         mappings: [
@@ -176,7 +176,7 @@ describe("Config Loading", () => {
       debugLog: { enabled: true, path: "relative/path.log" },
       mappings: [{ usage: { provider: "p1", ignore: true } }],
     };
-    vi.mocked(fs.promises.readFile).mockResolvedValueOnce("{}");
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce("{}"); // Global
     vi.mocked(fs.promises.readFile).mockResolvedValueOnce(
       JSON.stringify(debugConfig),
     );
@@ -186,6 +186,44 @@ describe("Config Loading", () => {
       expect(config.debugLog.enabled).toBe(true);
       expect(config.debugLog.path).toContain("relative/path.log");
     }
+  });
+
+  it("should seed global config from hardcoded defaults if global doesn't exist", async () => {
+    // Reset mocks for this specific test
+    vi.mocked(fs.promises.access).mockReset();
+    vi.mocked(fs.promises.readFile).mockReset();
+    vi.mocked(fs.promises.writeFile).mockReset();
+
+    vi.mocked(fs.promises.access).mockImplementation(() => {
+      // Global and project configs don't exist
+      return Promise.reject(new Error("ENOENT"));
+    });
+
+    vi.mocked(fs.promises.readFile).mockImplementation(() => {
+      return Promise.reject(new Error("ENOENT"));
+    });
+
+    const config = await loadConfig(mockCtx);
+
+    expect(fs.promises.writeFile).toHaveBeenCalled();
+    // Default mappings length is 11
+    expect(config?.mappings).toHaveLength(11);
+    expect(config?.mappings[0].usage.provider).toBe("anthropic");
+  });
+
+  it("should NOT seed global config if file exists but is invalid JSON", async () => {
+    vi.mocked(fs.promises.access).mockResolvedValue(undefined); // File exists
+    vi.mocked(fs.promises.readFile).mockResolvedValue("invalid { json"); // But is invalid
+    vi.mocked(fs.promises.writeFile).mockReset();
+
+    const config = await loadConfig(mockCtx);
+
+    expect(config).toBeNull();
+    expect(fs.promises.writeFile).not.toHaveBeenCalled();
+    expect(mockCtx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("Failed to read"),
+      "error",
+    );
   });
 
   it("should save config files and handle errors", async () => {

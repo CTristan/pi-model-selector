@@ -13,3 +13,6 @@ coverage/
 .fix-die-repeat/
 .ralph/
 .pi/
+
+# Local Config
+config/model-selector.json
