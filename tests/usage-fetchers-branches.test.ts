@@ -94,6 +94,7 @@ describe("Usage Fetchers Branch Coverage", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.useRealTimers();
   });
 
   // ========================================================================
@@ -333,7 +334,7 @@ describe("Usage Fetchers Branch Coverage", () => {
       );
 
       const results = await fetchCopilotUsage({}, {});
-      expect(results[0].account).toBe("304-fallback");
+      expect(results[0].account).toBe("304-fallback:gh-cli");
       expect(results[0].windows[0].resetDescription).toContain("cached");
     });
 
@@ -977,12 +978,13 @@ describe("Usage Fetchers Branch Coverage", () => {
 
       it("should handle invalid dates gracefully in catch block", () => {
         const original = Intl.DateTimeFormat;
-        // @ts-expect-error: mocking global
-        global.Intl.DateTimeFormat = vi.fn(() => ({
-          format: () => {
-            throw new Error("fail");
-          },
-        }));
+        global.Intl.DateTimeFormat = vi.fn(function () {
+          return {
+            format: () => {
+              throw new Error("fail");
+            },
+          };
+        }) as any;
         expect(formatReset(new Date(Date.now() + 10 * 24 * 3600000))).toBe("");
         global.Intl.DateTimeFormat = original;
       });
@@ -1107,7 +1109,8 @@ describe("Usage Fetchers Branch Coverage", () => {
           }),
         );
         const results = await fetchCopilotUsage({}, piAuth);
-        expect(results[0].windows).toHaveLength(0);
+        expect(results[0].windows).toHaveLength(1);
+        expect(results[0].windows[0].label).toBe("Access");
       });
 
       it("should find tokens in piAuth directly", async () => {
@@ -1244,7 +1247,7 @@ describe("Usage Fetchers Branch Coverage", () => {
         );
         const res = await fetchAllCodexUsages({}, piAuth);
         expect(res).toHaveLength(1);
-        expect(res[0].account).toContain("pi:1");
+        expect(res[0].account).toBe("acc");
       });
 
       it("should handle file read error in discovery", async () => {
@@ -1265,7 +1268,7 @@ describe("Usage Fetchers Branch Coverage", () => {
           vi.fn().mockResolvedValue({ ok: false, status: 403 }),
         );
         const res = await fetchAllCodexUsages({}, piAuth);
-        expect(res[0].error).toBe("Token expired");
+        expect(res[0].error).toBe("Permission denied");
       });
 
       it("should handle secondary window logic", async () => {
@@ -1290,6 +1293,31 @@ describe("Usage Fetchers Branch Coverage", () => {
         );
         const res = await fetchAllCodexUsages({}, piAuth);
         expect(res[0].windows[0].usedPercent).toBe(90);
+      });
+
+      it("should expose both windows when labels differ", async () => {
+        const piAuth = { "openai-codex": { access: "tok" } };
+        vi.stubGlobal(
+          "fetch",
+          vi.fn().mockResolvedValue({
+            ok: true,
+            json: async () => ({
+              rate_limit: {
+                primary_window: {
+                  used_percent: 10,
+                  limit_window_seconds: 3600,
+                },
+                secondary_window: {
+                  used_percent: 40,
+                  limit_window_seconds: 604800,
+                },
+              },
+            }),
+          }),
+        );
+        const res = await fetchAllCodexUsages({}, piAuth);
+        expect(res[0].windows).toHaveLength(2);
+        expect(res[0].windows.map((w) => w.label)).toEqual(["1w", "1h"]);
       });
 
       it("should handle same usage percent but later reset", async () => {

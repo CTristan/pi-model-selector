@@ -14,6 +14,7 @@ import {
   loadPiAuth,
 } from "../src/usage-fetchers.js";
 import * as fs from "node:fs";
+import { afterEach } from "vitest";
 
 vi.mock("node:fs", async () => {
   const actual = await vi.importActual<typeof import("node:fs")>("node:fs");
@@ -81,6 +82,10 @@ describe("Usage Fetchers Utilities", () => {
   it("loadPiAuth should return empty object on error", async () => {
     vi.mocked(fs.promises.readFile).mockRejectedValue(new Error("fail"));
     expect(await loadPiAuth()).toEqual({});
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("safeDate should handle invalid input", () => {
@@ -256,7 +261,9 @@ describe("Usage Fetchers", () => {
         {},
       );
       expect(results[0].plan).toBe("Enterprise");
-      expect(results[0].account).toBe("fallback");
+      expect(results[0].account).toBe(
+        "fallback:registry:github-copilot:apiKey",
+      );
     });
 
     it("should handle 304 fallback", async () => {
@@ -277,7 +284,110 @@ describe("Usage Fetchers", () => {
         },
         {},
       );
-      expect(results[0].account).toBe("304-fallback");
+      expect(results[0].account).toBe(
+        "304-fallback:registry:github-copilot:apiKey",
+      );
+    });
+
+    it("should key etag/cache lookups by the token used for COPILOT_USER", async () => {
+      const child_process = await import("node:child_process");
+      vi.mocked(child_process.exec).mockImplementation(
+        (
+          cmd: string,
+          opts: unknown,
+          cb?: (err: Error | null, stdout: string, stderr: string) => void,
+        ) => {
+          if (typeof opts === "function") {
+            cb = opts as (
+              err: Error | null,
+              stdout: string,
+              stderr: string,
+            ) => void;
+          }
+          cb?.(new Error("gh disabled"), "", "");
+          return {} as ReturnType<typeof import("node:child_process").exec>;
+        },
+      );
+
+      const exchangedToken = "tid=exchange-cache-key-test";
+      const exchangedEtag = '"etag-exchange-cache-key-test"';
+
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          headers: {
+            get: (name: string) =>
+              name.toLowerCase() === "etag" ? exchangedEtag : null,
+          },
+          json: async () => ({
+            login: "cache-user",
+            quota_snapshots: { chat: { percent_remaining: 100 } },
+          }),
+        }),
+      );
+
+      await fetchCopilotUsage(
+        {
+          authStorage: {
+            getApiKey: async (id: string) =>
+              id === "github-copilot" ? exchangedToken : undefined,
+            get: async () => ({}),
+          },
+        },
+        {},
+      );
+
+      let ifNoneMatchOnExchangedCall: string | undefined;
+      const sourceToken = "gh-token-needing-exchange";
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockImplementation(async (url: string, init?: unknown) => {
+          if (url.includes("/copilot_internal/v2/token")) {
+            return {
+              ok: true,
+              status: 200,
+              json: async () => ({ token: exchangedToken }),
+            };
+          }
+
+          if (url.includes("/copilot_internal/user")) {
+            const req = (init || {}) as { headers?: Record<string, string> };
+            const headers = req.headers || {};
+            const auth = headers.Authorization;
+
+            if (auth === `token ${sourceToken}`) {
+              return { ok: false, status: 401 };
+            }
+
+            if (auth === `Bearer ${sourceToken}`) {
+              return { ok: false, status: 401 };
+            }
+
+            if (auth === `Bearer ${exchangedToken}`) {
+              ifNoneMatchOnExchangedCall = headers["If-None-Match"];
+              return { ok: false, status: 304 };
+            }
+          }
+
+          return { ok: false, status: 500 };
+        }),
+      );
+
+      const results = await fetchCopilotUsage(
+        {
+          authStorage: {
+            getApiKey: async (id: string) =>
+              id === "github-copilot" ? sourceToken : undefined,
+            get: async () => ({}),
+          },
+        },
+        {},
+      );
+
+      expect(ifNoneMatchOnExchangedCall).toBe(exchangedEtag);
+      expect(results[0].account).toBe("cache-user");
     });
 
     it("should aggregate unique errors from multiple tokens", async () => {
@@ -517,6 +627,57 @@ describe("Usage Fetchers", () => {
         },
       );
       // Should have 2 because although usage is identical, they are from different accounts
+      expect(result).toHaveLength(2);
+      expect(result[0].account).toBe("pi:1");
+      expect(result[1].account).toBe("pi:2");
+    });
+
+    it("should handle non-integer hour windows in Codex", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            rate_limit: {
+              primary_window: {
+                used_percent: 10,
+                limit_window_seconds: 5400, // 1.5h
+              },
+            },
+          }),
+        }),
+      );
+      const result = await fetchAllCodexUsages(
+        {},
+        {
+          "openai-codex": { access: "token" },
+        },
+      );
+      expect(result[0].windows[0].label).toBe("1.5h");
+    });
+
+    it("should not deduplicate Codex errors from different accounts", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi
+          .fn()
+          .mockResolvedValueOnce({
+            ok: false,
+            status: 401,
+          })
+          .mockResolvedValueOnce({
+            ok: false,
+            status: 401,
+          }),
+      );
+      const result = await fetchAllCodexUsages(
+        {},
+        {
+          "openai-codex-1": { access: "token1" },
+          "openai-codex-2": { access: "token2" },
+        },
+      );
+      // Both should be present because they are from different accounts
       expect(result).toHaveLength(2);
       expect(result[0].account).toBe("pi:1");
       expect(result[1].account).toBe("pi:2");

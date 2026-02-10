@@ -117,13 +117,9 @@ async function discoverCodexCredentials(
           | undefined;
       };
     };
-    const registryToken = await Promise.resolve(
-      mr?.authStorage?.getApiKey?.("openai-codex"),
-    );
+    const registryToken = await mr?.authStorage?.getApiKey?.("openai-codex");
     if (typeof registryToken === "string" && !seenTokens.has(registryToken)) {
-      const cred = await Promise.resolve(
-          mr?.authStorage?.get?.("openai-codex"),
-        ),
+      const cred = await mr?.authStorage?.get?.("openai-codex"),
         accountId =
           cred?.type === "oauth" && typeof cred.accountId === "string"
             ? cred.accountId
@@ -196,12 +192,22 @@ async function fetchCodexUsageForCredential(
       timeout: 5000,
     });
 
-    if (res.status === 401 || res.status === 403) {
+    if (res.status === 401) {
       return {
         provider: "codex",
         displayName,
         windows: [],
         error: "Token expired",
+        account: cred.source,
+      };
+    }
+
+    if (res.status === 403) {
+      return {
+        provider: "codex",
+        displayName,
+        windows: [],
+        error: "Permission denied",
         account: cred.source,
       };
     }
@@ -217,28 +223,25 @@ async function fetchCodexUsageForCredential(
     }
 
     const dataTyped = data as {
-        rate_limit?: {
-          primary_window?: {
-            used_percent?: number | string;
-            reset_at?: number;
-            limit_window_seconds?: number;
-          };
-          secondary_window?: {
-            used_percent?: number | string;
-            reset_at?: number;
-            limit_window_seconds?: number;
-          };
+      rate_limit?: {
+        primary_window?: {
+          used_percent?: number | string;
+          reset_at?: number;
+          limit_window_seconds?: number;
         };
-        plan_type?: string;
-        credits?: {
-          balance?: number | string;
+        secondary_window?: {
+          used_percent?: number | string;
+          reset_at?: number;
+          limit_window_seconds?: number;
         };
-      },
-      windows: RateWindow[] = [];
+      };
+      plan_type?: string;
+      credits?: {
+        balance?: number | string;
+      };
+    };
 
-    let maxUsed = -1,
-      bestLabel = "",
-      bestResetsAt: Date | undefined;
+    const windowsByLabel = new Map<string, RateWindow>();
 
     interface CodexWindow {
       used_percent?: number | string;
@@ -246,39 +249,69 @@ async function fetchCodexUsageForCredential(
       limit_window_seconds?: number;
     }
 
-    const checkCodex = (w: CodexWindow | undefined) => {
+    const addCodexWindow = (w: CodexWindow | undefined) => {
       if (!w) return;
       const used =
           typeof w.used_percent === "number"
             ? w.used_percent
             : Number(w.used_percent) || 0,
         resetAt = w.reset_at ? new Date(w.reset_at * 1000) : undefined,
-        windowHours = Math.round((w.limit_window_seconds || 10800) / 3600),
-        label = windowHours >= 24 ? "Week" : `${windowHours}h`;
+        hours = (w.limit_window_seconds || 10800) / 3600,
+        label =
+          hours >= 168 && hours % 168 === 0
+            ? `${hours / 168}w`
+            : hours >= 24 && hours % 24 === 0
+              ? `${hours / 24}d`
+              : hours % 1 === 0
+                ? `${hours}h`
+                : `${hours.toFixed(1)}h`;
 
-      if (used > maxUsed) {
-        maxUsed = used;
-        bestLabel = label;
-        bestResetsAt = resetAt;
-      } else if (used === maxUsed) {
-        if (resetAt && (!bestResetsAt || resetAt > bestResetsAt)) {
-          bestResetsAt = resetAt;
-          bestLabel = label;
+      const entry: RateWindow = {
+        label,
+        usedPercent: used,
+        resetDescription: resetAt ? formatReset(resetAt) : undefined,
+        resetsAt: resetAt,
+      };
+
+      const existing = windowsByLabel.get(label);
+      if (!existing) {
+        windowsByLabel.set(label, entry);
+        return;
+      }
+
+      if (used > existing.usedPercent) {
+        windowsByLabel.set(label, entry);
+        return;
+      }
+
+      if (used === existing.usedPercent) {
+        const existingReset = existing.resetsAt?.getTime();
+        const nextReset = resetAt?.getTime();
+        if (
+          nextReset !== undefined &&
+          (existingReset === undefined || nextReset > existingReset)
+        ) {
+          windowsByLabel.set(label, entry);
         }
       }
     };
 
-    checkCodex(dataTyped.rate_limit?.primary_window);
-    checkCodex(dataTyped.rate_limit?.secondary_window);
+    addCodexWindow(dataTyped.rate_limit?.primary_window);
+    addCodexWindow(dataTyped.rate_limit?.secondary_window);
 
-    if (maxUsed >= 0) {
-      windows.push({
-        label: bestLabel,
-        usedPercent: maxUsed,
-        resetDescription: bestResetsAt ? formatReset(bestResetsAt) : undefined,
-        resetsAt: bestResetsAt,
-      });
-    }
+    const windows = Array.from(windowsByLabel.values()).sort((a, b) => {
+      if (a.usedPercent !== b.usedPercent) {
+        return b.usedPercent - a.usedPercent;
+      }
+      const aReset = a.resetsAt
+          ? a.resetsAt.getTime()
+          : Number.NEGATIVE_INFINITY,
+        bReset = b.resetsAt ? b.resetsAt.getTime() : Number.NEGATIVE_INFINITY;
+      if (aReset !== bReset) {
+        return bReset - aReset;
+      }
+      return a.label.localeCompare(b.label);
+    });
 
     let plan = dataTyped.plan_type;
     if (
@@ -299,7 +332,7 @@ async function fetchCodexUsageForCredential(
       displayName,
       windows,
       plan,
-      account: cred.source,
+      account: cred.accountId || cred.source,
     };
   } catch (error: unknown) {
     return {
@@ -307,25 +340,9 @@ async function fetchCodexUsageForCredential(
       displayName,
       windows: [],
       error: String(error),
-      account: cred.source,
+      account: cred.accountId || cred.source,
     };
   }
-}
-
-function usageFingerprint(snapshot: UsageSnapshot): string | null {
-  if (snapshot.error || snapshot.windows.length === 0) {
-    return null;
-  }
-  const escape = (s: string) => s.replace(/\|/g, "\\|");
-  const parts = snapshot.windows.map((w) => {
-    const pct = Number.isFinite(w.usedPercent)
-        ? w.usedPercent.toFixed(2)
-        : "NaN",
-      resetTs = w.resetsAt ? w.resetsAt.getTime() : "";
-    return `${escape(w.label)}:${pct}:${resetTs}`;
-  });
-  const accountPart = snapshot.account ? `|${escape(snapshot.account)}` : "";
-  return `${snapshot.provider}|${parts.sort().join("|")}${accountPart}`;
 }
 
 export async function fetchAllCodexUsages(
@@ -348,15 +365,20 @@ export async function fetchAllCodexUsages(
   const results = await Promise.all(
       credentials.map((cred) => fetchCodexUsageForCredential(cred)),
     ),
-    seenFingerprints = new Set<string>(),
+    seenAccounts = new Set<string>(),
     deduplicated: UsageSnapshot[] = [];
 
-  for (const result of results) {
-    const fingerprint = usageFingerprint(result);
-    if (fingerprint === null) {
-      deduplicated.push(result);
-    } else if (!seenFingerprints.has(fingerprint)) {
-      seenFingerprints.add(fingerprint);
+  // Prioritize successes
+  const sortedSnapshots = [...results].sort((a, b) => {
+    if (a.error && !b.error) return 1;
+    if (!a.error && b.error) return -1;
+    return 0;
+  });
+
+  for (const result of sortedSnapshots) {
+    const accountKey = result.account || "unknown";
+    if (!seenAccounts.has(accountKey)) {
+      seenAccounts.add(accountKey);
       deduplicated.push(result);
     }
   }

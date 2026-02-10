@@ -45,7 +45,7 @@ The extension runs automatically when you start a new session. You can also use 
 
 ## Configuration
 
-Configuration is stored in `config/model-selector.json` (bundled defaults), `~/.pi/model-selector.json` (global user config), or `.pi/model-selector.json` (project-specific config).
+Configuration is loaded from `config/model-selector.json` (bundled defaults) and `.pi/model-selector.json` (project-specific overrides).
 
 ### Priority Rules
 
