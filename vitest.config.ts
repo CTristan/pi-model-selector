@@ -15,8 +15,8 @@ export default defineConfig({
         branches: 80,
         statements: 80,
       },
-      include: ["src/**/*.ts", "index.ts"],
-      exclude: ["index.ts"], // Report coverage for src but exclude index.ts from global thresholds if dragging down
+      include: ["src/**/*.ts"],
+      exclude: [], // Report coverage for src but exclude index.ts from global thresholds if dragging down
     },
   },
 });

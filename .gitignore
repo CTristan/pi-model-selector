@@ -12,3 +12,4 @@ coverage/
 # Tools
 .fix-die-repeat/
 .ralph/
+.pi/

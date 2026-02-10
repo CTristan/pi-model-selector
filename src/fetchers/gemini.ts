@@ -57,7 +57,7 @@ export async function fetchGeminiUsage(
     };
 
     const extractFromData = (data: unknown, source: string) => {
-      if (!data || typeof data !== "object" || data === null) return;
+      if (data == null || typeof data !== "object") return;
       const d = data as Record<string, unknown>;
       const token = d.access || d.access_token || d.token;
       const refresh = d.refresh || d.refresh_token;

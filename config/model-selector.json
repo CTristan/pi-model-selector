@@ -109,7 +109,7 @@
     {
       "usage": {
         "provider": "codex",
-        "account": "422bd364-ecff-4e22-a1e0-47ddf452fb04",
+        "account": "YOUR-ACCOUNT-UUID-HERE",
         "window": "1w"
       },
       "model": {

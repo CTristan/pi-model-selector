@@ -80,7 +80,7 @@ export async function fetchCopilotUsage(
         writeDebugLog(`fetchCopilotUsage: added token from ${source}`);
       },
       extractFromData = (data: unknown, source: string) => {
-        if (!data || typeof data !== "object" || data === null) return;
+        if (data == null || typeof data !== "object") return;
         const d = data as Record<string, unknown>;
         const token = d.access || d.accessToken || d.access_token || d.token;
         if (typeof token === "string" && token) {
