@@ -31,7 +31,7 @@ export async function fetchCopilotUsage(
 
     interface TokenInfo {
       token: string;
-      source: string;
+      sources: string[];
       isCopilotToken: boolean;
     }
 
@@ -53,6 +53,8 @@ export async function fetchCopilotUsage(
         chat?: {
           unlimited?: boolean;
           percent_remaining?: number;
+          remaining?: number;
+          entitlement?: number;
         };
       };
     }
@@ -60,10 +62,19 @@ export async function fetchCopilotUsage(
     const tokens: TokenInfo[] = [],
       addToken = (token: unknown, source: string) => {
         if (typeof token !== "string" || !token) return;
-        if (tokens.some((t) => t.token === token)) return;
+        const existing = tokens.find((t) => t.token === token);
+        if (existing) {
+          if (!existing.sources.includes(source)) {
+            existing.sources.push(source);
+            writeDebugLog(
+              `fetchCopilotUsage: token already known, added source ${source}`,
+            );
+          }
+          return;
+        }
         tokens.push({
           token,
-          source,
+          sources: [source],
           isCopilotToken: token.startsWith("tid="),
         });
         writeDebugLog(`fetchCopilotUsage: added token from ${source}`);
@@ -142,17 +153,29 @@ export async function fetchCopilotUsage(
       tryExchange = async (
         githubToken: string,
       ): Promise<{ token: string; sku?: string } | null> => {
+        const tInfo = tokens.find((t) => t.token === githubToken);
         writeDebugLog(
-          `fetchCopilotUsage: attempting exchange for token from ${tokens.find((t) => t.token === githubToken)?.source || "unknown"}`,
+          `fetchCopilotUsage: attempting exchange for token from ${tInfo ? tInfo.sources.join(", ") : "unknown"}`,
         );
         try {
-          const { res, data } = await fetchWithTimeout(URLS.COPILOT_TOKEN, {
-            headers: {
-              ...headersBase,
-              Authorization: `token ${githubToken}`,
-            },
-            timeout: 5000,
-          });
+          const request = (auth: string) =>
+            fetchWithTimeout(URLS.COPILOT_TOKEN, {
+              headers: {
+                ...headersBase,
+                Authorization: auth,
+              },
+              timeout: 5000,
+            });
+
+          let { res, data } = await request(`token ${githubToken}`);
+
+          if (res.status === 401) {
+            writeDebugLog(
+              "fetchCopilotUsage: exchange 401, retrying with Bearer",
+            );
+            ({ res, data } = await request(`Bearer ${githubToken}`));
+          }
+
           const d = data as CopilotTokenResponse | undefined;
           if (res.ok && d?.token) {
             writeDebugLog("fetchCopilotUsage: exchange successful");
@@ -169,8 +192,9 @@ export async function fetchCopilotUsage(
     // 2. Execution
     const snapshots = await Promise.all(
       tokens.map(async (t): Promise<UsageSnapshot> => {
+        const sourceLabel = t.sources.join(", ");
         try {
-          writeDebugLog(`fetchCopilotUsage: trying token from ${t.source}`);
+          writeDebugLog(`fetchCopilotUsage: trying token from ${sourceLabel}`);
 
           let tokenToUse = t.token;
           let skuFound: string | undefined;
@@ -186,16 +210,16 @@ export async function fetchCopilotUsage(
             getAuthHeader(tokenToUse, t.isCopilotToken),
           );
           writeDebugLog(
-            `fetchCopilotUsage: ${t.source} initial fetch status: ${res.status} (isCopilotToken=${t.isCopilotToken})`,
+            `fetchCopilotUsage: ${sourceLabel} initial fetch status: ${res.status} (isCopilotToken=${t.isCopilotToken})`,
           );
 
           if (res.status === 401 && !t.isCopilotToken) {
             writeDebugLog(
-              `fetchCopilotUsage: ${t.source} retrying with Bearer`,
+              `fetchCopilotUsage: ${sourceLabel} retrying with Bearer`,
             );
             ({ res, data } = await request(`Bearer ${tokenToUse}`));
             writeDebugLog(
-              `fetchCopilotUsage: ${t.source} Bearer retry status: ${res.status}`,
+              `fetchCopilotUsage: ${sourceLabel} Bearer retry status: ${res.status}`,
             );
           }
 
@@ -206,24 +230,24 @@ export async function fetchCopilotUsage(
               cacheKey = tokenToUse;
               skuFound = exchanged.sku;
               writeDebugLog(
-                `fetchCopilotUsage: ${t.source} retrying with exchanged token`,
+                `fetchCopilotUsage: ${sourceLabel} retrying with exchanged token`,
               );
               ({ res, data } = await request(`Bearer ${tokenToUse}`));
               writeDebugLog(
-                `fetchCopilotUsage: ${t.source} exchanged retry status: ${res.status}`,
+                `fetchCopilotUsage: ${sourceLabel} exchanged retry status: ${res.status}`,
               );
             }
           }
 
           if (res.status !== 200 && res.status !== 304) {
             writeDebugLog(
-              `fetchCopilotUsage: fetch failed for ${t.source} (HTTP ${res.status})`,
+              `fetchCopilotUsage: fetch failed for ${sourceLabel} (HTTP ${res.status})`,
             );
           }
 
           if (res.status === 304) {
             writeDebugLog(
-              `fetchCopilotUsage: 304 Not Modified for token from ${t.source}`,
+              `fetchCopilotUsage: 304 Not Modified for token from ${sourceLabel}`,
             );
             const cachedData = COPILOT_DATA_CACHE.get(cacheKey) as
               | CopilotUserResponse
@@ -242,7 +266,7 @@ export async function fetchCopilotUsage(
                   },
                 ],
                 plan: skuFound,
-                account: `304-fallback:${t.source}`,
+                account: `304-fallback:${sourceLabel}`,
               };
             }
           }
@@ -265,8 +289,18 @@ export async function fetchCopilotUsage(
             if (d.quota_snapshots?.premium_interactions) {
               const pi = d.quota_snapshots.premium_interactions,
                 remaining = pi.remaining ?? 0,
-                entitlement = pi.entitlement ?? 0,
-                usedPercent = Math.max(0, 100 - (pi.percent_remaining || 0));
+                entitlement = pi.entitlement ?? 0;
+
+              let usedPercent = 0;
+              if (typeof pi.percent_remaining === "number") {
+                usedPercent = Math.max(0, 100 - pi.percent_remaining);
+              } else if (entitlement > 0) {
+                usedPercent = Math.max(
+                  0,
+                  100 - (remaining / entitlement) * 100,
+                );
+              }
+
               windows.push({
                 label: "Premium",
                 usedPercent,
@@ -279,9 +313,22 @@ export async function fetchCopilotUsage(
 
             if (d.quota_snapshots?.chat && !d.quota_snapshots.chat.unlimited) {
               const { chat } = d.quota_snapshots;
+              let usedPercent = 0;
+              if (typeof chat.percent_remaining === "number") {
+                usedPercent = Math.max(0, 100 - chat.percent_remaining);
+              } else if (
+                typeof chat.remaining === "number" &&
+                typeof chat.entitlement === "number" &&
+                chat.entitlement > 0
+              ) {
+                usedPercent = Math.max(
+                  0,
+                  100 - (chat.remaining / chat.entitlement) * 100,
+                );
+              }
               windows.push({
                 label: "Chat",
-                usedPercent: Math.max(0, 100 - (chat.percent_remaining || 0)),
+                usedPercent,
                 resetDescription: resetDesc,
                 resetsAt: resetDate,
               });
@@ -300,7 +347,7 @@ export async function fetchCopilotUsage(
               displayName: "Copilot",
               windows,
               plan: d.copilot_plan || skuFound,
-              account: d.login || t.source,
+              account: d.login || sourceLabel,
             };
           }
 
@@ -312,7 +359,7 @@ export async function fetchCopilotUsage(
                 { label: "Access", usedPercent: 0, resetDescription: "Active" },
               ],
               plan: skuFound,
-              account: `fallback:${t.source}`,
+              account: `fallback:${sourceLabel}`,
             };
           }
 
@@ -321,18 +368,18 @@ export async function fetchCopilotUsage(
             displayName: "Copilot",
             windows: [],
             error: `HTTP ${res.status}`,
-            account: t.source,
+            account: sourceLabel,
           };
         } catch (e: unknown) {
           writeDebugLog(
-            `fetchCopilotUsage: error for token from ${t.source}: ${String(e)}`,
+            `fetchCopilotUsage: error for token from ${sourceLabel}: ${String(e)}`,
           );
           return {
             provider: "copilot",
             displayName: "Copilot",
             windows: [],
             error: String(e),
-            account: t.source,
+            account: sourceLabel,
           };
         }
       }),
@@ -348,9 +395,36 @@ export async function fetchCopilotUsage(
       return 0;
     });
 
+    const successfulAccounts = new Set(
+      snapshots.filter((s) => !s.error).map((s) => s.account),
+    );
+    const successfulAccountNames = Array.from(successfulAccounts);
+    const isSingleAccountSuccess = successfulAccountNames.length === 1;
+
     for (const s of sortedSnapshots) {
       const accountKey = s.account || "unknown";
       if (!seenAccounts.has(accountKey)) {
+        if (s.error) {
+          if (successfulAccounts.has(accountKey)) {
+            writeDebugLog(
+              `fetchCopilotUsage: suppressing error from ${s.account} because another token succeeded for this account`,
+            );
+            continue;
+          }
+          // Suppress anonymous errors if a single account succeeded
+          if (
+            isSingleAccountSuccess &&
+            (accountKey.includes(":") ||
+              accountKey.startsWith("auth.json") ||
+              accountKey === "gh-cli" ||
+              accountKey === "none")
+          ) {
+            writeDebugLog(
+              `fetchCopilotUsage: suppressing anonymous error from ${accountKey} because single account ${successfulAccountNames[0]} succeeded`,
+            );
+            continue;
+          }
+        }
         seenAccounts.add(accountKey);
         results.push(s);
       }

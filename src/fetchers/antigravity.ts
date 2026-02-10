@@ -323,7 +323,7 @@ export async function fetchAntigravityUsage(
       claudeOrGptOss = getQuotaInfo([
         "claude-sonnet-4-5",
         "claude-sonnet-4-5-thinking",
-        "claude-opus-4-5-thinking",
+        "claude-opus-4-6-thinking",
         "gpt-oss-120b-medium",
       ]);
     if (claudeOrGptOss) {

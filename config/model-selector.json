@@ -103,7 +103,18 @@
       },
       "model": {
         "provider": "google-antigravity",
-        "id": "claude-opus-4-5-thinking"
+        "id": "claude-opus-4-6-thinking"
+      }
+    },
+    {
+      "usage": {
+        "provider": "codex",
+        "account": "422bd364-ecff-4e22-a1e0-47ddf452fb04",
+        "window": "1w"
+      },
+      "model": {
+        "provider": "openai-codex",
+        "id": "gpt-5.3-codex"
       }
     }
   ],

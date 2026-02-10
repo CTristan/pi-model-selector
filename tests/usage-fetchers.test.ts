@@ -15,6 +15,7 @@ import {
 } from "../src/usage-fetchers.js";
 import * as fs from "node:fs";
 import { afterEach } from "vitest";
+import type { RateWindow } from "../src/types.js";
 
 vi.mock("node:fs", async () => {
   const actual = await vi.importActual<typeof import("node:fs")>("node:fs");
@@ -262,7 +263,7 @@ describe("Usage Fetchers", () => {
       );
       expect(results[0].plan).toBe("Enterprise");
       expect(results[0].account).toBe(
-        "fallback:registry:github-copilot:apiKey",
+        "fallback:registry:github-copilot:apiKey, registry:github:apiKey",
       );
     });
 
@@ -285,7 +286,7 @@ describe("Usage Fetchers", () => {
         {},
       );
       expect(results[0].account).toBe(
-        "304-fallback:registry:github-copilot:apiKey",
+        "304-fallback:registry:github-copilot:apiKey, registry:github:apiKey",
       );
     });
 
@@ -433,10 +434,11 @@ describe("Usage Fetchers", () => {
         {},
         { "google-gemini-cli": { access: "tok", projectId: "pid" } },
       );
-      expect(result.windows).toHaveLength(2);
-      expect(result.windows.find((w) => w.label === "Pro")?.usedPercent).toBe(
-        80,
-      );
+      expect(result[0].windows).toHaveLength(2);
+      expect(
+        result[0].windows.find((w: RateWindow) => w.label === "Pro")
+          ?.usedPercent,
+      ).toBe(80);
     });
 
     it("should handle token refresh", async () => {
@@ -462,7 +464,7 @@ describe("Usage Fetchers", () => {
           },
         },
       );
-      expect(result.provider).toBe("gemini");
+      expect(result[0].provider).toBe("gemini");
     });
   });
 
@@ -475,7 +477,7 @@ describe("Usage Fetchers", () => {
           json: async () => ({
             models: {
               "claude-sonnet-4-5": { quotaInfo: { remainingFraction: 0.5 } },
-              "claude-opus-4-5-thinking": {
+              "claude-opus-4-6-thinking": {
                 quotaInfo: { remainingFraction: 0.3 },
               },
               "gemini-3-pro-low": { quotaInfo: { remainingFraction: 0.1 } },
@@ -570,9 +572,10 @@ describe("Usage Fetchers", () => {
         },
       );
       const result = await fetchKiroUsage();
-      expect(result.windows).toHaveLength(2);
-      expect(result.windows[1].resetDescription).toBe("2d left");
-      expect(result.windows[1].usedPercent).toBe(50);
+      expect(result.windows).toHaveLength(3);
+      const bonus = result.windows.find((w) => w.label === "Bonus");
+      expect(bonus?.resetDescription).toBe("2d left");
+      expect(bonus?.usedPercent).toBe(50);
     });
 
     it("should correctly handle 'Remaining Bonus credits'", async () => {
@@ -704,8 +707,8 @@ describe("Usage Fetchers", () => {
         "zai",
       ]);
 
-      // Advance past the 12s timeout
-      await vi.advanceTimersByTimeAsync(13000);
+      // Advance past the 30s timeout
+      await vi.advanceTimersByTimeAsync(31000);
       // Ensure all microtasks and timers are processed
       await vi.runAllTimersAsync();
 

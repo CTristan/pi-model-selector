@@ -94,7 +94,9 @@ describe("Usage Fetchers Branch Coverage", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
 
   // ========================================================================
@@ -392,7 +394,7 @@ describe("Usage Fetchers Branch Coverage", () => {
       );
 
       const result = await fetchGeminiUsage({}, piAuth);
-      expect(result.provider).toBe("gemini");
+      expect(result[0].provider).toBe("gemini");
       expect(fetchMock).toHaveBeenCalledTimes(4);
     });
 
@@ -411,7 +413,7 @@ describe("Usage Fetchers Branch Coverage", () => {
         {},
         { "google-gemini-cli": { access: "tok", projectId: "pid" } },
       );
-      expect(result.windows[0].label).toBe("Unknown");
+      expect(result[0].windows[0].label).toBe("Unknown");
     });
 
     it("refreshGoogleToken should handle API failures", async () => {
@@ -487,10 +489,9 @@ describe("Usage Fetchers Branch Coverage", () => {
     });
 
     it("should use ENV var credential", async () => {
-      process.env.ANTIGRAVITY_API_KEY = "env_key";
+      vi.stubEnv("ANTIGRAVITY_API_KEY", "env_key");
       const result = await fetchAntigravityUsage({}, {});
       expect(result.error).toBe("Missing projectId");
-      delete process.env.ANTIGRAVITY_API_KEY;
     });
 
     it("should merge projectId from piAuth when token comes from registry", async () => {
@@ -517,7 +518,7 @@ describe("Usage Fetchers Branch Coverage", () => {
     });
 
     it("should allow ANTIGRAVITY_API_KEY auth when projectId exists in piAuth", async () => {
-      process.env.ANTIGRAVITY_API_KEY = "env_key";
+      vi.stubEnv("ANTIGRAVITY_API_KEY", "env_key");
       const piAuth = {
         "google-antigravity": { projectId: "pid" },
       };
@@ -532,7 +533,6 @@ describe("Usage Fetchers Branch Coverage", () => {
 
       const result = await fetchAntigravityUsage({}, piAuth);
       expect(result.error).toBe("No quota data");
-      delete process.env.ANTIGRAVITY_API_KEY;
     });
 
     it("should handle refresh failure and fallback to piAuth", async () => {
@@ -649,7 +649,7 @@ describe("Usage Fetchers Branch Coverage", () => {
           json: async () => ({
             models: {
               "claude-sonnet-4-5": { quotaInfo: { remainingFraction: 0.8 } },
-              "claude-opus-4-5-thinking": {
+              "claude-opus-4-6-thinking": {
                 quotaInfo: { remainingFraction: 0.2 },
               },
             },
@@ -749,12 +749,11 @@ describe("Usage Fetchers Branch Coverage", () => {
       vi.mocked(os.platform).mockReturnValue("linux");
       const child_process = await import("node:child_process");
       vi.mocked(child_process.exec).mockImplementation((cmd, opts, cb): any => {
+        if (typeof opts === "function") cb = opts as any;
         if (typeof cmd === "string" && cmd.includes("which")) {
-          // @ts-expect-error: mock callback signature
-          cb(new Error("not found"), "", "");
+          cb?.(new Error("not found"), "", "");
         } else {
-          // @ts-expect-error: mock callback signature
-          cb(null, "", "");
+          cb?.(null, "", "");
         }
       });
       const result = await fetchKiroUsage();
@@ -765,15 +764,13 @@ describe("Usage Fetchers Branch Coverage", () => {
       vi.mocked(os.platform).mockReturnValue("linux");
       const child_process = await import("node:child_process");
       vi.mocked(child_process.exec).mockImplementation((cmd, opts, cb): any => {
+        if (typeof opts === "function") cb = opts as any;
         if (typeof cmd === "string" && cmd.includes("which")) {
-          // @ts-expect-error: mock callback signature
-          cb(null, "/bin/kiro", "");
-        } else if (cmd.includes("whoami")) {
-          // @ts-expect-error: mock callback signature
-          cb(null, "user", "");
+          cb?.(null, "/bin/kiro", "");
+        } else if (typeof cmd === "string" && cmd.includes("whoami")) {
+          cb?.(null, "user", "");
         } else {
-          // @ts-expect-error: mock callback signature
-          cb(null, "Usage: 10% resets on 02/03", "");
+          cb?.(null, "Usage: 10% resets on 02/03", "");
         }
       });
 
@@ -784,15 +781,13 @@ describe("Usage Fetchers Branch Coverage", () => {
     it("kiro date heuristic branches", async () => {
       const child_process = await import("node:child_process");
       vi.mocked(child_process.exec).mockImplementation((cmd, opts, cb): any => {
-        if (cmd.includes("which")) {
-          // @ts-expect-error: mock callback signature
-          cb(null, "/bin/kiro", "");
-        } else if (cmd.includes("whoami")) {
-          // @ts-expect-error: mock callback signature
-          cb(null, "user", "");
+        if (typeof opts === "function") cb = opts as any;
+        if (typeof cmd === "string" && cmd.includes("which")) {
+          cb?.(null, "/bin/kiro", "");
+        } else if (typeof cmd === "string" && cmd.includes("whoami")) {
+          cb?.(null, "user", "");
         } else {
-          // @ts-expect-error: mock callback signature
-          cb(null, "Usage: 10% resets on 10/11", "");
+          cb?.(null, "Usage: 10% resets on 10/11", "");
         }
       });
       const result = await fetchKiroUsage();
@@ -808,7 +803,7 @@ describe("Usage Fetchers Branch Coverage", () => {
       const piAuth = { "google-gemini-cli": { access: "tok" } };
       vi.mocked(fs.promises.access).mockRejectedValue(new Error("no file"));
       const result = await fetchGeminiUsage({}, piAuth);
-      expect(result.error).toBe("Missing projectId");
+      expect(result[0].error).toBe("Missing projectId");
     });
 
     it("fetchCopilotUsage should handle exchange exception", async () => {
@@ -868,7 +863,7 @@ describe("Usage Fetchers Branch Coverage", () => {
       );
 
       const result = await fetchGeminiUsage({}, piAuth);
-      expect(result.provider).toBe("gemini");
+      expect(result[0].provider).toBe("gemini");
       expect(fetchMock).toHaveBeenCalledTimes(4);
     });
 
@@ -921,7 +916,7 @@ describe("Usage Fetchers Branch Coverage", () => {
       );
 
       const result = await fetchGeminiUsage({}, piAuth);
-      expect(result.provider).toBe("gemini");
+      expect(result[0].provider).toBe("gemini");
       expect(fetchMock).toHaveBeenCalledTimes(3); // Should NOT call 4th time
     });
 
@@ -1130,8 +1125,8 @@ describe("Usage Fetchers Branch Coverage", () => {
         const child_process = await import("node:child_process");
         vi.mocked(child_process.exec).mockImplementation(
           (cmd, opts, cb): any => {
-            // @ts-expect-error: mock callback signature
-            cb(new Error("fail"), "", "");
+            if (typeof opts === "function") cb = opts as any;
+            cb?.(new Error("fail"), "", "");
           },
         );
         const results = await fetchCopilotUsage({}, {});
@@ -1152,7 +1147,7 @@ describe("Usage Fetchers Branch Coverage", () => {
           }),
         );
         const res = await fetchGeminiUsage({}, piAuth);
-        expect(res.error).toBeUndefined();
+        expect(res[0].error).toBeUndefined();
       });
 
       it("should accept projectId (camelCase) in file creds", async () => {
@@ -1171,14 +1166,14 @@ describe("Usage Fetchers Branch Coverage", () => {
           }),
         );
         const res = await fetchGeminiUsage({}, {});
-        expect(res.error).toBeUndefined();
+        expect(res[0].error).toBeUndefined();
       });
 
       it("should handle invalid file content gracefully", async () => {
         vi.mocked(fs.promises.access).mockResolvedValue(undefined);
         vi.mocked(fs.promises.readFile).mockResolvedValue("invalid json");
         const res = await fetchGeminiUsage({}, {});
-        expect(res.error).toBe("No credentials");
+        expect(res[0].error).toBe("No credentials");
       });
     });
 

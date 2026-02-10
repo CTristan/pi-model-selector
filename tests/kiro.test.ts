@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument */
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { fetchKiroUsage } from "../src/fetchers/kiro.js";
 import { execAsync } from "../src/fetchers/common.js";
 
@@ -14,6 +14,15 @@ vi.mock("../src/fetchers/common.js", async () => {
 });
 
 describe("Kiro Quota Detection", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T12:00:00Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("should detect both percentage and ratio quotas and return multiple windows", async () => {
     vi.mocked(execAsync).mockImplementation(((cmd: string) => {
       if (cmd.includes("which") || cmd.includes("where"))

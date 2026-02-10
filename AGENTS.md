@@ -21,6 +21,11 @@
 - **`src/candidates.ts`**: Candidate building and ranking logic. Exports `buildCandidates()`, `sortCandidates()`, `findModelMapping()`, `findIgnoreMapping()`, `selectionReason()`.
 - **`src/widget.ts`**: Visual sub-bar widget rendering. Displays top N ranked candidates with progress bars. Exports `updateWidgetState()`, `renderUsageWidget()`, `clearWidget()`.
 
+### Documentation
+
+- **`docs/*.md`**: Provider-specific documentation detailing authentication methods, API endpoints, usage windows, and logic details.
+- **Provider Updates**: Whenever provider logic in `src/fetchers/` is updated, the corresponding file in `docs/` must be reviewed and updated to remain accurate.
+
 ### Configuration
 
 - **`config/model-selector.json`**: Default configuration including:

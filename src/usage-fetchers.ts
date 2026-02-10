@@ -32,7 +32,7 @@ export async function fetchAllUsages(
           windows: [],
           error,
         };
-        return (provider === "codex" || provider === "copilot"
+        return (["codex", "copilot", "gemini"].includes(provider)
           ? [snapshot]
           : snapshot) as unknown as T;
       };
@@ -76,7 +76,7 @@ export async function fetchAllUsages(
     ],
     activeFetchers = fetchers.filter((f) => !disabled.has(f.provider)),
     results = await Promise.all(
-      activeFetchers.map((f) => timeout(f.fetch(), 12000, f.provider)),
+      activeFetchers.map((f) => timeout(f.fetch(), 30000, f.provider)),
     );
 
   return results.flat();

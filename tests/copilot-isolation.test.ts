@@ -54,12 +54,11 @@ describe("Copilot Token Fetch Isolation & Uniqueness", () => {
       {},
     );
 
-    // If isolation works, we should get one error snapshot and one success snapshot
-    expect(results).toHaveLength(2);
-    expect(
-      results.some((r) => r.error && r.error.includes("Network failure")),
-    ).toBe(true);
-    expect(results.some((r) => r.account === "user2")).toBe(true);
+    // One failed (t1), one succeeded (t2 -> user2).
+    // The failure from t1 is suppressed because user2 succeeded and t1 is anonymous (registry).
+    expect(results).toHaveLength(1);
+    expect(results[0].account).toBe("user2");
+    expect(results[0].error).toBeUndefined();
   });
 
   it("should use unique identifiers for fallback accounts", async () => {
@@ -87,15 +86,12 @@ describe("Copilot Token Fetch Isolation & Uniqueness", () => {
       {},
     );
 
-    // If they are unique, we should have 2 snapshots even though both are 304-fallback
-    // Wait, the current implementation deduplicates successful ones by account.
-    // If they have the same account "304-fallback", one will be dropped.
-    // So we expect 2 if they are unique.
+    // Both are 304 (success-ish), so they should both be included as long as they have unique accounts
     expect(results).toHaveLength(2);
     expect(results[0].account).not.toBe(results[1].account);
   });
 
-  it("should not suppress errors if at least one successful snapshot is found", async () => {
+  it("should suppress errors if at least one successful snapshot is found", async () => {
     vi.mocked(execAsync).mockRejectedValue(new Error("gh-cli fail"));
 
     let callCount = 0;
@@ -132,10 +128,11 @@ describe("Copilot Token Fetch Isolation & Uniqueness", () => {
       {},
     );
 
-    // We expect both the error from t1 and the success from t2
-    expect(results).toHaveLength(2);
-    expect(results.some((r) => r.error)).toBe(true);
-    expect(results.some((r) => r.account === "user2")).toBe(true);
+    // One failed (t1 -> 401), one succeeded (t2 -> user2).
+    // The failure from t1 is suppressed because user2 succeeded.
+    expect(results).toHaveLength(1);
+    expect(results[0].account).toBe("user2");
+    expect(results[0].error).toBeUndefined();
   });
 
   it("should handle null modelRegistry gracefully", async () => {
