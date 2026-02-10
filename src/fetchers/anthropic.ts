@@ -101,16 +101,21 @@ export async function fetchClaudeUsage(
       fiveHourUtil = dataTyped.five_hour?.utilization ?? 0,
       sevenDayUtil = dataTyped.seven_day?.utilization ?? 0,
       globalUtilization = Math.max(fiveHourUtil, sevenDayUtil),
-      globalResetsAt = (
-        fiveHourUtil > sevenDayUtil
-          ? [dataTyped.five_hour?.resets_at]
-          : sevenDayUtil > fiveHourUtil
-            ? [dataTyped.seven_day?.resets_at]
-            : [dataTyped.five_hour?.resets_at, dataTyped.seven_day?.resets_at]
-      )
-        .map(safeDate)
-        .filter((d): d is Date => d !== undefined)
-        .sort((a, b) => b.getTime() - a.getTime())[0],
+      globalResetsAt =
+        globalUtilization > 0
+          ? (fiveHourUtil > sevenDayUtil
+              ? [dataTyped.five_hour?.resets_at]
+              : sevenDayUtil > fiveHourUtil
+                ? [dataTyped.seven_day?.resets_at]
+                : [
+                    dataTyped.five_hour?.resets_at,
+                    dataTyped.seven_day?.resets_at,
+                  ]
+            )
+              .map(safeDate)
+              .filter((d): d is Date => d !== undefined)
+              .sort((a, b) => b.getTime() - a.getTime())[0]
+          : undefined,
       addPessimisticWindow = (
         label: string,
         utilization: number,
@@ -151,14 +156,33 @@ export async function fetchClaudeUsage(
       );
     }
 
-    if (windows.length === 0 && (globalUtilization >= 0 || globalResetsAt)) {
-      const label =
-        (dataTyped.five_hour?.utilization ?? 0) >=
-        (dataTyped.seven_day?.utilization ?? 0)
-          ? "5h"
-          : "Week";
+    // Always add the raw global windows with their true utilization and reset times
+    // to avoid misleading users about the status of these specific windows.
+    if (dataTyped.five_hour) {
+      const resetsAt = safeDate(dataTyped.five_hour.resets_at);
       windows.push({
-        label,
+        label: "5h",
+        usedPercent: (dataTyped.five_hour.utilization ?? 0) * 100,
+        resetDescription: resetsAt ? formatReset(resetsAt) : undefined,
+        resetsAt,
+      });
+    }
+
+    if (dataTyped.seven_day) {
+      const resetsAt = safeDate(dataTyped.seven_day.resets_at);
+      windows.push({
+        label: "Week",
+        usedPercent: (dataTyped.seven_day.utilization ?? 0) * 100,
+        resetDescription: resetsAt ? formatReset(resetsAt) : undefined,
+        resetsAt,
+      });
+    }
+
+    // If no model-specific windows were found, add a pessimistic "Shared" window
+    // that the selector can use as a reliable bottleneck.
+    if (!windows.some((w) => w.label === "Sonnet" || w.label === "Opus")) {
+      windows.push({
+        label: "Shared",
         usedPercent: globalUtilization * 100,
         resetDescription: globalResetsAt
           ? formatReset(globalResetsAt)

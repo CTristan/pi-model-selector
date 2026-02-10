@@ -20,13 +20,15 @@ The extension discovers credentials in the following order:
 
 The provider tracks several utilization metrics:
 
-- **5-hour Window**: Labeled as `5h`.
-- **7-day Window**: Labeled as `Week`.
-- **7-day Sonnet Window**: Labeled as `Sonnet`.
-- **7-day Opus Window**: Labeled as `Opus`.
+- **5-hour Window**: Labeled as `5h` (raw utilization).
+- **7-day Window**: Labeled as `Week` (raw utilization).
+- **7-day Sonnet Window**: Labeled as `Sonnet` (pessimistic).
+- **7-day Opus Window**: Labeled as `Opus` (pessimistic).
+- **Shared Window**: Labeled as `Shared` (pessimistic). Only present if `Sonnet` and `Opus` are missing.
 
 ## Logic Details
 
 - **Global Utilization**: The extension calculates a "global utilization" by taking the maximum of the `five_hour` and `seven_day` utilization.
-- **Pessimistic Windows**: For model-specific windows (Sonnet/Opus), the extension uses a pessimistic approach, setting the utilization to the maximum of the model-specific value and the global utilization.
-- **Resets**: It tracks the `resets_at` timestamp to determine when the quota will refresh.
+- **Raw Windows**: The `5h` and `Week` windows always reflect their true raw utilization and reset times to provide accurate information to the user.
+- **Pessimistic Windows**: For model-specific windows (`Sonnet`, `Opus`) and the `Shared` fallback window, the extension uses a pessimistic approach. It sets the utilization to the maximum of the specific window's value and the global utilization. This ensures that whichever limit is stricter (short-term or long-term) is reflected in the window the selector likely uses.
+- **Resets**: It tracks the `resets_at` timestamp to determine when the quota will refresh. For pessimistic windows, the reset time is also set to the maximum (latest) between the specific window and the limiting global window.
