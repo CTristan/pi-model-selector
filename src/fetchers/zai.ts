@@ -1,17 +1,36 @@
 import type { RateWindow, UsageSnapshot } from "../types.js";
 import { fetchWithTimeout, formatReset, safeDate, URLS } from "./common.js";
 
+export function resolveZaiApiKey(
+  piAuth: Record<string, unknown>,
+): string | undefined {
+  const envApiKey = process.env.Z_AI_API_KEY;
+  if (typeof envApiKey === "string" && envApiKey.trim().length > 0) {
+    return envApiKey.trim();
+  }
+
+  const zai = (piAuth["z-ai"] ?? piAuth.zai) as
+    | Record<string, unknown>
+    | undefined;
+
+  const access = zai?.access,
+    key = zai?.key;
+
+  if (typeof access === "string" && access.trim().length > 0) {
+    return access.trim();
+  }
+
+  if (typeof key === "string" && key.trim().length > 0) {
+    return key.trim();
+  }
+
+  return undefined;
+}
+
 export async function fetchZaiUsage(
   piAuth: Record<string, unknown> = {},
 ): Promise<UsageSnapshot> {
-  let apiKey = process.env.Z_AI_API_KEY;
-
-  if (!apiKey) {
-    const zai = (piAuth["z-ai"] ?? piAuth.zai) as
-      | Record<string, unknown>
-      | undefined;
-    apiKey = typeof zai?.access === "string" ? zai.access : undefined;
-  }
+  const apiKey = resolveZaiApiKey(piAuth);
 
   if (!apiKey) {
     return {

@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-argument, @typescript-eslint/require-await */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as fs from "node:fs";
 import modelSelectorExtension from "../index.js";
 import * as usageFetchers from "../src/usage-fetchers.js";
@@ -39,6 +39,28 @@ describe("Model Selector Extension", () => {
   let pi: any; // eslint-disable-line @typescript-eslint/no-explicit-any
   let ctx: any; // eslint-disable-line @typescript-eslint/no-explicit-any
   let commands: Record<string, (...args: any[]) => any> = {}; // eslint-disable-line @typescript-eslint/no-explicit-any
+
+  const getLastPersistedCooldownState = (): {
+    cooldowns: Record<string, number>;
+    lastSelected: string | null;
+  } => {
+    const writes = vi.mocked(fs.promises.writeFile).mock.calls,
+      stateWrite = [...writes]
+        .reverse()
+        .find(
+          ([filePath]) =>
+            typeof filePath === "string" &&
+            filePath.includes("model-selector-cooldowns.json.tmp"),
+        );
+
+    expect(stateWrite).toBeDefined();
+    const content = stateWrite?.[1];
+    expect(typeof content).toBe("string");
+    return JSON.parse(content as string) as {
+      cooldowns: Record<string, number>;
+      lastSelected: string | null;
+    };
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -104,6 +126,10 @@ describe("Model Selector Extension", () => {
         windows: [{ label: "w2", usedPercent: 20, resetsAt: new Date() }],
       },
     ]);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it("should register commands", () => {
@@ -180,5 +206,78 @@ describe("Model Selector Extension", () => {
       expect.stringContaining("Set model to p2/m2"),
       "info",
     );
+  });
+
+  it("re-arms provider cooldown when an expired wildcard cooldown exists", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-02-11T17:00:00.000Z"));
+
+    vi.mocked(fs.promises.readFile).mockResolvedValue(
+      JSON.stringify({
+        cooldowns: { "p1|acc1|*": Date.now() - 60_000 },
+        lastSelected: null,
+      }),
+    );
+
+    vi.mocked(usageFetchers.fetchAllUsages).mockResolvedValue([
+      {
+        provider: "p1",
+        displayName: "Provider 1",
+        account: "acc1",
+        error: "HTTP 429",
+        windows: [{ label: "w1", usedPercent: 10, resetsAt: new Date() }],
+      },
+      {
+        provider: "p2",
+        displayName: "Provider 2",
+        windows: [{ label: "w2", usedPercent: 20, resetsAt: new Date() }],
+      },
+    ]);
+
+    modelSelectorExtension(pi);
+    const selectHandler = commands["model-select"];
+    await selectHandler({}, ctx);
+
+    const persisted = getLastPersistedCooldownState();
+    expect(persisted.cooldowns["p1|acc1|*"]).toBeGreaterThan(Date.now());
+  });
+
+  it("extends provider cooldown window on repeated 429 responses", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-02-11T17:00:00.000Z"));
+
+    vi.mocked(fs.promises.readFile).mockResolvedValue(
+      JSON.stringify({ cooldowns: {}, lastSelected: null }),
+    );
+
+    vi.mocked(usageFetchers.fetchAllUsages).mockResolvedValue([
+      {
+        provider: "p1",
+        displayName: "Provider 1",
+        account: "acc1",
+        error: "HTTP 429",
+        windows: [{ label: "w1", usedPercent: 10, resetsAt: new Date() }],
+      },
+      {
+        provider: "p2",
+        displayName: "Provider 2",
+        windows: [{ label: "w2", usedPercent: 20, resetsAt: new Date() }],
+      },
+    ]);
+
+    modelSelectorExtension(pi);
+    const selectHandler = commands["model-select"];
+
+    await selectHandler({}, ctx);
+    const firstState = getLastPersistedCooldownState(),
+      firstExpiry = firstState.cooldowns["p1|acc1|*"];
+
+    vi.setSystemTime(new Date("2026-02-11T17:10:00.000Z"));
+    await selectHandler({}, ctx);
+
+    const secondState = getLastPersistedCooldownState(),
+      secondExpiry = secondState.cooldowns["p1|acc1|*"];
+
+    expect(secondExpiry).toBeGreaterThan(firstExpiry);
   });
 });
