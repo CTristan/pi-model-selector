@@ -77,10 +77,13 @@ function buildClaudeWindows(data: unknown): RateWindow[] {
       resetsAtStr?: string,
     ) => {
       const finalUtilization = Math.max(globalUtilization, utilization);
+      const windowResetsAt = safeDate(resetsAtStr);
       const finalResetsAt =
-        globalUtilization > utilization && globalResetsAt
-          ? globalResetsAt
-          : safeDate(resetsAtStr);
+        globalResetsAt && windowResetsAt
+          ? globalResetsAt.getTime() >= windowResetsAt.getTime()
+            ? globalResetsAt
+            : windowResetsAt
+          : (globalResetsAt ?? windowResetsAt);
 
       windows.push({
         label,
@@ -246,7 +249,34 @@ export async function fetchClaudeUsage(
   modelRegistry?: unknown,
   piAuth: Record<string, unknown> = {},
 ): Promise<UsageSnapshot> {
-  const credentials = await loadClaudeCredentials(modelRegistry, piAuth),
+  // Backward-compatible argument handling:
+  // Previously, callers used fetchClaudeUsage(piAuth). After the signature
+  // change to (modelRegistry?, piAuth?), such calls would incorrectly treat
+  // the piAuth object as modelRegistry and use an empty piAuth, resulting in
+  // missing credentials. Detect when the first argument looks like a piAuth
+  // object (has "anthropic") and does not look like a model registry
+  // (lacking "authStorage"), and the second argument is empty, and in that
+  // case, reinterpret the first argument as piAuth.
+  let effectiveModelRegistry: unknown = modelRegistry;
+  let effectivePiAuth: Record<string, unknown> = piAuth ?? {};
+
+  if (
+    effectiveModelRegistry &&
+    typeof effectiveModelRegistry === "object" &&
+    !("authStorage" in (effectiveModelRegistry as Record<string, unknown>)) &&
+    "anthropic" in (effectiveModelRegistry as Record<string, unknown>) &&
+    (effectivePiAuth == null ||
+      (typeof effectivePiAuth === "object" &&
+        Object.keys(effectivePiAuth).length === 0))
+  ) {
+    effectivePiAuth = effectiveModelRegistry as Record<string, unknown>;
+    effectiveModelRegistry = undefined;
+  }
+
+  const credentials = await loadClaudeCredentials(
+      effectiveModelRegistry,
+      effectivePiAuth,
+    ),
     attemptedTokens = new Set<string>();
 
   const doFetch = (accessToken: string) =>

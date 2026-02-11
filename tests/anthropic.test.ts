@@ -243,6 +243,37 @@ describe("Anthropic Usage Fetcher", () => {
 
       expect(resetsAt).toEqual(expectedReset);
     });
+
+    it("should pick the latest reset time for Sonnet window among limiting windows", async () => {
+      const now = Date.now();
+      const mockResponse = {
+        five_hour: {
+          utilization: 0.8,
+          resets_at: new Date(now + 3600 * 1000).toISOString(),
+        }, // 1 hour
+        seven_day_sonnet: {
+          utilization: 0.8,
+          resets_at: new Date(now + 1800 * 1000).toISOString(),
+        }, // 0.5 hour
+      };
+
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(mockResponse),
+        }),
+      );
+
+      const result = await fetchClaudeUsage(undefined, {
+        anthropic: { access: "fake-token" },
+      });
+
+      const sonnet = result.windows.find((w) => w.label === "Sonnet");
+      // Both have 0.8 utilization, so it should pick the LATEST reset (the 1 hour one from five_hour)
+      expect(sonnet?.resetsAt?.getTime()).toBe(now + 3600 * 1000);
+    });
   });
 
   describe("Error Handling", () => {
