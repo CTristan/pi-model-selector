@@ -751,15 +751,41 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
     },
     configureProviders = async (): Promise<void> => {
       const piAuth = await loadAuth();
-      const providerOptions = ALL_PROVIDERS.map((provider) => {
-          const enabled = !config.disabledProviders.includes(provider),
-            providerLabel = PROVIDER_LABELS[provider],
-            hasCredentials = hasProviderCredential(provider, piAuth);
+      const locationChoice = await ctx.ui.select(
+        "Select configuration scope",
+        locationLabels,
+      );
+      if (!locationChoice) return;
 
-          return `${enabled ? "✅" : "⏸"} ${providerLabel} (${provider}) — ${enabled ? "enabled" : "disabled"}, credentials: ${hasCredentials ? "detected" : "missing"}`;
+      const saveToProject = locationChoice === locationLabels[1],
+        targetRaw = saveToProject ? config.raw.project : config.raw.global,
+        targetPath = saveToProject
+          ? config.sources.projectPath
+          : config.sources.globalPath;
+
+      const currentRawDisabled = Array.isArray(targetRaw.disabledProviders)
+        ? targetRaw.disabledProviders.filter(
+            (value): value is ProviderName =>
+              typeof value === "string" &&
+              ALL_PROVIDERS.includes(value as ProviderName),
+          )
+        : [];
+
+      const providerOptions = ALL_PROVIDERS.map((provider) => {
+          const disabledInTarget = currentRawDisabled.includes(provider),
+            providerLabel = PROVIDER_LABELS[provider],
+            hasCredentials = hasProviderCredential(provider, piAuth),
+            mergedDisabled = config.disabledProviders.includes(provider);
+
+          let statusLabel = disabledInTarget ? "⏸ disabled" : "✅ enabled";
+          if (disabledInTarget !== mergedDisabled) {
+            statusLabel += ` (overall: ${mergedDisabled ? "disabled" : "enabled"})`;
+          }
+
+          return `${statusLabel} ${providerLabel} (${provider}) — credentials: ${hasCredentials ? "detected" : "missing"}`;
         }),
         selectedProviderLabel = await ctx.ui.select(
-          "Select provider to enable/disable",
+          `Configure providers in ${saveToProject ? "Project" : "Global"}`,
           providerOptions,
         );
 
@@ -768,24 +794,9 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
       if (selectedIndex < 0) return;
 
       const selectedProvider = ALL_PROVIDERS[selectedIndex],
-        currentlyDisabled = config.disabledProviders.includes(selectedProvider),
-        nextDisabled = !currentlyDisabled,
-        locationChoice = await ctx.ui.select(
-          "Save provider setting to",
-          locationLabels,
-        );
-      if (!locationChoice) return;
-
-      const saveToProject = locationChoice === locationLabels[1],
-        targetRaw = saveToProject ? config.raw.project : config.raw.global,
-        targetPath = saveToProject
-          ? config.sources.projectPath
-          : config.sources.globalPath,
-        currentRawDisabled = Array.isArray(targetRaw.disabledProviders)
-          ? targetRaw.disabledProviders.filter(
-              (value): value is string => typeof value === "string",
-            )
-          : [],
+        currentlyDisabledInTarget =
+          currentRawDisabled.includes(selectedProvider),
+        nextDisabled = !currentlyDisabledInTarget,
         disabledSet = new Set(currentRawDisabled);
 
       if (nextDisabled) {
@@ -806,21 +817,19 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
       if (reloaded) {
         config.disabledProviders = reloaded.disabledProviders;
         config.raw = reloaded.raw;
-      } else {
-        config.disabledProviders = nextDisabled
-          ? [...new Set([...config.disabledProviders, selectedProvider])]
-          : config.disabledProviders.filter(
-              (value) => value !== selectedProvider,
-            );
       }
 
       cachedCandidates = null;
 
       const selectedProviderLabelFriendly = PROVIDER_LABELS[selectedProvider];
+      const isActuallyDisabled =
+        config.disabledProviders.includes(selectedProvider);
+      const scopeLabel = saveToProject ? "Project" : "Global";
+
       notify(
         ctx,
         "info",
-        `${nextDisabled ? "Disabled" : "Enabled"} ${selectedProviderLabelFriendly}.`,
+        `${nextDisabled ? "Disabled" : "Enabled"} ${selectedProviderLabelFriendly} in ${scopeLabel} config. Overall status: ${isActuallyDisabled ? "Disabled" : "Enabled"}.`,
       );
     },
     menuOptions = [

@@ -119,17 +119,17 @@ describe("mapping wizard provider configuration", () => {
         );
       }
 
-      if (message === "Select provider to enable/disable") {
+      if (message === "Select configuration scope") {
+        return Promise.resolve("Global (global.json)");
+      }
+
+      if (message.includes("Configure providers in Global")) {
         const zaiOption = options.find((option) =>
           option.includes("z.ai (zai)"),
         );
         expect(zaiOption).toBeDefined();
         expect(zaiOption).toContain("credentials: detected");
         return Promise.resolve(zaiOption);
-      }
-
-      if (message === "Save provider setting to") {
-        return Promise.resolve("Global (global.json)");
       }
 
       return Promise.resolve(undefined);
@@ -146,6 +146,98 @@ describe("mapping wizard provider configuration", () => {
     expect(ctx.ui.notify).toHaveBeenCalledWith(
       expect.stringContaining("Enabled z.ai"),
       "info",
+    );
+  });
+
+  it("toggles provider based on target file status, not merged status", async () => {
+    // Scenario: Claude is disabled in Global, but user wants to toggle it in Project.
+    // It is enabled in Project initially. Toggling it in Project should disable it there.
+    const config: LoadedConfig = {
+      mappings: [],
+      priority: ["remainingPercent"],
+      widget: { enabled: true, placement: "belowEditor", showCount: 3 },
+      autoRun: false,
+      disabledProviders: ["anthropic"], // Disabled in Global
+      sources: { globalPath: "global.json", projectPath: "project.json" },
+      raw: {
+        global: { disabledProviders: ["anthropic"] },
+        project: { disabledProviders: [] }, // Enabled in Project
+      },
+    };
+
+    vi.mocked(configMod.loadConfig).mockReset();
+    vi.mocked(configMod.loadConfig).mockResolvedValue(config);
+
+    let menuVisits = 0;
+    ctx.ui.select = vi.fn((message: string, options: string[]) => {
+      if (message === "Model selector configuration") {
+        menuVisits++;
+        return Promise.resolve(
+          menuVisits === 1 ? "Configure providers" : "Done",
+        );
+      }
+      if (message === "Select configuration scope") {
+        return Promise.resolve("Project (project.json)");
+      }
+      if (message.includes("Configure providers in Project")) {
+        return Promise.resolve(
+          options.find((o) => o.includes("Claude (anthropic)")),
+        );
+      }
+      return Promise.resolve(undefined);
+    });
+
+    const runWizard = commands["model-select-config"];
+    await runWizard({}, ctx as unknown as Record<string, unknown>);
+
+    expect(configMod.saveConfigFile).toHaveBeenCalledWith(
+      "project.json",
+      expect.objectContaining({ disabledProviders: ["anthropic"] }),
+    );
+  });
+
+  it("filters invalid providers when writing to config", async () => {
+    const config: LoadedConfig = {
+      mappings: [],
+      priority: ["remainingPercent"],
+      widget: { enabled: true, placement: "belowEditor", showCount: 3 },
+      autoRun: false,
+      disabledProviders: ["zai"],
+      sources: { globalPath: "global.json", projectPath: "project.json" },
+      raw: {
+        global: { disabledProviders: ["zai", "garbage-provider"] },
+        project: {},
+      },
+    };
+
+    vi.mocked(configMod.loadConfig).mockReset();
+    vi.mocked(configMod.loadConfig).mockResolvedValue(config);
+
+    let menuVisits = 0;
+    ctx.ui.select = vi.fn((message: string, options: string[]) => {
+      if (message === "Model selector configuration") {
+        menuVisits++;
+        return Promise.resolve(
+          menuVisits === 1 ? "Configure providers" : "Done",
+        );
+      }
+      if (message === "Select configuration scope") {
+        return Promise.resolve("Global (global.json)");
+      }
+      if (message.includes("Configure providers in Global")) {
+        return Promise.resolve(options.find((o) => o.includes("z.ai (zai)")));
+      }
+      return Promise.resolve(undefined);
+    });
+
+    const runWizard = commands["model-select-config"];
+    await runWizard({}, ctx as unknown as Record<string, unknown>);
+
+    expect(configMod.saveConfigFile).toHaveBeenCalledWith(
+      "global.json",
+      expect.objectContaining({
+        disabledProviders: [], // Removed 'zai', and 'garbage-provider' should be filtered out
+      }),
     );
   });
 });
