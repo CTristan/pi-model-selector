@@ -9,7 +9,7 @@ The Zai provider (z.ai) fetches usage and token limits via a dedicated monitor A
 Discovers API keys from:
 
 1. **Environment Variable**: `Z_AI_API_KEY`.
-2. **`auth.json`**: `z-ai` or `zai` entry.
+2. **`auth.json`**: `z-ai` or `zai` entry (`access` or `key` field).
 
 ## API Endpoint
 

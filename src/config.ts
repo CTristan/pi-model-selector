@@ -471,6 +471,34 @@ export function upsertMapping(
   raw.mappings = [...filtered, mapping];
 }
 
+export function removeMapping(
+  raw: Record<string, unknown>,
+  mapping: MappingEntry,
+  options: { onlyIgnore?: boolean } = {},
+): { removed: boolean } {
+  const existing: unknown[] = Array.isArray(raw.mappings) ? raw.mappings : [],
+    targetKey = mappingKey(mapping),
+    filtered = existing.filter((entry: unknown) => {
+      if (!entry || typeof entry !== "object" || !("usage" in entry))
+        return true;
+      try {
+        const key = mappingKey(entry as MappingEntry);
+        if (key !== targetKey) return true;
+        if (options.onlyIgnore) {
+          // If onlyIgnore is true, keep entries that are not ignore entries
+          const e = entry as MappingEntry;
+          return !(e.ignore === true);
+        }
+        // Otherwise, remove any matching entry (regardless of model/ignore)
+        return false;
+      } catch {
+        return true;
+      }
+    });
+  raw.mappings = filtered;
+  return { removed: filtered.length !== existing.length };
+}
+
 export function updateWidgetConfig(
   raw: Record<string, unknown>,
   widgetUpdate: Partial<WidgetConfig>,
@@ -480,4 +508,15 @@ export function updateWidgetConfig(
       ? (raw.widget as Record<string, unknown>)
       : {};
   raw.widget = { ...existing, ...widgetUpdate };
+}
+
+// Utility: return normalized mapping entries from a raw config object
+export function getRawMappings(raw: Record<string, unknown>): MappingEntry[] {
+  try {
+    const errors: string[] = [];
+    const shape = asConfigShape(raw);
+    return normalizeMappings(shape, "<raw>", errors);
+  } catch {
+    return [];
+  }
 }
