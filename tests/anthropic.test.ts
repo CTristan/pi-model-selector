@@ -333,4 +333,76 @@ describe("Anthropic Usage Fetcher", () => {
       expect(result.windows.length).toBeGreaterThan(0);
     });
   });
+
+  describe("Argument Reinterpretation", () => {
+    it("should correctly handle legacy 1-arg call path fetchClaudeUsage(piAuth)", async () => {
+      const mockResponse = {
+        five_hour: { utilization: 0.5 },
+      };
+
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(mockResponse),
+        }),
+      );
+
+      // Legacy call: first arg is piAuth, second is missing/empty
+      const piAuth = {
+        anthropic: { access: "legacy-token" },
+      };
+
+      const result = await fetchClaudeUsage(piAuth);
+
+      expect(result.account).toBe("auth.json");
+      expect(result.windows.length).toBeGreaterThan(0);
+
+      // Verify that fetch was called with the legacy token
+      expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          headers: expect.objectContaining({
+            Authorization: "Bearer legacy-token",
+          }),
+        }),
+      );
+    });
+
+    it("should NOT reinterpret if first arg looks like modelRegistry", async () => {
+      const mockResponse = {
+        five_hour: { utilization: 0.5 },
+      };
+
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(mockResponse),
+        }),
+      );
+
+      const modelRegistry = {
+        authStorage: {
+          getApiKey: () => "registry-token",
+        },
+      };
+
+      const result = await fetchClaudeUsage(modelRegistry);
+
+      expect(result.account).toBe("registry:anthropic:apiKey");
+      expect(vi.mocked(fetch)).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+          headers: expect.objectContaining({
+            Authorization: "Bearer registry-token",
+          }),
+        }),
+      );
+    });
+  });
 });
