@@ -25,7 +25,9 @@ vi.mock("../src/config.js");
 vi.mock("../src/widget.js");
 
 describe("Provider Credential Detection", () => {
-  const originalEnv = process.env;
+  // Snapshot only the specific env vars we modify, not the entire process.env
+  const originalZaiKey = process.env.Z_AI_API_KEY;
+  const originalAntigravityKey = process.env.ANTIGRAVITY_API_KEY;
   type CommandHandler = (
     args: Record<string, unknown>,
     ctx: Record<string, unknown>,
@@ -65,8 +67,7 @@ describe("Provider Credential Detection", () => {
   };
 
   beforeEach(() => {
-    // Clear environment
-    process.env = { ...originalEnv };
+    // Clear only the specific environment variables we modify
     delete process.env.Z_AI_API_KEY;
     delete process.env.ANTIGRAVITY_API_KEY;
 
@@ -103,8 +104,17 @@ describe("Provider Credential Detection", () => {
   });
 
   afterEach(() => {
-    // Restore original environment after each test
-    process.env = { ...originalEnv };
+    // Restore only the specific environment variables we modified
+    if (originalZaiKey !== undefined) {
+      process.env.Z_AI_API_KEY = originalZaiKey;
+    } else {
+      delete process.env.Z_AI_API_KEY;
+    }
+    if (originalAntigravityKey !== undefined) {
+      process.env.ANTIGRAVITY_API_KEY = originalAntigravityKey;
+    } else {
+      delete process.env.ANTIGRAVITY_API_KEY;
+    }
   });
 
   describe("Gemini credential detection", () => {
