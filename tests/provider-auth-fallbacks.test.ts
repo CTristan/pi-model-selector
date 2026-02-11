@@ -94,7 +94,7 @@ describe("Provider auth fallback behavior", () => {
     expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 
-  it("fetchClaudeUsage should return non-auth HTTP errors immediately", async () => {
+  it("fetchClaudeUsage should return non-auth HTTP errors after exhausting credentials", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn().mockResolvedValue({ ok: false, status: 500 } as Response),

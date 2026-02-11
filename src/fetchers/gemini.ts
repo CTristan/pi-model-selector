@@ -29,8 +29,15 @@ export async function fetchGeminiUsage(
 
     const mr = modelRegistry as {
       authStorage?: {
-        getApiKey?: (id: string) => Promise<string | undefined>;
-        get?: (id: string) => Promise<unknown>;
+        getApiKey?: (
+          id: string,
+        ) => Promise<string | undefined> | string | undefined;
+        get?: (
+          id: string,
+        ) =>
+          | Promise<Record<string, unknown> | undefined>
+          | Record<string, unknown>
+          | undefined;
       };
     };
 

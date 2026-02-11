@@ -260,6 +260,7 @@ export async function fetchClaudeUsage(
 
   let lastAttemptedSource: string | undefined;
   let lastAuthFailure: { status: number; source: string } | undefined;
+  let lastError: { message: string; source: string } | undefined;
 
   const tryToken = async (
     token: string,
@@ -302,8 +303,6 @@ export async function fetchClaudeUsage(
 
     return undefined;
   };
-
-  let lastError: { message: string; source: string } | undefined;
 
   try {
     for (const credential of credentials) {
