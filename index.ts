@@ -24,6 +24,7 @@ import {
   writeDebugLog,
 } from "./src/types.js";
 import { fetchAllUsages, loadPiAuth } from "./src/usage-fetchers.js";
+import { resolveZaiApiKey } from "./src/fetchers/zai.js";
 import {
   loadConfig,
   saveConfigFile,
@@ -176,10 +177,6 @@ async function hasProviderCredential(
   },
 ): Promise<boolean> {
   // Check environment variables
-  if (provider === "zai") {
-    if (isNonEmptyString(process.env.Z_AI_API_KEY)) return true;
-  }
-
   if (provider === "antigravity") {
     if (isNonEmptyString(process.env.ANTIGRAVITY_API_KEY)) return true;
   }
@@ -256,7 +253,7 @@ async function hasProviderCredential(
 
   // Check piAuth for applicable providers
   if (provider === "zai") {
-    if (hasTokenPayload(piAuth["z-ai"] ?? piAuth.zai)) return true;
+    if (resolveZaiApiKey(piAuth)) return true;
   }
 
   if (provider === "codex") {
