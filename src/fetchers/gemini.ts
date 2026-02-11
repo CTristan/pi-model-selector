@@ -72,14 +72,14 @@ export async function fetchGeminiUsage(
     const extractFromData = (data: unknown, source: string) => {
       if (data == null || typeof data !== "object") return;
       const d = data as Record<string, unknown>;
-      const token = d.access || d.access_token || d.token;
+      const token = d.access || d.access_token || d.token || d.accessToken;
       const refresh = d.refresh || d.refresh_token;
       const project = d.projectId || d.project_id;
       const client = d.clientId || d.client_id;
       const clientSecret = d.clientSecret || d.client_secret;
       const expiresAt =
         parseEpochMillis(
-          d.expires || d.expiresAt || d.expiry_date || d.expiryDate,
+          d.expires ?? d.expiresAt ?? d.expiry_date ?? d.expiryDate,
         ) ??
         (typeof d.expires_in === "number" && Number.isFinite(d.expires_in)
           ? Date.now() + d.expires_in * 1000
