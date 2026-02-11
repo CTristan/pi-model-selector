@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import * as fs from "node:fs";
 import modelSelectorExtension from "../index.js";
@@ -178,6 +178,11 @@ describe("429 cooldown and ignored provider behavior", () => {
     );
 
     modelSelectorExtension(pi as unknown as ExtensionAPI);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.clearAllTimers();
   });
 
   it("skips 429 cooldown for providers with catch-all ignore mappings", async () => {

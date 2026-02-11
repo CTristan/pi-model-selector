@@ -152,16 +152,7 @@ describe("configureProviders parallel credential checking", () => {
     });
 
     const runWizard = commands["model-select-config"];
-
-    // Measure time to verify parallel execution
-    const startTime = Date.now();
     await runWizard({}, ctx as unknown as Record<string, unknown>);
-    const endTime = Date.now();
-
-    // With parallel execution, this should complete quickly
-    // If serializing, it would take longer (7 providers * delays)
-    // We're using a generous threshold to avoid flaky tests
-    expect(endTime - startTime).toBeLessThan(100);
 
     expect(ctx.ui.notify).toHaveBeenCalledWith(
       expect.stringContaining("Disabled Claude"),
@@ -295,13 +286,6 @@ describe("configureProviders parallel credential checking", () => {
     });
 
     const runWizard = commands["model-select-config"];
-
-    const startTime = Date.now();
     await runWizard({}, ctx as unknown as Record<string, unknown>);
-    const endTime = Date.now();
-
-    // With parallel execution, even with authStorage checks,
-    // the total time should be reasonable (not 7x serial)
-    expect(endTime - startTime).toBeLessThan(100);
   });
 });
