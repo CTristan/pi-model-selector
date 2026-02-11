@@ -11,23 +11,26 @@ import type {
   LoadedConfig,
   MappingEntry,
   PriorityRule,
+  ProviderName,
   UsageCandidate,
   UsageMappingKey,
   UsageSnapshot,
   WidgetConfig,
 } from "./src/types.js";
 import {
-  mappingKey,
+  ALL_PROVIDERS,
   notify,
   setGlobalConfig,
   writeDebugLog,
 } from "./src/types.js";
-import { fetchAllUsages } from "./src/usage-fetchers.js";
+import { fetchAllUsages, loadPiAuth } from "./src/usage-fetchers.js";
 import {
   loadConfig,
   saveConfigFile,
   updateWidgetConfig,
   upsertMapping,
+  removeMapping,
+  getRawMappings,
 } from "./src/config.js";
 import {
   buildCandidates,
@@ -98,6 +101,10 @@ function isProviderIgnored(
   );
 }
 
+function getWildcardKey(provider: string, account?: string | null): string {
+  return `${provider}|${account ?? ""}|*`;
+}
+
 const priorityOptions: Array<{ label: string; value: PriorityRule[] }> = [
   {
     label: "fullAvailability → remainingPercent → earliestReset",
@@ -124,6 +131,59 @@ const priorityOptions: Array<{ label: string; value: PriorityRule[] }> = [
     value: ["earliestReset", "remainingPercent", "fullAvailability"],
   },
 ];
+
+const PROVIDER_LABELS: Record<ProviderName, string> = {
+  anthropic: "Claude",
+  copilot: "Copilot",
+  gemini: "Gemini",
+  codex: "Codex",
+  antigravity: "Antigravity",
+  kiro: "Kiro",
+  zai: "z.ai",
+};
+
+function isNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim().length > 0;
+}
+
+function hasTokenPayload(value: unknown): boolean {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  return [record.access, record.refresh, record.key].some(isNonEmptyString);
+}
+
+function hasProviderCredential(
+  provider: ProviderName,
+  piAuth: Record<string, unknown>,
+): boolean {
+  if (provider === "zai") {
+    if (isNonEmptyString(process.env.Z_AI_API_KEY)) return true;
+    return hasTokenPayload(piAuth["z-ai"] ?? piAuth.zai);
+  }
+
+  if (provider === "codex") {
+    return Object.entries(piAuth).some(([authProvider, payload]) => {
+      return (
+        authProvider.startsWith("openai-codex") && hasTokenPayload(payload)
+      );
+    });
+  }
+
+  const providerAliases: Record<
+    Exclude<ProviderName, "zai" | "codex">,
+    string[]
+  > = {
+    anthropic: ["anthropic"],
+    copilot: ["github-copilot", "copilot"],
+    gemini: ["google-gemini-cli", "gemini"],
+    antigravity: ["google-antigravity", "antigravity"],
+    kiro: ["kiro"],
+  };
+
+  return providerAliases[provider].some((alias) =>
+    hasTokenPayload(piAuth[alias]),
+  );
+}
 
 // ============================================================================
 // Cooldown Persistence (for print-mode / automation support)
@@ -199,9 +259,15 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
   ];
 
   let cachedCandidates: UsageCandidate[] | null = null,
-    cachedModels: Array<{ provider: string; id: string }> | null = null;
+    cachedModels: Array<{ provider: string; id: string }> | null = null,
+    cachedPiAuth: Record<string, unknown> | null = null;
 
-  const loadCandidates = async (): Promise<UsageCandidate[] | null> => {
+  const loadAuth = async (): Promise<Record<string, unknown>> => {
+      if (cachedPiAuth) return cachedPiAuth;
+      cachedPiAuth = await loadPiAuth();
+      return cachedPiAuth;
+    },
+    loadCandidates = async (): Promise<UsageCandidate[] | null> => {
       if (cachedCandidates) return cachedCandidates;
       const usages = await fetchAllUsages(
           ctx.modelRegistry,
@@ -209,11 +275,23 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         ),
         candidates = dedupeCandidates(buildCandidates(usages));
       if (candidates.length === 0) {
-        notify(
-          ctx,
-          "error",
-          "No usage windows found. Check provider credentials and connectivity.",
-        );
+        let detail =
+          "No usage windows found. Check provider credentials and connectivity.";
+        if (config.disabledProviders.length > 0) {
+          const piAuth = await loadAuth(),
+            disabledWithCredentials = config.disabledProviders.filter(
+              (provider) => hasProviderCredential(provider, piAuth),
+            );
+
+          if (disabledWithCredentials.length > 0) {
+            const labels = disabledWithCredentials.map(
+              (provider) => PROVIDER_LABELS[provider],
+            );
+            detail += ` Detected credentials for disabled provider(s): ${labels.join(", ")}. Enable them via "Configure providers".`;
+          }
+        }
+
+        notify(ctx, "error", detail);
         return null;
       }
       cachedCandidates = candidates;
@@ -317,17 +395,111 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 
         const selectedIndex = optionLabels.indexOf(selectedLabel);
         if (selectedIndex < 0) return;
-        const selectedCandidate = sortedCandidates[selectedIndex],
-          actionChoice = await ctx.ui.select(
-            `Select action for ${selectedCandidate.provider}/${selectedCandidate.windowLabel}`,
-            [
-              "Map to model",
-              "Map by pattern",
-              "Ignore bucket",
-              "Ignore by pattern",
-            ],
-          );
+        const selectedCandidate = sortedCandidates[selectedIndex];
+
+        // Ask which config file (Global / Project) the user wants to modify first
+        const locationChoice = await ctx.ui.select(
+          `Modify mapping in`,
+          locationLabels,
+        );
+        if (!locationChoice) return;
+
+        const saveToProject = locationChoice === locationLabels[1];
+        const targetRaw = saveToProject
+          ? config.raw.project
+          : config.raw.global;
+        const targetPath = saveToProject
+          ? config.sources.projectPath
+          : config.sources.globalPath;
+
+        // Determine which actions make sense for this target file
+        const targetMappings = getRawMappings(targetRaw),
+          matchedIgnoreInTarget = findIgnoreMapping(
+            selectedCandidate,
+            targetMappings,
+          ),
+          matchedModelInTarget = findModelMapping(
+            selectedCandidate,
+            targetMappings,
+          ),
+          hasIgnoreInTarget = matchedIgnoreInTarget !== undefined,
+          hasModelInTarget = matchedModelInTarget !== undefined;
+
+        const actionOptions = [
+          "Map to model",
+          "Map by pattern",
+          "Ignore bucket",
+          "Ignore by pattern",
+        ];
+        if (hasIgnoreInTarget) actionOptions.push("Stop ignoring");
+        if (hasIgnoreInTarget || hasModelInTarget)
+          actionOptions.push("Remove mapping");
+
+        const actionChoice = await ctx.ui.select(
+          `Select action for ${selectedCandidate.provider}/${selectedCandidate.windowLabel}`,
+          actionOptions,
+        );
         if (!actionChoice) return;
+
+        if (
+          actionChoice === "Stop ignoring" ||
+          actionChoice === "Remove mapping"
+        ) {
+          const mappingToRemove =
+            actionChoice === "Stop ignoring"
+              ? matchedIgnoreInTarget
+              : (matchedModelInTarget ?? matchedIgnoreInTarget);
+
+          if (!mappingToRemove) {
+            notify(
+              ctx,
+              "warning",
+              `No matching ${actionChoice === "Stop ignoring" ? "ignore" : "mapping"} found in ${targetPath}.`,
+            );
+          } else {
+            try {
+              const res = removeMapping(targetRaw, mappingToRemove, {
+                onlyIgnore: actionChoice === "Stop ignoring",
+              });
+              if (!res.removed) {
+                notify(
+                  ctx,
+                  "warning",
+                  `No matching ${actionChoice === "Stop ignoring" ? "ignore" : "mapping"} found in ${targetPath}.`,
+                );
+              } else {
+                await saveConfigFile(targetPath, targetRaw);
+
+                const reloaded = await loadConfig(ctx, {
+                  requireMappings: false,
+                });
+                if (reloaded) {
+                  config.mappings = reloaded.mappings;
+                }
+
+                notify(
+                  ctx,
+                  "info",
+                  `Removed ${actionChoice === "Stop ignoring" ? "ignore mapping" : "mapping"} for ${selectedCandidate.provider}/${selectedCandidate.windowLabel}.`,
+                );
+              }
+            } catch (error: unknown) {
+              notify(
+                ctx,
+                "error",
+                `Failed to write ${targetPath}: ${String(error)}`,
+              );
+              return;
+            }
+          }
+
+          const addMoreAfterRemove = await ctx.ui.confirm(
+            "Modify another mapping?",
+            "Do you want to modify another usage bucket?",
+          );
+          if (!addMoreAfterRemove) continueMapping = false;
+          continue;
+        }
 
         let pattern: string | undefined;
         if (
@@ -362,40 +534,27 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
           selectedModel = availableModels[modelIndex];
         }
 
-        const locationChoice = await ctx.ui.select(
-          "Save mapping to",
-          locationLabels,
-        );
-        if (!locationChoice) return;
+        // Build the usage descriptor for this candidate/pattern
+        const usageDesc = {
+          provider: selectedCandidate.provider,
+          account: selectedCandidate.account,
+          window: pattern ? undefined : selectedCandidate.windowLabel,
+          windowPattern: pattern,
+        } as MappingEntry["usage"];
 
-        const saveToProject = locationChoice === locationLabels[1],
-          targetRaw = saveToProject ? config.raw.project : config.raw.global,
-          targetPath = saveToProject
-            ? config.sources.projectPath
-            : config.sources.globalPath,
-          mappingEntry: MappingEntry =
-            actionChoice === "Map to model" || actionChoice === "Map by pattern"
-              ? {
-                  usage: {
-                    provider: selectedCandidate.provider,
-                    account: selectedCandidate.account,
-                    window: pattern ? undefined : selectedCandidate.windowLabel,
-                    windowPattern: pattern,
-                  },
-                  model: {
-                    provider: selectedModel!.provider,
-                    id: selectedModel!.id,
-                  },
-                }
-              : {
-                  usage: {
-                    provider: selectedCandidate.provider,
-                    account: selectedCandidate.account,
-                    window: pattern ? undefined : selectedCandidate.windowLabel,
-                    windowPattern: pattern,
-                  },
-                  ignore: true,
-                };
+        const mappingEntry: MappingEntry =
+          actionChoice === "Map to model" || actionChoice === "Map by pattern"
+            ? {
+                usage: usageDesc,
+                model: {
+                  provider: selectedModel!.provider,
+                  id: selectedModel!.id,
+                },
+              }
+            : {
+                usage: usageDesc,
+                ignore: true,
+              };
 
         try {
           upsertMapping(targetRaw, mappingEntry);
@@ -409,11 +568,10 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
           return;
         }
 
-        const key = mappingKey(mappingEntry);
-        config.mappings = [
-          ...config.mappings.filter((entry) => mappingKey(entry) !== key),
-          mappingEntry,
-        ];
+        const reloaded = await loadConfig(ctx, { requireMappings: false });
+        if (reloaded) {
+          config.mappings = reloaded.mappings;
+        }
 
         const actionSummary = mappingEntry.ignore
           ? `Ignored ${selectedCandidate.provider}/${selectedCandidate.windowLabel}.`
@@ -591,8 +749,83 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
       config.autoRun = newValue;
       notify(ctx, "info", `Auto-run ${newValue ? "enabled" : "disabled"}.`);
     },
+    configureProviders = async (): Promise<void> => {
+      const piAuth = await loadAuth();
+      const providerOptions = ALL_PROVIDERS.map((provider) => {
+          const enabled = !config.disabledProviders.includes(provider),
+            providerLabel = PROVIDER_LABELS[provider],
+            hasCredentials = hasProviderCredential(provider, piAuth);
+
+          return `${enabled ? "✅" : "⏸"} ${providerLabel} (${provider}) — ${enabled ? "enabled" : "disabled"}, credentials: ${hasCredentials ? "detected" : "missing"}`;
+        }),
+        selectedProviderLabel = await ctx.ui.select(
+          "Select provider to enable/disable",
+          providerOptions,
+        );
+
+      if (!selectedProviderLabel) return;
+      const selectedIndex = providerOptions.indexOf(selectedProviderLabel);
+      if (selectedIndex < 0) return;
+
+      const selectedProvider = ALL_PROVIDERS[selectedIndex],
+        currentlyDisabled = config.disabledProviders.includes(selectedProvider),
+        nextDisabled = !currentlyDisabled,
+        locationChoice = await ctx.ui.select(
+          "Save provider setting to",
+          locationLabels,
+        );
+      if (!locationChoice) return;
+
+      const saveToProject = locationChoice === locationLabels[1],
+        targetRaw = saveToProject ? config.raw.project : config.raw.global,
+        targetPath = saveToProject
+          ? config.sources.projectPath
+          : config.sources.globalPath,
+        currentRawDisabled = Array.isArray(targetRaw.disabledProviders)
+          ? targetRaw.disabledProviders.filter(
+              (value): value is string => typeof value === "string",
+            )
+          : [],
+        disabledSet = new Set(currentRawDisabled);
+
+      if (nextDisabled) {
+        disabledSet.add(selectedProvider);
+      } else {
+        disabledSet.delete(selectedProvider);
+      }
+
+      try {
+        targetRaw.disabledProviders = [...disabledSet];
+        await saveConfigFile(targetPath, targetRaw);
+      } catch (error: unknown) {
+        notify(ctx, "error", `Failed to write ${targetPath}: ${String(error)}`);
+        return;
+      }
+
+      const reloaded = await loadConfig(ctx, { requireMappings: false });
+      if (reloaded) {
+        config.disabledProviders = reloaded.disabledProviders;
+        config.raw = reloaded.raw;
+      } else {
+        config.disabledProviders = nextDisabled
+          ? [...new Set([...config.disabledProviders, selectedProvider])]
+          : config.disabledProviders.filter(
+              (value) => value !== selectedProvider,
+            );
+      }
+
+      cachedCandidates = null;
+
+      const selectedProviderLabelFriendly = PROVIDER_LABELS[selectedProvider];
+      notify(
+        ctx,
+        "info",
+        `${nextDisabled ? "Disabled" : "Enabled"} ${selectedProviderLabelFriendly}.`,
+      );
+    },
     menuOptions = [
       "Edit mappings",
+      "Configure providers",
       "Configure priority",
       "Configure widget",
       "Configure auto-run",
@@ -609,6 +842,11 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 
     if (action === "Configure priority") {
       await configurePriority();
+      continue;
+    }
+
+    if (action === "Configure providers") {
+      await configureProviders();
       continue;
     }
 
@@ -679,6 +917,44 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
         cooldowns,
         lastSelected: lastSelectedCandidateKey,
       });
+    },
+    pruneExpiredCooldowns = (now = Date.now()): boolean => {
+      let removed = false;
+      for (const [key, expiry] of modelCooldowns) {
+        if (expiry <= now) {
+          modelCooldowns.delete(key);
+          removed = true;
+        }
+      }
+      return removed;
+    },
+    setOrExtendProviderCooldown = (
+      provider: string,
+      account: string | undefined,
+      now: number,
+    ): boolean => {
+      const wildcardKey = getWildcardKey(provider, account),
+        existingExpiry = modelCooldowns.get(wildcardKey) ?? 0,
+        newExpiry = now + COOLDOWN_DURATION;
+      if (newExpiry <= existingExpiry) {
+        return false;
+      }
+      modelCooldowns.set(wildcardKey, newExpiry);
+      return true;
+    },
+    // Check if a candidate is on cooldown (handles exact and wildcard keys)
+    isOnCooldown = (c: UsageCandidate): boolean => {
+      const key = candidateKey(c),
+        wildcardKey = getWildcardKey(c.provider, c.account),
+        now = Date.now();
+
+      const expiry = modelCooldowns.get(key),
+        wildcardExpiry = modelCooldowns.get(wildcardKey);
+
+      return (
+        (expiry !== undefined && expiry > now) ||
+        (wildcardExpiry !== undefined && wildcardExpiry > now)
+      );
     };
 
   let running = false;
@@ -710,26 +986,54 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
         options.preloadedUsages ||
         (await fetchAllUsages(ctx.modelRegistry, config.disabledProviders));
 
+      // Clean up stale cooldowns first so fresh 429s can always re-arm cooldowns.
+      pruneExpiredCooldowns();
+
       if (!options.preloadedUsages) {
+        let saveNeeded = false;
+        const now = Date.now();
+
         for (const usage of usages) {
-          if (
+          // Detect 429 errors and apply provider-wide cooldown
+          if (usage.error?.includes("429")) {
+            const updated = setOrExtendProviderCooldown(
+              usage.provider,
+              usage.account,
+              now,
+            );
+            if (updated) {
+              saveNeeded = true;
+              notify(
+                ctx,
+                "warning",
+                `Rate limit (429) detected for ${usage.displayName}. Pausing this provider for 1 hour.`,
+              );
+            }
+          } else if (
             usage.error &&
             !isProviderIgnored(usage.provider, usage.account, config.mappings)
           ) {
-            notify(
-              ctx,
-              "warning",
-              `Usage check failed for ${usage.displayName}: ${usage.error}`,
-            );
+            // Suppress warnings if provider is already on cooldown
+            const wildcardKey = getWildcardKey(usage.provider, usage.account),
+              wildcardExpiry = modelCooldowns.get(wildcardKey);
+
+            if (!wildcardExpiry || wildcardExpiry <= now) {
+              notify(
+                ctx,
+                "warning",
+                `Usage check failed for ${usage.displayName}: ${usage.error}`,
+              );
+            }
           }
+        }
+
+        if (saveNeeded) {
+          await persistCooldowns();
         }
       }
 
-      // Clean up expired cooldowns
-      const now = Date.now();
-      for (const [key, expiry] of modelCooldowns) {
-        if (expiry < now) modelCooldowns.delete(key);
-      }
+      // Clean up any cooldowns that may have just expired.
+      pruneExpiredCooldowns();
 
       const candidates = buildCandidates(usages);
       let eligibleCandidates = candidates.filter(
@@ -738,12 +1042,10 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
 
       // Filter out cooldowns
       const cooldownCount = eligibleCandidates.filter((c) =>
-        modelCooldowns.has(candidateKey(c)),
+        isOnCooldown(c),
       ).length;
       if (cooldownCount > 0) {
-        eligibleCandidates = eligibleCandidates.filter(
-          (c) => !modelCooldowns.has(candidateKey(c)),
-        );
+        eligibleCandidates = eligibleCandidates.filter((c) => !isOnCooldown(c));
         if (reason === "command") {
           notify(
             ctx,
@@ -900,7 +1202,7 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
   });
 
   pi.registerCommand("model-select-config", {
-    description: "Configure usage-to-model mappings and widget settings",
+    description: "Configure mappings, providers, and widget settings",
     handler: async (_args, ctx) => {
       await runMappingWizard(ctx);
     },

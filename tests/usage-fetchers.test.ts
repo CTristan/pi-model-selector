@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/require-await, @typescript-eslint/no-unsafe-call */
+/* eslint-disable @typescript-eslint/require-await, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import {
   fetchClaudeUsage,
@@ -565,6 +565,35 @@ describe("Usage Fetchers", () => {
       );
       const result = await fetchZaiUsage({ "z-ai": { access: "mock" } });
       expect(result.windows).toHaveLength(4);
+    });
+
+    it("should read API key from auth.json zai.key", async () => {
+      const fetchMock = vi.fn(
+        async () =>
+          ({
+            ok: true,
+            json: async () => ({
+              success: true,
+              code: 200,
+              data: { limits: [] },
+            }),
+          }) satisfies {
+            ok: boolean;
+            json: () => Promise<Record<string, unknown>>;
+          },
+      );
+      vi.stubGlobal("fetch", fetchMock);
+
+      await fetchZaiUsage({ zai: { key: "zai-key" } });
+
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: "Bearer zai-key",
+          }),
+        }),
+      );
     });
   });
 

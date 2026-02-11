@@ -5,6 +5,7 @@ import {
   upsertMapping,
   updateWidgetConfig,
   saveConfigFile,
+  removeMapping,
 } from "../src/config.js";
 import { MappingEntry } from "../src/types.js";
 import * as fs from "node:fs";
@@ -292,5 +293,51 @@ describe("Config Mutation", () => {
     updateWidgetConfig(raw, { enabled: false, showCount: 5 });
     expect((raw.widget as Record<string, unknown>).enabled).toBe(false);
     expect((raw.widget as Record<string, unknown>).showCount).toBe(5);
+  });
+
+  it("should remove mappings correctly", () => {
+    const raw: Record<string, unknown> = { mappings: [] };
+    const mapping: MappingEntry = {
+      usage: { provider: "p1", window: "w1" },
+      model: { provider: "p1", id: "m1" },
+    };
+
+    upsertMapping(raw, mapping);
+    expect(raw.mappings).toHaveLength(1);
+
+    const removed = removeMapping(raw, {
+      usage: { provider: "p1", window: "w1" },
+    } as MappingEntry);
+    expect(removed.removed).toBe(true);
+    expect(raw.mappings).toHaveLength(0);
+  });
+
+  it("should remove only ignore mappings when onlyIgnore is true", () => {
+    const raw: Record<string, unknown> = { mappings: [] };
+    const ignoreMapping: MappingEntry = {
+      usage: { provider: "p1", window: "w1" },
+      ignore: true,
+    };
+    const modelMapping: MappingEntry = {
+      usage: { provider: "p1", window: "w1" },
+      model: { provider: "p1", id: "m1" },
+    };
+
+    // Insert both entries into the raw mappings
+    raw.mappings = [ignoreMapping, modelMapping];
+    // Sanity check
+    expect(raw.mappings as MappingEntry[]).toHaveLength(2);
+
+    const res = removeMapping(
+      raw,
+      { usage: { provider: "p1", window: "w1" } } as MappingEntry,
+      { onlyIgnore: true },
+    );
+    expect(res.removed).toBe(true);
+    // Only the ignore mapping should have been removed, leaving the model mapping
+    const remaining = raw.mappings as MappingEntry[];
+    expect(remaining).toHaveLength(1);
+    expect(remaining[0].model).toBeDefined();
+    expect(remaining[0].ignore).not.toBe(true);
   });
 });
