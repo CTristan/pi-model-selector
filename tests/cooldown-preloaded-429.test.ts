@@ -5,22 +5,85 @@ import { loadCooldownState, saveCooldownState } from "../index.js";
 // These are not directly exported, so we'll test the behavior indirectly
 // by mocking the cooldown state persistence
 
+// In-memory storage for test file operations
+const mockFileSystem = new Map<string, string>();
+
+// Mock node:os to provide a consistent homedir for testing
+vi.mock("node:os", async () => {
+  const actual = await vi.importActual<typeof import("node:os")>("node:os");
+  return {
+    ...actual,
+    homedir: vi.fn().mockReturnValue("/mock/home"),
+  };
+});
+
+// Mock node:fs to handle file operations in memory (index.ts uses fs.promises)
+vi.mock("node:fs", async () => {
+  const actual = await vi.importActual<typeof import("node:fs")>("node:fs");
+  return {
+    ...actual,
+    promises: {
+      // eslint-disable-next-line @typescript-eslint/require-await
+      access: vi.fn(async (filePath: string) => {
+        if (!mockFileSystem.has(filePath)) {
+          throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+        }
+      }),
+      // eslint-disable-next-line @typescript-eslint/require-await
+      readFile: vi.fn(async (filePath: string) => {
+        const content = mockFileSystem.get(filePath);
+        if (content === undefined) {
+          throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+        }
+        return content;
+      }),
+      // eslint-disable-next-line @typescript-eslint/require-await
+      writeFile: vi.fn(async (filePath: string, data: string) => {
+        mockFileSystem.set(filePath, data);
+      }),
+      // eslint-disable-next-line @typescript-eslint/require-await
+      unlink: vi.fn(async (filePath: string) => {
+        if (!mockFileSystem.has(filePath)) {
+          throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+        }
+        mockFileSystem.delete(filePath);
+      }),
+      mkdir: vi.fn(
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        (_filePath: string, _options?: unknown) => {
+          // No-op for test - directory creation not needed for in-memory store
+        },
+      ),
+      // eslint-disable-next-line @typescript-eslint/require-await
+      rename: vi.fn(async (oldPath: string, newPath: string) => {
+        const content = mockFileSystem.get(oldPath);
+        if (content === undefined) {
+          throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+        }
+        mockFileSystem.set(newPath, content);
+        mockFileSystem.delete(oldPath);
+      }),
+    },
+  };
+});
+
+// Mock node:path to use actual implementation
+vi.mock("node:path", async () => {
+  const actual = await vi.importActual<typeof import("node:path")>("node:path");
+  return actual;
+});
+
 describe("429 Cooldown with Preloaded Usages", () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2024-01-01T00:00:00Z"));
   });
 
-  afterEach(async () => {
+  afterEach(() => {
     vi.useRealTimers();
     vi.clearAllMocks();
-    // Clean up cooldown state file if it exists
-    const fs = await import("node:fs/promises");
-    try {
-      await fs.unlink(`${process.env.HOME}/.pi/model-selector-cooldowns.json`);
-    } catch {
-      // Ignore if file doesn't exist
-    }
+    // Clear in-memory filesystem
+    mockFileSystem.clear();
   });
 
   it("should save and load cooldown state with provider wildcard keys", async () => {
@@ -68,13 +131,8 @@ describe("429 Cooldown with Preloaded Usages", () => {
   });
 
   it("should handle missing cooldown state file gracefully", async () => {
-    // First clean up any existing file
-    const fs = await import("node:fs/promises");
-    try {
-      await fs.unlink(`${process.env.HOME}/.pi/model-selector-cooldowns.json`);
-    } catch {
-      // Ignore if file doesn't exist
-    }
+    // Ensure no state file exists in memory
+    mockFileSystem.clear();
 
     const loaded = await loadCooldownState();
     expect(loaded.cooldowns).toEqual({});
