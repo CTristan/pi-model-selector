@@ -42,7 +42,7 @@
 ### Testing
 
 - **`tests/*.test.ts`**: Unit tests using Vitest. Run with `npm run test`.
-- **Naming Convention**: Test filenames must clearly indicate what they are testing (e.g., `candidates.test.ts`, `config-loading.test.ts`). **Do not use generic or ambiguous names like `reproduce.test.ts` or `reproduce_issue.test.ts`.**
+- **Naming Convention**: Test filenames must clearly indicate what they are testing (e.g., `candidates.test.ts`, `config-loading.test.ts`). **Do not use generic, ambiguous, or ephemeral names like `reproduce.test.ts`, `reproduce_issue.test.ts`, or `pr9-fixes.test.ts`.**
 - **`npm run test`**: Generate test coverage report.
 - **Performance Requirement**: All unit tests must complete within **one second**. Tests exceeding this limit must be updated, refactored, or removed.
 
@@ -112,7 +112,7 @@ To handle transient "No capacity" (503) errors that aren't reflected in quota us
 ### Testing Best Practices
 
 - **Descriptive Names**: Ensure test files are named after the module or feature they test.
-- **No Reproduction Files**: Avoid committing files named `reproduce.test.ts` or similar. If a bug is reproduced via a test, integrate that test into the appropriate existing test suite or create a new descriptively named test file.
+- **No Reproduction Files**: Avoid committing files named `reproduce.test.ts`, `pr9-fixes.test.ts`, or similar. If a bug is reproduced via a test, integrate that test into the appropriate existing test suite or create a new descriptively named test file.
 
 ### Language & Environment
 

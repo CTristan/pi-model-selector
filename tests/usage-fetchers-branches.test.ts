@@ -148,7 +148,7 @@ describe("Usage Fetchers Branch Coverage", () => {
   describe("Claude Usage", () => {
     it("should return undefined for keychain on non-darwin", async () => {
       vi.mocked(os.platform).mockReturnValue("linux");
-      const result = await fetchClaudeUsage({});
+      const result = await fetchClaudeUsage(undefined, {});
       expect(result.error).toBe("No credentials");
     });
 
@@ -159,7 +159,7 @@ describe("Usage Fetchers Branch Coverage", () => {
         // @ts-expect-error: mock callback signature
         cb(new Error("fail"), "", "");
       });
-      const result = await fetchClaudeUsage({});
+      const result = await fetchClaudeUsage(undefined, {});
       expect(result.error).toBe("No credentials");
     });
 
@@ -176,7 +176,7 @@ describe("Usage Fetchers Branch Coverage", () => {
           "",
         );
       });
-      const result = await fetchClaudeUsage({});
+      const result = await fetchClaudeUsage(undefined, {});
       expect(result.error).toBe("No credentials");
     });
 
@@ -203,7 +203,7 @@ describe("Usage Fetchers Branch Coverage", () => {
         }); // New token succeeds
       vi.stubGlobal("fetch", fetchMock);
 
-      const result = await fetchClaudeUsage({
+      const result = await fetchClaudeUsage(undefined, {
         anthropic: { access: "old_key" },
       });
       expect(result.account).toBe("keychain");
@@ -226,7 +226,9 @@ describe("Usage Fetchers Branch Coverage", () => {
         }),
       );
 
-      const result = await fetchClaudeUsage({ anthropic: { access: "key" } });
+      const result = await fetchClaudeUsage(undefined, {
+        anthropic: { access: "key" },
+      });
       const sonnetWindow = result.windows.find((w) => w.label === "Sonnet");
       expect(sonnetWindow?.usedPercent).toBe(90);
       expect(sonnetWindow?.resetsAt?.toISOString()).toBe(globalReset);
@@ -247,7 +249,9 @@ describe("Usage Fetchers Branch Coverage", () => {
         }),
       );
 
-      const result = await fetchClaudeUsage({ anthropic: { access: "key" } });
+      const result = await fetchClaudeUsage(undefined, {
+        anthropic: { access: "key" },
+      });
       const w = result.windows.find((w) => w.label === "Sonnet");
       expect(w?.usedPercent).toBe(90);
     });
@@ -265,7 +269,9 @@ describe("Usage Fetchers Branch Coverage", () => {
         }),
       );
 
-      const result = await fetchClaudeUsage({ anthropic: { access: "key" } });
+      const result = await fetchClaudeUsage(undefined, {
+        anthropic: { access: "key" },
+      });
       const w = result.windows.find((w) => w.label === "Sonnet");
       expect(w?.resetsAt?.toISOString()).toBe(globalReset);
     });
@@ -1006,7 +1012,7 @@ describe("Usage Fetchers Branch Coverage", () => {
           },
         );
 
-        const res = await fetchClaudeUsage({});
+        const res = await fetchClaudeUsage(undefined, {});
         expect(fetchMock).toHaveBeenCalledTimes(1);
         expect(res.error).toBe("HTTP 401");
       });
@@ -1034,7 +1040,9 @@ describe("Usage Fetchers Branch Coverage", () => {
           },
         );
 
-        await fetchClaudeUsage({ anthropic: { access: "same_token" } });
+        await fetchClaudeUsage(undefined, {
+          anthropic: { access: "same_token" },
+        });
         expect(fetchMock).toHaveBeenCalledTimes(1);
       });
 
@@ -1046,7 +1054,7 @@ describe("Usage Fetchers Branch Coverage", () => {
             if (cb) cb(null, JSON.stringify({ other: {} }), "");
           },
         );
-        const res = await fetchClaudeUsage({});
+        const res = await fetchClaudeUsage(undefined, {});
         expect(res.error).toBe("No credentials");
       });
     });
