@@ -1,10 +1,12 @@
 import type { RateWindow, UsageSnapshot } from "../types.js";
 import { fetchWithTimeout, formatReset, safeDate, URLS } from "./common.js";
 
-function resolveZaiApiKey(piAuth: Record<string, unknown>): string | undefined {
+export function resolveZaiApiKey(
+  piAuth: Record<string, unknown>,
+): string | undefined {
   const envApiKey = process.env.Z_AI_API_KEY;
   if (typeof envApiKey === "string" && envApiKey.trim().length > 0) {
-    return envApiKey;
+    return envApiKey.trim();
   }
 
   const zai = (piAuth["z-ai"] ?? piAuth.zai) as
@@ -15,11 +17,11 @@ function resolveZaiApiKey(piAuth: Record<string, unknown>): string | undefined {
     key = zai?.key;
 
   if (typeof access === "string" && access.trim().length > 0) {
-    return access;
+    return access.trim();
   }
 
   if (typeof key === "string" && key.trim().length > 0) {
-    return key;
+    return key.trim();
   }
 
   return undefined;

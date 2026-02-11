@@ -302,7 +302,7 @@ const COOLDOWN_STATE_PATH = path.join(
   "model-selector-cooldowns.json",
 );
 
-async function loadCooldownState(): Promise<CooldownState> {
+export async function loadCooldownState(): Promise<CooldownState> {
   try {
     await fs.promises.access(COOLDOWN_STATE_PATH);
     const data = await fs.promises.readFile(COOLDOWN_STATE_PATH, "utf-8"),
@@ -320,7 +320,7 @@ async function loadCooldownState(): Promise<CooldownState> {
   return { cooldowns: {}, lastSelected: null };
 }
 
-async function saveCooldownState(state: CooldownState): Promise<void> {
+export async function saveCooldownState(state: CooldownState): Promise<void> {
   const dir = path.dirname(COOLDOWN_STATE_PATH);
   try {
     await fs.promises.mkdir(dir, { recursive: true });
@@ -1117,33 +1117,45 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
       // Clean up stale cooldowns first so fresh 429s can always re-arm cooldowns.
       pruneExpiredCooldowns();
 
-      if (!options.preloadedUsages) {
-        let saveNeeded = false;
-        const now = Date.now();
+      // Apply 429 cooldowns for all usages (including preloaded)
+      // This ensures rate-limit detection works even when /model-skip provides preloaded usages
+      let saveNeeded = false;
+      const now = Date.now();
 
-        for (const usage of usages) {
-          // Detect 429 errors and apply provider-wide cooldown
-          // Skip ignored providers to avoid noisy UX for intentionally-ignored providers
-          if (usage.error?.includes("429")) {
-            if (
-              !isProviderIgnored(usage.provider, usage.account, config.mappings)
-            ) {
-              const updated = setOrExtendProviderCooldown(
-                usage.provider,
-                usage.account,
-                now,
+      for (const usage of usages) {
+        // Detect 429 errors and apply provider-wide cooldown
+        // Skip ignored providers to avoid noisy UX for intentionally-ignored providers
+        if (usage.error?.includes("429")) {
+          if (
+            !isProviderIgnored(usage.provider, usage.account, config.mappings)
+          ) {
+            const updated = setOrExtendProviderCooldown(
+              usage.provider,
+              usage.account,
+              now,
+            );
+            if (updated) {
+              saveNeeded = true;
+              notify(
+                ctx,
+                "warning",
+                `Rate limit (429) detected for ${usage.displayName}. Pausing this provider for 1 hour.`,
               );
-              if (updated) {
-                saveNeeded = true;
-                notify(
-                  ctx,
-                  "warning",
-                  `Rate limit (429) detected for ${usage.displayName}. Pausing this provider for 1 hour.`,
-                );
-              }
             }
-          } else if (
+          }
+        }
+      }
+
+      if (saveNeeded) {
+        await persistCooldowns();
+      }
+
+      // Show error notifications only for non-preloaded usages
+      if (!options.preloadedUsages) {
+        for (const usage of usages) {
+          if (
             usage.error &&
+            !usage.error.includes("429") &&
             !isProviderIgnored(usage.provider, usage.account, config.mappings)
           ) {
             // Suppress warnings if provider is already on cooldown
@@ -1158,10 +1170,6 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
               );
             }
           }
-        }
-
-        if (saveNeeded) {
-          await persistCooldowns();
         }
       }
 
