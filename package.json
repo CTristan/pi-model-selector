@@ -25,10 +25,8 @@
   },
   "scripts": {
     "type-check": "tsc",
-    "lint": "biome check .",
-    "lint:fix": "biome check --write .",
-    "format:check": "biome format .",
-    "format:fix": "biome format --write .",
+    "check": "biome check .",
+    "fix": "biome check --write .",
     "test": "vitest run --coverage",
     "test:watch": "vitest",
     "ci": "./scripts/ci.sh",

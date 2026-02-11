@@ -1002,6 +1002,8 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 
     if (action === "Configure debug log") {
       await configureDebugLog();
+      // biome-ignore lint/complexity/noUselessContinue: consistency with other handlers
+      continue;
     }
   }
 }

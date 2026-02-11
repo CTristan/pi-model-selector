@@ -263,8 +263,12 @@ export async function fetchGeminiUsage(
     const projectGroups = new Map<string, GeminiTokenInfo[]>();
     for (const cfg of configs) {
       const pid = cfg.projectId || "no-project";
-      if (!projectGroups.has(pid)) projectGroups.set(pid, []);
-      projectGroups.get(pid)?.push(cfg);
+      const group = projectGroups.get(pid);
+      if (group) {
+        group.push(cfg);
+      } else {
+        projectGroups.set(pid, [cfg]);
+      }
     }
 
     const snapshots = await Promise.all(
