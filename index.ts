@@ -878,15 +878,19 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
           )
         : [];
 
+      // Check credentials for all providers in parallel to avoid UI sluggishness
+      const credentialChecks = await Promise.all(
+        ALL_PROVIDERS.map((provider) =>
+          hasProviderCredential(provider, piAuth, ctx.modelRegistry).then(
+            (hasCredentials) => ({ provider, hasCredentials }),
+          ),
+        ),
+      );
+
       const providerOptions: string[] = [];
-      for (const provider of ALL_PROVIDERS) {
+      for (const { provider, hasCredentials } of credentialChecks) {
         const disabledInTarget = currentRawDisabled.includes(provider);
         const providerLabel = PROVIDER_LABELS[provider];
-        const hasCredentials = await hasProviderCredential(
-          provider,
-          piAuth,
-          ctx.modelRegistry,
-        );
         const mergedDisabled = config.disabledProviders.includes(provider);
 
         let statusLabel = disabledInTarget ? "⏸ disabled" : "✅ enabled";
@@ -1119,19 +1123,24 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
 
         for (const usage of usages) {
           // Detect 429 errors and apply provider-wide cooldown
+          // Skip ignored providers to avoid noisy UX for intentionally-ignored providers
           if (usage.error?.includes("429")) {
-            const updated = setOrExtendProviderCooldown(
-              usage.provider,
-              usage.account,
-              now,
-            );
-            if (updated) {
-              saveNeeded = true;
-              notify(
-                ctx,
-                "warning",
-                `Rate limit (429) detected for ${usage.displayName}. Pausing this provider for 1 hour.`,
+            if (
+              !isProviderIgnored(usage.provider, usage.account, config.mappings)
+            ) {
+              const updated = setOrExtendProviderCooldown(
+                usage.provider,
+                usage.account,
+                now,
               );
+              if (updated) {
+                saveNeeded = true;
+                notify(
+                  ctx,
+                  "warning",
+                  `Rate limit (429) detected for ${usage.displayName}. Pausing this provider for 1 hour.`,
+                );
+              }
             }
           } else if (
             usage.error &&
