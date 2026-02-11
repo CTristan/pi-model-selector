@@ -1,12 +1,11 @@
-/* eslint-disable @typescript-eslint/require-await, @typescript-eslint/unbound-method, @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-member-access */
-import { describe, it, expect, vi } from "vitest";
+import type { ExtensionContext, Theme } from "@mariozechner/pi-coding-agent";
+import { describe, expect, it, vi } from "vitest";
+import type { LoadedConfig, UsageCandidate } from "../src/types.js";
 import {
-  renderUsageWidget,
   clearWidget,
+  renderUsageWidget,
   updateWidgetState,
 } from "../src/widget.js";
-import type { Theme, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import type { UsageCandidate, LoadedConfig } from "../src/types.js";
 
 describe("Widget", () => {
   const theme = {

@@ -1,9 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import modelSelectorExtension from "../index.js";
-import * as usageFetchers from "../src/usage-fetchers.js";
 import * as configMod from "../src/config.js";
 import type { LoadedConfig } from "../src/types.js";
+import * as usageFetchers from "../src/usage-fetchers.js";
 
 vi.mock("node:fs", () => ({
   promises: {
@@ -152,8 +152,8 @@ describe("Provider Credential Detection", () => {
 
       expect(ctx.ui.select).toHaveBeenCalled();
       const selectCalls = vi.mocked(ctx.ui.select).mock.calls;
-      const providerSelectCall = selectCalls.find(
-        (call) => call[0] && call[0].includes("Configure providers in Global"),
+      const providerSelectCall = selectCalls.find((call) =>
+        call[0]?.includes("Configure providers in Global"),
       );
       expect(providerSelectCall).toBeDefined();
       const options = providerSelectCall?.[1] as string[];
@@ -192,8 +192,8 @@ describe("Provider Credential Detection", () => {
       await runWizard({}, ctx as unknown as Record<string, unknown>);
 
       const selectCalls = vi.mocked(ctx.ui.select).mock.calls;
-      const providerSelectCall = selectCalls.find(
-        (call) => call[0] && call[0].includes("Configure providers in Global"),
+      const providerSelectCall = selectCalls.find((call) =>
+        call[0]?.includes("Configure providers in Global"),
       );
       const options = providerSelectCall?.[1] as string[];
       const geminiOption = options.find((o) => o.includes("Gemini"));
@@ -235,8 +235,8 @@ describe("Provider Credential Detection", () => {
       await runWizard({}, ctx as unknown as Record<string, unknown>);
 
       const selectCalls = vi.mocked(ctx.ui.select).mock.calls;
-      const providerSelectCall = selectCalls.find(
-        (call) => call[0] && call[0].includes("Configure providers in Global"),
+      const providerSelectCall = selectCalls.find((call) =>
+        call[0]?.includes("Configure providers in Global"),
       );
       const options = providerSelectCall?.[1] as string[];
       const antigravityOption = options.find((o) => o.includes("Antigravity"));
@@ -274,8 +274,8 @@ describe("Provider Credential Detection", () => {
       await runWizard({}, ctx as unknown as Record<string, unknown>);
 
       const selectCalls = vi.mocked(ctx.ui.select).mock.calls;
-      const providerSelectCall = selectCalls.find(
-        (call) => call[0] && call[0].includes("Configure providers in Global"),
+      const providerSelectCall = selectCalls.find((call) =>
+        call[0]?.includes("Configure providers in Global"),
       );
       const options = providerSelectCall?.[1] as string[];
       const antigravityOption = options.find((o) => o.includes("Antigravity"));
@@ -317,8 +317,8 @@ describe("Provider Credential Detection", () => {
       await runWizard({}, ctx as unknown as Record<string, unknown>);
 
       const selectCalls = vi.mocked(ctx.ui.select).mock.calls;
-      const providerSelectCall = selectCalls.find(
-        (call) => call[0] && call[0].includes("Configure providers in Global"),
+      const providerSelectCall = selectCalls.find((call) =>
+        call[0]?.includes("Configure providers in Global"),
       );
       const options = providerSelectCall?.[1] as string[];
       const copilotOption = options.find((o) => o.includes("Copilot"));
@@ -358,8 +358,8 @@ describe("Provider Credential Detection", () => {
       await runWizard({}, ctx as unknown as Record<string, unknown>);
 
       const selectCalls = vi.mocked(ctx.ui.select).mock.calls;
-      const providerSelectCall = selectCalls.find(
-        (call) => call[0] && call[0].includes("Configure providers in Global"),
+      const providerSelectCall = selectCalls.find((call) =>
+        call[0]?.includes("Configure providers in Global"),
       );
       const options = providerSelectCall?.[1] as string[];
       const zaiOption = options.find((o) => o.includes("z.ai"));
@@ -396,8 +396,8 @@ describe("Provider Credential Detection", () => {
       await runWizard({}, ctx as unknown as Record<string, unknown>);
 
       const selectCalls = vi.mocked(ctx.ui.select).mock.calls;
-      const providerSelectCall = selectCalls.find(
-        (call) => call[0] && call[0].includes("Configure providers in Global"),
+      const providerSelectCall = selectCalls.find((call) =>
+        call[0]?.includes("Configure providers in Global"),
       );
       expect(providerSelectCall).toBeDefined();
     });

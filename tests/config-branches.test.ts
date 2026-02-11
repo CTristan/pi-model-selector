@@ -1,7 +1,7 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { loadConfig, readConfigFile } from "../src/config.js";
 import * as fs from "node:fs";
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { loadConfig, readConfigFile } from "../src/config.js";
 
 // Mocks
 vi.mock("node:fs", async () => {

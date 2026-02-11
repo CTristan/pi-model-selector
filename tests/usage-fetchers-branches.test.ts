@@ -1,19 +1,18 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-explicit-any, @typescript-eslint/require-await, @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-base-to-string */
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  fetchAllCodexUsages,
+  fetchAntigravityUsage,
   fetchClaudeUsage,
   fetchCopilotUsage,
   fetchGeminiUsage,
-  fetchAntigravityUsage,
   fetchKiroUsage,
   fetchZaiUsage,
-  fetchAllCodexUsages,
   formatReset,
   loadPiAuth,
   refreshGoogleToken,
 } from "../src/usage-fetchers.js";
-import * as fs from "node:fs";
-import * as os from "node:os";
 
 // Mocks
 vi.mock("node:fs", async () => {
@@ -41,7 +40,7 @@ vi.mock("node:os", async () => {
 
 vi.mock("node:child_process", async () => {
   const util = await import("node:util");
-  const execMock = vi.fn((cmd, options, cb) => {
+  const execMock = vi.fn((_cmd, options, cb) => {
     if (typeof options === "function") cb = options;
     if (cb) cb(null, "", "");
     return {} as ReturnType<typeof import("node:child_process").exec>; // Return mock ChildProcess
@@ -155,10 +154,12 @@ describe("Usage Fetchers Branch Coverage", () => {
     it("should handle keychain error/empty", async () => {
       vi.mocked(os.platform).mockReturnValue("darwin");
       const child_process = await import("node:child_process");
-      vi.mocked(child_process.exec).mockImplementation((cmd, opts, cb): any => {
-        // @ts-expect-error: mock callback signature
-        cb(new Error("fail"), "", "");
-      });
+      vi.mocked(child_process.exec).mockImplementation(
+        (_cmd, _opts, cb): any => {
+          // @ts-expect-error: mock callback signature
+          cb(new Error("fail"), "", "");
+        },
+      );
       const result = await fetchClaudeUsage(undefined, {});
       expect(result.error).toBe("No credentials");
     });
@@ -166,16 +167,18 @@ describe("Usage Fetchers Branch Coverage", () => {
     it("should handle successful keychain load but missing scopes", async () => {
       vi.mocked(os.platform).mockReturnValue("darwin");
       const child_process = await import("node:child_process");
-      vi.mocked(child_process.exec).mockImplementation((cmd, opts, cb): any => {
-        // @ts-expect-error: mock callback signature
-        cb(
-          null,
-          JSON.stringify({
-            claudeAiOauth: { scopes: ["other"], accessToken: "abc" },
-          }),
-          "",
-        );
-      });
+      vi.mocked(child_process.exec).mockImplementation(
+        (_cmd, _opts, cb): any => {
+          // @ts-expect-error: mock callback signature
+          cb(
+            null,
+            JSON.stringify({
+              claudeAiOauth: { scopes: ["other"], accessToken: "abc" },
+            }),
+            "",
+          );
+        },
+      );
       const result = await fetchClaudeUsage(undefined, {});
       expect(result.error).toBe("No credentials");
     });
@@ -183,16 +186,21 @@ describe("Usage Fetchers Branch Coverage", () => {
     it("fetchClaudeUsage should update token from keychain if different", async () => {
       vi.mocked(os.platform).mockReturnValue("darwin");
       const child_process = await import("node:child_process");
-      vi.mocked(child_process.exec).mockImplementation((cmd, opts, cb): any => {
-        // @ts-expect-error: mock callback signature
-        cb(
-          null,
-          JSON.stringify({
-            claudeAiOauth: { scopes: ["user:profile"], accessToken: "new_key" },
-          }),
-          "",
-        );
-      });
+      vi.mocked(child_process.exec).mockImplementation(
+        (_cmd, _opts, cb): any => {
+          // @ts-expect-error: mock callback signature
+          cb(
+            null,
+            JSON.stringify({
+              claudeAiOauth: {
+                scopes: ["user:profile"],
+                accessToken: "new_key",
+              },
+            }),
+            "",
+          );
+        },
+      );
 
       const fetchMock = vi
         .fn()
@@ -283,10 +291,12 @@ describe("Usage Fetchers Branch Coverage", () => {
   describe("Copilot Usage", () => {
     it("should handle registry errors", async () => {
       const child_process = await import("node:child_process");
-      vi.mocked(child_process.exec).mockImplementation((cmd, opts, cb): any => {
-        // @ts-expect-error: mock callback signature
-        cb(null, "", "");
-      });
+      vi.mocked(child_process.exec).mockImplementation(
+        (_cmd, _opts, cb): any => {
+          // @ts-expect-error: mock callback signature
+          cb(null, "", "");
+        },
+      );
 
       const modelRegistry = {
         authStorage: {
@@ -301,15 +311,17 @@ describe("Usage Fetchers Branch Coverage", () => {
 
     it("should pick up token from gh auth token", async () => {
       const child_process = await import("node:child_process");
-      vi.mocked(child_process.exec).mockImplementation((cmd, opts, cb): any => {
-        if (typeof cmd === "string" && cmd.includes("gh auth token")) {
-          // @ts-expect-error: mock callback signature
-          cb(null, "gh_cli_token\n", "");
-        } else {
-          // @ts-expect-error: mock callback signature
-          cb(new Error("fail"), "", "");
-        }
-      });
+      vi.mocked(child_process.exec).mockImplementation(
+        (cmd, _opts, cb): any => {
+          if (typeof cmd === "string" && cmd.includes("gh auth token")) {
+            // @ts-expect-error: mock callback signature
+            cb(null, "gh_cli_token\n", "");
+          } else {
+            // @ts-expect-error: mock callback signature
+            cb(new Error("fail"), "", "");
+          }
+        },
+      );
 
       vi.stubGlobal(
         "fetch",
@@ -328,10 +340,12 @@ describe("Usage Fetchers Branch Coverage", () => {
 
     it("should fallback to 304 cached state", async () => {
       const child_process = await import("node:child_process");
-      vi.mocked(child_process.exec).mockImplementation((cmd, opts, cb): any => {
-        // @ts-expect-error: mock callback signature
-        cb(null, "gh_cli_token", "");
-      });
+      vi.mocked(child_process.exec).mockImplementation(
+        (_cmd, _opts, cb): any => {
+          // @ts-expect-error: mock callback signature
+          cb(null, "gh_cli_token", "");
+        },
+      );
 
       vi.stubGlobal(
         "fetch",
@@ -979,13 +993,11 @@ describe("Usage Fetchers Branch Coverage", () => {
 
       it("should handle invalid dates gracefully in catch block", () => {
         const original = Intl.DateTimeFormat;
-        global.Intl.DateTimeFormat = vi.fn(function () {
-          return {
-            format: () => {
-              throw new Error("fail");
-            },
-          };
-        }) as any;
+        global.Intl.DateTimeFormat = vi.fn(() => ({
+          format: () => {
+            throw new Error("fail");
+          },
+        })) as any;
         expect(formatReset(new Date(Date.now() + 10 * 24 * 3600000))).toBe("");
         global.Intl.DateTimeFormat = original;
       });
@@ -999,7 +1011,7 @@ describe("Usage Fetchers Branch Coverage", () => {
 
         const child_process = await import("node:child_process");
         vi.mocked(child_process.exec).mockImplementation(
-          (cmd, opts, cb): any => {
+          (_cmd, opts, cb): any => {
             if (typeof opts === "function") cb = opts as any;
             if (cb)
               cb(
@@ -1024,7 +1036,7 @@ describe("Usage Fetchers Branch Coverage", () => {
 
         const child_process = await import("node:child_process");
         vi.mocked(child_process.exec).mockImplementation(
-          (cmd, opts, cb): any => {
+          (_cmd, opts, cb): any => {
             if (typeof opts === "function") cb = opts as any;
             if (cb)
               cb(
@@ -1049,7 +1061,7 @@ describe("Usage Fetchers Branch Coverage", () => {
       it("should handle keychain with missing claudeAiOauth property", async () => {
         const child_process = await import("node:child_process");
         vi.mocked(child_process.exec).mockImplementation(
-          (cmd, opts, cb): any => {
+          (_cmd, opts, cb): any => {
             if (typeof opts === "function") cb = opts as any;
             if (cb) cb(null, JSON.stringify({ other: {} }), "");
           },
@@ -1132,7 +1144,7 @@ describe("Usage Fetchers Branch Coverage", () => {
       it("should handle gh auth token throwing", async () => {
         const child_process = await import("node:child_process");
         vi.mocked(child_process.exec).mockImplementation(
-          (cmd, opts, cb): any => {
+          (_cmd, opts, cb): any => {
             if (typeof opts === "function") cb = opts as any;
             cb?.(new Error("fail"), "", "");
           },

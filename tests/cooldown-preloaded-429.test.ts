@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadCooldownState, saveCooldownState } from "../index.js";
 
 // Import the cooldown state helpers and mock persistence to control
@@ -22,13 +22,12 @@ vi.mock("node:fs", async () => {
   return {
     ...actual,
     promises: {
-      // eslint-disable-next-line @typescript-eslint/require-await
       access: vi.fn(async (filePath: string) => {
         if (!mockFileSystem.has(filePath)) {
           throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
         }
       }),
-      // eslint-disable-next-line @typescript-eslint/require-await
+
       readFile: vi.fn(async (filePath: string) => {
         const content = mockFileSystem.get(filePath);
         if (content === undefined) {
@@ -36,24 +35,21 @@ vi.mock("node:fs", async () => {
         }
         return content;
       }),
-      // eslint-disable-next-line @typescript-eslint/require-await
+
       writeFile: vi.fn(async (filePath: string, data: string) => {
         mockFileSystem.set(filePath, data);
       }),
-      // eslint-disable-next-line @typescript-eslint/require-await
+
       unlink: vi.fn(async (filePath: string) => {
         if (!mockFileSystem.has(filePath)) {
           throw Object.assign(new Error("ENOENT"), { code: "ENOENT" });
         }
         mockFileSystem.delete(filePath);
       }),
-      mkdir: vi.fn(
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        (_filePath: string, _options?: unknown) => {
-          // No-op for test - directory creation not needed for in-memory store
-        },
-      ),
-      // eslint-disable-next-line @typescript-eslint/require-await
+      mkdir: vi.fn((_filePath: string, _options?: unknown) => {
+        // No-op for test - directory creation not needed for in-memory store
+      }),
+
       rename: vi.fn(async (oldPath: string, newPath: string) => {
         const content = mockFileSystem.get(oldPath);
         if (content === undefined) {

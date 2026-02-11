@@ -4,7 +4,7 @@ import { execAsync, formatReset } from "./common.js";
 
 function stripAnsi(text: string): string {
   return text.replace(
-    // eslint-disable-next-line no-control-regex
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: Standard ANSI escape sequence regex
     /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-PRZcf-ntqry=><~]/g,
     "",
   );
@@ -32,7 +32,7 @@ export function parseSingleKiroResetDate(dateStr: string): Date | undefined {
 
   const dateMD = new Date(year, first - 1, second);
   const dateDM = new Date(year, second - 1, first);
-  const isValid = (d: Date) => !isNaN(d.getTime());
+  const isValid = (d: Date) => !Number.isNaN(d.getTime());
 
   if (!isValid(dateMD) && !isValid(dateDM)) return undefined;
 
@@ -44,8 +44,8 @@ export function parseSingleKiroResetDate(dateStr: string): Date | undefined {
   for (const y of years) {
     const dMD = new Date(y, first - 1, second);
     const dDM = new Date(y, second - 1, first);
-    if (!isNaN(dMD.getTime())) candidates.push(dMD);
-    if (!isNaN(dDM.getTime())) candidates.push(dDM);
+    if (!Number.isNaN(dMD.getTime())) candidates.push(dMD);
+    if (!Number.isNaN(dDM.getTime())) candidates.push(dDM);
   }
 
   if (candidates.length === 0) return undefined;
@@ -118,8 +118,8 @@ export function parseKiroWindows(output: string): RateWindow[] {
     // Keep track of quotas found on this line with their positions
     const quotasWithIndices: Array<{ w: RateWindow; end: number }> = [];
 
-    let match: RegExpExecArray | null;
-    while ((match = combinedRegex.exec(line)) !== null) {
+    let match = combinedRegex.exec(line);
+    while (match !== null) {
       const fullPrefix = match[1] || "";
       const isPct = match[2] !== undefined;
       const keyword = isPct ? match[2] : match[4];
@@ -146,7 +146,10 @@ export function parseKiroWindows(output: string): RateWindow[] {
         label = `${label} ${keyword}`.trim();
       }
 
-      if (ignoreLabels.some((l) => label.toLowerCase().includes(l))) continue;
+      if (ignoreLabels.some((l) => label.toLowerCase().includes(l))) {
+        match = combinedRegex.exec(line);
+        continue;
+      }
 
       const keywordLower = (keyword || "").toLowerCase();
       const isRemaining =
@@ -188,19 +191,20 @@ export function parseKiroWindows(output: string): RateWindow[] {
       }
       windows.push(window);
       quotasWithIndices.push({ w: window, end: combinedRegex.lastIndex });
+      match = combinedRegex.exec(line);
     }
 
     // Sort quotas on this line by their end position to help with assignments
     quotasWithIndices.sort((a, b) => a.end - b.end);
 
     // Reset dates: assign to the most recent quota found before the reset string
-    let resetMatch: RegExpExecArray | null;
-    while ((resetMatch = resetRegex.exec(line)) !== null) {
+    let resetMatch = resetRegex.exec(line);
+    while (resetMatch !== null) {
       const resetsAt = parseSingleKiroResetDate(resetMatch[1]);
       if (resetsAt) {
         const target = [...quotasWithIndices]
           .reverse()
-          .find((q) => q.end <= resetMatch!.index);
+          .find((q) => q.end <= (resetMatch?.index ?? 0));
         if (target) {
           target.w.resetsAt = resetsAt;
           target.w.resetDescription = formatReset(resetsAt);
@@ -213,15 +217,16 @@ export function parseKiroWindows(output: string): RateWindow[] {
           }
         }
       }
+      resetMatch = resetRegex.exec(line);
     }
 
     // Expiry: assign to the most recent quota found before the expiry string
-    let expiryMatch: RegExpExecArray | null;
-    while ((expiryMatch = expiryRegex.exec(line)) !== null) {
+    let expiryMatch = expiryRegex.exec(line);
+    while (expiryMatch !== null) {
       const days = expiryMatch[1];
       const target = [...quotasWithIndices]
         .reverse()
-        .find((q) => q.end <= expiryMatch!.index);
+        .find((q) => q.end <= (expiryMatch?.index ?? 0));
       if (target) {
         target.w.resetDescription = `${days}d left`;
       } else if (windows.length > 0) {
@@ -230,6 +235,7 @@ export function parseKiroWindows(output: string): RateWindow[] {
           last.resetDescription = `${days}d left`;
         }
       }
+      expiryMatch = expiryRegex.exec(line);
     }
   }
 

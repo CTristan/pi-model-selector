@@ -69,11 +69,11 @@ export function safeDate(value: unknown): Date | undefined {
   if (value === 0 || value === "0") return new Date(0);
   if (!value) return undefined;
   const d = new Date(value as string | number | Date);
-  return isNaN(d.getTime()) ? undefined : d;
+  return Number.isNaN(d.getTime()) ? undefined : d;
 }
 
 export function formatReset(date: Date): string {
-  if (isNaN(date.getTime())) return "";
+  if (Number.isNaN(date.getTime())) return "";
   const diffMs = date.getTime() - Date.now();
   if (diffMs < 0) return "now";
 

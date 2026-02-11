@@ -1,7 +1,6 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument */
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { fetchKiroUsage } from "../src/fetchers/kiro.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { execAsync } from "../src/fetchers/common.js";
+import { fetchKiroUsage } from "../src/fetchers/kiro.js";
 
 vi.mock("../src/fetchers/common.js", async () => {
   const actual = await vi.importActual<

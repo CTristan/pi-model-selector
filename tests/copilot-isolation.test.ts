@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { fetchCopilotUsage } from "../src/fetchers/copilot.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { execAsync } from "../src/fetchers/common.js";
+import { fetchCopilotUsage } from "../src/fetchers/copilot.js";
 
 vi.mock("../src/fetchers/common.js", async () => {
   const actual = await vi.importActual<

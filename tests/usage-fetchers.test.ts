@@ -1,21 +1,19 @@
-/* eslint-disable @typescript-eslint/require-await, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-assignment */
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import * as fs from "node:fs";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { RateWindow } from "../src/types.js";
 import {
+  fetchAllCodexUsages,
+  fetchAllUsages,
+  fetchAntigravityUsage,
   fetchClaudeUsage,
   fetchCopilotUsage,
-  fetchAllUsages,
   fetchGeminiUsage,
-  fetchAntigravityUsage,
-  fetchZaiUsage,
   fetchKiroUsage,
-  fetchAllCodexUsages,
+  fetchZaiUsage,
   formatReset,
-  safeDate,
   loadPiAuth,
+  safeDate,
 } from "../src/usage-fetchers.js";
-import * as fs from "node:fs";
-import { afterEach } from "vitest";
-import type { RateWindow } from "../src/types.js";
 
 vi.mock("node:fs", async () => {
   const actual = await vi.importActual<typeof import("node:fs")>("node:fs");
@@ -59,7 +57,6 @@ vi.mock("node:child_process", async () => {
   );
 
   Object.defineProperty(execMock, util.promisify.custom, {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     value: (cmd: string, options: any) => {
       return new Promise((resolve, reject) => {
         execMock(
@@ -119,7 +116,6 @@ describe("Usage Fetchers", () => {
     it("should handle Keychain failure and 401 retry", async () => {
       const child_process = await import("node:child_process");
       vi.mocked(child_process.exec).mockImplementation(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (cmd: string, options: unknown, cb?: any): any => {
           if (typeof options === "function") cb = options;
           if (cmd.includes("security")) {
@@ -311,7 +307,7 @@ describe("Usage Fetchers", () => {
       const child_process = await import("node:child_process");
       vi.mocked(child_process.exec).mockImplementation(
         (
-          cmd: string,
+          _cmd: string,
           opts: unknown,
           cb?: (err: Error | null, stdout: string, stderr: string) => void,
         ) => {
@@ -613,7 +609,6 @@ describe("Usage Fetchers", () => {
     it("should handle patterns and bonus", async () => {
       const child_process = await import("node:child_process");
       vi.mocked(child_process.exec).mockImplementation(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (cmd, options, cb): any => {
           if (typeof options === "function") cb = options;
           if (!cb) return;
@@ -639,7 +634,6 @@ describe("Usage Fetchers", () => {
     it("should correctly handle 'Remaining Bonus credits'", async () => {
       const child_process = await import("node:child_process");
       vi.mocked(child_process.exec).mockImplementation(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (cmd, options, cb): any => {
           if (typeof options === "function") cb = options;
           if (!cb) return;

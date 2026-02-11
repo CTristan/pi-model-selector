@@ -1,15 +1,14 @@
-/* eslint-disable @typescript-eslint/unbound-method */
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import {
-  loadConfig,
-  upsertMapping,
-  updateWidgetConfig,
-  saveConfigFile,
-  removeMapping,
-} from "../src/config.js";
-import { MappingEntry } from "../src/types.js";
 import * as fs from "node:fs";
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  loadConfig,
+  removeMapping,
+  saveConfigFile,
+  updateWidgetConfig,
+  upsertMapping,
+} from "../src/config.js";
+import type { MappingEntry } from "../src/types.js";
 
 // Mock pi-coding-agent ExtensionContext
 const mockCtx = {
