@@ -4,6 +4,7 @@ import {
   execAsync,
   fetchWithTimeout,
   formatReset,
+  parseEpochMillis,
   safeDate,
   URLS,
 } from "./common.js";
@@ -13,21 +14,6 @@ type ClaudeCredential = {
   source: string;
   expiresAt?: number;
 };
-
-function parseEpochMillis(value: unknown): number | undefined {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === "string") {
-    if (/^\d+$/.test(value)) {
-      const parsed = Number(value);
-      return Number.isFinite(parsed) ? parsed : undefined;
-    }
-    const parsedDate = Date.parse(value);
-    return Number.isNaN(parsedDate) ? undefined : parsedDate;
-  }
-  return undefined;
-}
 
 function extractClaudeCredential(
   data: unknown,
@@ -67,15 +53,22 @@ function buildClaudeWindows(data: unknown): RateWindow[] {
     windows: RateWindow[] = [],
     fiveHourUtil = dataTyped.five_hour?.utilization ?? 0,
     sevenDayUtil = dataTyped.seven_day?.utilization ?? 0,
-    globalUtilization = Math.max(fiveHourUtil, sevenDayUtil),
-    globalResetsAt = (
-      fiveHourUtil > sevenDayUtil
-        ? [dataTyped.five_hour?.resets_at]
-        : sevenDayUtil > fiveHourUtil
-          ? [dataTyped.seven_day?.resets_at]
-          : [dataTyped.five_hour?.resets_at, dataTyped.seven_day?.resets_at]
-    )
-      .map(safeDate)
+    sonnetUtil = dataTyped.seven_day_sonnet?.utilization ?? 0,
+    opusUtil = dataTyped.seven_day_opus?.utilization ?? 0,
+    globalUtilization = Math.max(
+      fiveHourUtil,
+      sevenDayUtil,
+      sonnetUtil,
+      opusUtil,
+    ),
+    globalResetsAt = [
+      { u: fiveHourUtil, r: dataTyped.five_hour?.resets_at },
+      { u: sevenDayUtil, r: dataTyped.seven_day?.resets_at },
+      { u: sonnetUtil, r: dataTyped.seven_day_sonnet?.resets_at },
+      { u: opusUtil, r: dataTyped.seven_day_opus?.resets_at },
+    ]
+      .filter((c) => c.u === globalUtilization)
+      .map((c) => safeDate(c.r))
       .filter((d): d is Date => d !== undefined)
       .sort((a, b) => b.getTime() - a.getTime())[0],
     addPessimisticWindow = (
@@ -84,13 +77,10 @@ function buildClaudeWindows(data: unknown): RateWindow[] {
       resetsAtStr?: string,
     ) => {
       const finalUtilization = Math.max(globalUtilization, utilization);
-      let finalResetsAt = safeDate(resetsAtStr);
-
-      if (globalUtilization > utilization && globalResetsAt) {
-        if (!finalResetsAt || globalResetsAt > finalResetsAt) {
-          finalResetsAt = globalResetsAt;
-        }
-      }
+      const finalResetsAt =
+        globalUtilization > utilization && globalResetsAt
+          ? globalResetsAt
+          : safeDate(resetsAtStr);
 
       windows.push({
         label,
@@ -253,27 +243,11 @@ async function loadClaudeCredentials(
 }
 
 export async function fetchClaudeUsage(
-  piAuth: Record<string, unknown> = {},
   modelRegistry?: unknown,
+  piAuth: Record<string, unknown> = {},
 ): Promise<UsageSnapshot> {
   const credentials = await loadClaudeCredentials(modelRegistry, piAuth),
     attemptedTokens = new Set<string>();
-
-  if (credentials.length === 0) {
-    const keychainToken = await loadClaudeKeychainToken();
-    if (keychainToken) {
-      credentials.push({ token: keychainToken, source: "keychain" });
-    }
-  }
-
-  if (credentials.length === 0) {
-    return {
-      provider: "anthropic",
-      displayName: "Claude",
-      windows: [],
-      error: "No credentials",
-    };
-  }
 
   const doFetch = (accessToken: string) =>
     fetchWithTimeout(URLS.ANTHROPIC_USAGE, {
@@ -284,67 +258,74 @@ export async function fetchClaudeUsage(
       timeout: 10000,
     });
 
-  try {
-    let lastAuthFailure: { status: number; source: string } | undefined;
+  let lastAttemptedSource: string | undefined;
+  let lastAuthFailure: { status: number; source: string } | undefined;
 
-    for (const credential of credentials) {
-      if (attemptedTokens.has(credential.token)) continue;
-      attemptedTokens.add(credential.token);
+  const tryToken = async (
+    token: string,
+    source: string,
+  ): Promise<UsageSnapshot | undefined> => {
+    if (attemptedTokens.has(token)) return undefined;
+    attemptedTokens.add(token);
+    lastAttemptedSource = source;
 
-      const { res, data } = await doFetch(credential.token);
+    try {
+      const { res, data } = await doFetch(token);
 
       if (res.ok) {
         return {
           provider: "anthropic",
           displayName: "Claude",
           windows: buildClaudeWindows(data),
-          account: credential.source,
+          account: source,
         };
       }
 
       if (res.status === 401 || res.status === 403) {
         lastAuthFailure = {
           status: res.status,
-          source: credential.source,
+          source: source,
         };
-        continue;
+      } else {
+        // For 429, 500, etc., we record it as the last error but continue.
+        lastError = {
+          message: `HTTP ${res.status}`,
+          source: source,
+        };
       }
+    } catch (err) {
+      lastError = {
+        message: String(err),
+        source: source,
+      };
+    }
 
+    return undefined;
+  };
+
+  let lastError: { message: string; source: string } | undefined;
+
+  try {
+    for (const credential of credentials) {
+      const result = await tryToken(credential.token, credential.source);
+      if (result) return result;
+    }
+
+    // Fallback to keychain if nothing worked yet
+    const keychainToken = await loadClaudeKeychainToken();
+    if (keychainToken) {
+      const result = await tryToken(keychainToken, "keychain");
+      if (result) return result;
+    }
+
+    if (lastError) {
       return {
         provider: "anthropic",
         displayName: "Claude",
         windows: [],
-        error: `HTTP ${res.status}`,
-        account: credential.source,
+        error: lastError.message,
+        account: lastError.source,
       };
-    }
-
-    const keychainToken = await loadClaudeKeychainToken();
-    if (keychainToken && !attemptedTokens.has(keychainToken)) {
-      const { res, data } = await doFetch(keychainToken);
-      if (res.ok) {
-        return {
-          provider: "anthropic",
-          displayName: "Claude",
-          windows: buildClaudeWindows(data),
-          account: "keychain",
-        };
-      }
-
-      if (res.status === 401 || res.status === 403) {
-        lastAuthFailure = {
-          status: res.status,
-          source: "keychain",
-        };
-      } else {
-        return {
-          provider: "anthropic",
-          displayName: "Claude",
-          windows: [],
-          error: `HTTP ${res.status}`,
-          account: "keychain",
-        };
-      }
     }
 
     return {
@@ -362,6 +343,7 @@ export async function fetchClaudeUsage(
       displayName: "Claude",
       windows: [],
       error: String(error),
+      account: lastAttemptedSource || "none",
     };
   }
 }

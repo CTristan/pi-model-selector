@@ -49,6 +49,21 @@ export async function loadPiAuth(): Promise<Record<string, unknown>> {
   }
 }
 
+export function parseEpochMillis(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    if (/^\d+$/.test(value)) {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? parsed : undefined;
+    }
+    const parsedDate = Date.parse(value);
+    return Number.isNaN(parsedDate) ? undefined : parsedDate;
+  }
+  return undefined;
+}
+
 export function safeDate(value: unknown): Date | undefined {
   // Fix safeDate Epoch Issue: returns undefined for value = 0, ignoring the valid Epoch timestamp.
   if (value === 0 || value === "0") return new Date(0);
@@ -112,11 +127,17 @@ export async function refreshGoogleToken(
   clientId?: string,
   clientSecret?: string,
 ): Promise<{ accessToken: string; expiresAt?: number } | null> {
-  const tryClientIds = clientId
-    ? [clientId]
-    : [undefined, GOOGLE_CLOUD_SHELL_CLIENT_ID];
+  const tryClientIds: (string | undefined)[] = [];
+  if (clientId) {
+    tryClientIds.push(clientId);
+  }
+  tryClientIds.push(undefined);
+  tryClientIds.push(GOOGLE_CLOUD_SHELL_CLIENT_ID);
 
-  for (const candidateClientId of tryClientIds) {
+  // Remove duplicates while preserving order
+  const uniqueClientIds = tryClientIds.filter((v, i, a) => a.indexOf(v) === i);
+
+  for (const candidateClientId of uniqueClientIds) {
     const controller = new AbortController(),
       timer = setTimeout(() => controller.abort(), 10000);
     try {
@@ -124,14 +145,22 @@ export async function refreshGoogleToken(
           refresh_token: refreshToken,
           grant_type: "refresh_token",
         }),
-        normalizedClientId = candidateClientId?.trim(),
-        normalizedClientSecret = clientSecret?.trim();
+        normalizedClientId = candidateClientId?.trim();
 
       if (normalizedClientId) {
         params.set("client_id", normalizedClientId);
       }
-      if (normalizedClientSecret) {
-        params.set("client_secret", normalizedClientSecret);
+
+      const shouldIncludeClientSecret =
+        typeof clientId === "string" &&
+        clientId.trim().length > 0 &&
+        candidateClientId === clientId;
+
+      if (shouldIncludeClientSecret) {
+        const normalizedClientSecret = clientSecret?.trim();
+        if (normalizedClientSecret) {
+          params.set("client_secret", normalizedClientSecret);
+        }
       }
 
       const res = await fetch(URLS.GOOGLE_TOKEN, {

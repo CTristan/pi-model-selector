@@ -145,7 +145,7 @@ describe("Usage Fetchers", () => {
         });
       vi.stubGlobal("fetch", fetchMock);
 
-      const result = await fetchClaudeUsage({
+      const result = await fetchClaudeUsage(undefined, {
         anthropic: { access: "expired" },
       });
       expect(result.account).toBe("keychain");
@@ -162,7 +162,9 @@ describe("Usage Fetchers", () => {
           }),
         }),
       );
-      const result = await fetchClaudeUsage({ anthropic: { access: "mock" } });
+      const result = await fetchClaudeUsage(undefined, {
+        anthropic: { access: "mock" },
+      });
       expect(result.windows[0].resetsAt).toBeDefined();
     });
 
@@ -184,7 +186,9 @@ describe("Usage Fetchers", () => {
           }),
         }),
       );
-      const result = await fetchClaudeUsage({ anthropic: { access: "mock" } });
+      const result = await fetchClaudeUsage(undefined, {
+        anthropic: { access: "mock" },
+      });
       expect(result.windows).toHaveLength(3);
       expect(
         result.windows.find((w) => w.label === "Sonnet")?.usedPercent,
@@ -205,7 +209,9 @@ describe("Usage Fetchers", () => {
           }),
         }),
       );
-      const result = await fetchClaudeUsage({ anthropic: { access: "mock" } });
+      const result = await fetchClaudeUsage(undefined, {
+        anthropic: { access: "mock" },
+      });
       // Returns 5h, Week, and Shared
       expect(result.windows).toHaveLength(3);
       expect(result.windows.find((w) => w.label === "5h")?.usedPercent).toBe(0);

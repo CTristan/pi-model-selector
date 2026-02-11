@@ -39,7 +39,6 @@ describe("Provider auth fallback behavior", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const result = await fetchClaudeUsage(
-      { anthropic: { access: "stale-auth-json-token" } },
       {
         authStorage: {
           getApiKey: async (id: string) =>
@@ -47,6 +46,7 @@ describe("Provider auth fallback behavior", () => {
           get: async () => undefined,
         },
       },
+      { anthropic: { access: "stale-auth-json-token" } },
     );
 
     expect(result.error).toBeUndefined();
@@ -79,7 +79,6 @@ describe("Provider auth fallback behavior", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const result = await fetchClaudeUsage(
-      { anthropic: { access: "auth-json-token" } },
       {
         authStorage: {
           getApiKey: async (id: string) =>
@@ -87,6 +86,7 @@ describe("Provider auth fallback behavior", () => {
           get: async () => undefined,
         },
       },
+      { anthropic: { access: "auth-json-token" } },
     );
 
     expect(result.error).toBeUndefined();
@@ -101,7 +101,6 @@ describe("Provider auth fallback behavior", () => {
     );
 
     const result = await fetchClaudeUsage(
-      {},
       {
         authStorage: {
           getApiKey: async (id: string) =>
@@ -109,6 +108,7 @@ describe("Provider auth fallback behavior", () => {
           get: async () => undefined,
         },
       },
+      {},
     );
 
     expect(result.error).toBe("HTTP 500");

@@ -3,7 +3,12 @@ import * as os from "node:os";
 import * as path from "node:path";
 import type { RateWindow, UsageSnapshot } from "../types.js";
 import { writeDebugLog } from "../types.js";
-import { fetchWithTimeout, refreshGoogleToken, URLS } from "./common.js";
+import {
+  fetchWithTimeout,
+  parseEpochMillis,
+  refreshGoogleToken,
+  URLS,
+} from "./common.js";
 
 interface GeminiTokenInfo {
   token?: string;
@@ -13,21 +18,6 @@ interface GeminiTokenInfo {
   clientSecret?: string;
   expiresAt?: number;
   sources: string[];
-}
-
-function parseEpochMillis(value: unknown): number | undefined {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-  if (typeof value === "string") {
-    if (/^\d+$/.test(value)) {
-      const parsed = Number(value);
-      return Number.isFinite(parsed) ? parsed : undefined;
-    }
-    const parsedDate = Date.parse(value);
-    return Number.isNaN(parsedDate) ? undefined : parsedDate;
-  }
-  return undefined;
 }
 
 export async function fetchGeminiUsage(
@@ -178,7 +168,7 @@ export async function fetchGeminiUsage(
       }
       const group = groupedAuth.get(key)!;
       if (cred.projectId) group.projectIds.add(cred.projectId);
-      if (cred.expiresAt) {
+      if (cred.expiresAt !== undefined) {
         group.expiresAt = Math.max(group.expiresAt ?? 0, cred.expiresAt);
       }
       group.sources.add(cred.source);
