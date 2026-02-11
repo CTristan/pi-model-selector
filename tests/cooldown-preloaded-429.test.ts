@@ -1,9 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { loadCooldownState, saveCooldownState } from "../index.js";
 
-// Import the internal functions we need to test
-// These are not directly exported, so we'll test the behavior indirectly
-// by mocking the cooldown state persistence
+// Import the cooldown state helpers and mock persistence to control
+// filesystem interactions during testing
 
 // In-memory storage for test file operations
 const mockFileSystem = new Map<string, string>();

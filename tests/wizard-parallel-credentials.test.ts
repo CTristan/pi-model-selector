@@ -4,6 +4,7 @@ import modelSelectorExtension from "../index.js";
 import * as usageFetchers from "../src/usage-fetchers.js";
 import * as configMod from "../src/config.js";
 import type { LoadedConfig } from "../src/types.js";
+import { ALL_PROVIDERS } from "../src/types.js";
 
 vi.mock("node:fs", () => ({
   promises: {
@@ -72,16 +73,6 @@ describe("configureProviders parallel credential checking", () => {
       project: {},
     },
   };
-
-  const allProviders = [
-    "anthropic",
-    "copilot",
-    "gemini",
-    "codex",
-    "antigravity",
-    "kiro",
-    "zai",
-  ];
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -177,7 +168,7 @@ describe("configureProviders parallel credential checking", () => {
 
       if (message.includes("Configure providers in Global")) {
         // Verify all providers are listed with credential status
-        expect(options.length).toBe(allProviders.length);
+        expect(options.length).toBe(ALL_PROVIDERS.length);
 
         // Each option should contain the provider label and credentials status
         const expectedLabels = [
