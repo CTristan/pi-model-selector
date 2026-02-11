@@ -79,15 +79,15 @@ vi.mock("node:child_process", async () => {
   };
 });
 
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
+
 describe("Usage Fetchers Utilities", () => {
   it("loadPiAuth should return empty object on error", async () => {
     vi.mocked(fs.promises.readFile).mockRejectedValue(new Error("fail"));
     expect(await loadPiAuth()).toEqual({});
-  });
-
-  afterEach(() => {
-    vi.useRealTimers();
-    vi.unstubAllGlobals();
   });
 
   it("safeDate should handle invalid input", () => {
@@ -568,32 +568,44 @@ describe("Usage Fetchers", () => {
     });
 
     it("should read API key from auth.json zai.key", async () => {
-      const fetchMock = vi.fn(
-        async () =>
-          ({
-            ok: true,
-            json: async () => ({
-              success: true,
-              code: 200,
-              data: { limits: [] },
+      const originalZaiKey = process.env.Z_AI_API_KEY;
+      // Ensure environment does not override the auth.json zai.key for this test
+      delete process.env.Z_AI_API_KEY;
+
+      try {
+        const fetchMock = vi.fn(
+          async () =>
+            ({
+              ok: true,
+              json: async () => ({
+                success: true,
+                code: 200,
+                data: { limits: [] },
+              }),
+            }) satisfies {
+              ok: boolean;
+              json: () => Promise<Record<string, unknown>>;
+            },
+        );
+        vi.stubGlobal("fetch", fetchMock);
+
+        await fetchZaiUsage({ zai: { key: "zai-key" } });
+
+        expect(fetchMock).toHaveBeenCalledWith(
+          expect.any(String),
+          expect.objectContaining({
+            headers: expect.objectContaining({
+              Authorization: "Bearer zai-key",
             }),
-          }) satisfies {
-            ok: boolean;
-            json: () => Promise<Record<string, unknown>>;
-          },
-      );
-      vi.stubGlobal("fetch", fetchMock);
-
-      await fetchZaiUsage({ zai: { key: "zai-key" } });
-
-      expect(fetchMock).toHaveBeenCalledWith(
-        expect.any(String),
-        expect.objectContaining({
-          headers: expect.objectContaining({
-            Authorization: "Bearer zai-key",
           }),
-        }),
-      );
+        );
+      } finally {
+        if (originalZaiKey === undefined) {
+          delete process.env.Z_AI_API_KEY;
+        } else {
+          process.env.Z_AI_API_KEY = originalZaiKey;
+        }
+      }
     });
   });
 
