@@ -152,13 +152,106 @@ function hasTokenPayload(value: unknown): boolean {
   return [record.access, record.refresh, record.key].some(isNonEmptyString);
 }
 
-function hasProviderCredential(
+async function hasProviderCredential(
   provider: ProviderName,
   piAuth: Record<string, unknown>,
-): boolean {
+  modelRegistry?: {
+    authStorage?: {
+      getApiKey?: (
+        id: string,
+      ) => Promise<string | undefined> | string | undefined;
+      get?: (
+        id: string,
+      ) =>
+        | Promise<Record<string, unknown> | undefined>
+        | Record<string, unknown>
+        | undefined;
+    };
+  },
+): Promise<boolean> {
+  // Check environment variables
   if (provider === "zai") {
     if (isNonEmptyString(process.env.Z_AI_API_KEY)) return true;
-    return hasTokenPayload(piAuth["z-ai"] ?? piAuth.zai);
+  }
+
+  if (provider === "antigravity") {
+    if (isNonEmptyString(process.env.ANTIGRAVITY_API_KEY)) return true;
+  }
+
+  // Check authStorage for applicable providers
+  if (modelRegistry?.authStorage) {
+    try {
+      if (provider === "copilot") {
+        const githubCopilotKey = await Promise.resolve(
+          modelRegistry.authStorage.getApiKey?.("github-copilot"),
+        );
+        const githubKey = await Promise.resolve(
+          modelRegistry.authStorage.getApiKey?.("github"),
+        );
+        const githubCopilotData = await Promise.resolve(
+          modelRegistry.authStorage.get?.("github-copilot"),
+        );
+        const githubData = await Promise.resolve(
+          modelRegistry.authStorage.get?.("github"),
+        );
+
+        if (
+          isNonEmptyString(githubCopilotKey) ||
+          isNonEmptyString(githubKey) ||
+          hasTokenPayload(githubCopilotData) ||
+          hasTokenPayload(githubData)
+        ) {
+          return true;
+        }
+      }
+
+      if (provider === "gemini") {
+        const geminiKey = await Promise.resolve(
+          modelRegistry.authStorage.getApiKey?.("google-gemini"),
+        );
+        const geminiCliKey = await Promise.resolve(
+          modelRegistry.authStorage.getApiKey?.("google-gemini-cli"),
+        );
+        const geminiData = await Promise.resolve(
+          modelRegistry.authStorage.get?.("google-gemini"),
+        );
+        const geminiCliData = await Promise.resolve(
+          modelRegistry.authStorage.get?.("google-gemini-cli"),
+        );
+
+        if (
+          isNonEmptyString(geminiKey) ||
+          isNonEmptyString(geminiCliKey) ||
+          hasTokenPayload(geminiData) ||
+          hasTokenPayload(geminiCliData)
+        ) {
+          return true;
+        }
+      }
+
+      if (provider === "antigravity") {
+        const antigravityKey = await Promise.resolve(
+          modelRegistry.authStorage.getApiKey?.("google-antigravity"),
+        );
+        const antigravityData = await Promise.resolve(
+          modelRegistry.authStorage.get?.("google-antigravity"),
+        );
+
+        if (
+          isNonEmptyString(antigravityKey) ||
+          hasTokenPayload(antigravityData)
+        ) {
+          return true;
+        }
+      }
+    } catch {
+      // Ignore registry access errors
+    }
+  }
+
+  // Check piAuth for applicable providers
+  if (provider === "zai") {
+    if (hasTokenPayload(piAuth["z-ai"] ?? piAuth.zai)) return true;
   }
 
   if (provider === "codex") {
@@ -169,20 +262,29 @@ function hasProviderCredential(
     });
   }
 
-  const providerAliases: Record<
-    Exclude<ProviderName, "zai" | "codex">,
-    string[]
-  > = {
+  if (provider === "antigravity") {
+    if (
+      hasTokenPayload(
+        piAuth["google-antigravity"] ??
+          piAuth.antigravity ??
+          piAuth["anti-gravity"],
+      )
+    )
+      return true;
+  }
+
+  // For remaining providers (anthropic, copilot, gemini, kiro), check piAuth aliases
+  const providerAliases: Record<string, string[]> = {
     anthropic: ["anthropic"],
-    copilot: ["github-copilot", "copilot"],
-    gemini: ["google-gemini-cli", "gemini"],
-    antigravity: ["google-antigravity", "antigravity"],
+    copilot: ["github-copilot", "copilot", "github"],
+    gemini: ["google-gemini", "google-gemini-cli", "gemini"],
     kiro: ["kiro"],
   };
 
-  return providerAliases[provider].some((alias) =>
-    hasTokenPayload(piAuth[alias]),
-  );
+  const aliases = providerAliases[provider];
+  if (!aliases) return false;
+
+  return aliases.some((alias) => hasTokenPayload(piAuth[alias]));
 }
 
 // ============================================================================
@@ -278,10 +380,15 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         let detail =
           "No usage windows found. Check provider credentials and connectivity.";
         if (config.disabledProviders.length > 0) {
-          const piAuth = await loadAuth(),
-            disabledWithCredentials = config.disabledProviders.filter(
-              (provider) => hasProviderCredential(provider, piAuth),
-            );
+          const piAuth = await loadAuth();
+          const disabledWithCredentials: ProviderName[] = [];
+          for (const provider of config.disabledProviders) {
+            if (
+              await hasProviderCredential(provider, piAuth, ctx.modelRegistry)
+            ) {
+              disabledWithCredentials.push(provider);
+            }
+          }
 
           if (disabledWithCredentials.length > 0) {
             const labels = disabledWithCredentials.map(
@@ -771,23 +878,31 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
           )
         : [];
 
-      const providerOptions = ALL_PROVIDERS.map((provider) => {
-          const disabledInTarget = currentRawDisabled.includes(provider),
-            providerLabel = PROVIDER_LABELS[provider],
-            hasCredentials = hasProviderCredential(provider, piAuth),
-            mergedDisabled = config.disabledProviders.includes(provider);
-
-          let statusLabel = disabledInTarget ? "⏸ disabled" : "✅ enabled";
-          if (disabledInTarget !== mergedDisabled) {
-            statusLabel += ` (overall: ${mergedDisabled ? "disabled" : "enabled"})`;
-          }
-
-          return `${statusLabel} ${providerLabel} (${provider}) — credentials: ${hasCredentials ? "detected" : "missing"}`;
-        }),
-        selectedProviderLabel = await ctx.ui.select(
-          `Configure providers in ${saveToProject ? "Project" : "Global"}`,
-          providerOptions,
+      const providerOptions: string[] = [];
+      for (const provider of ALL_PROVIDERS) {
+        const disabledInTarget = currentRawDisabled.includes(provider);
+        const providerLabel = PROVIDER_LABELS[provider];
+        const hasCredentials = await hasProviderCredential(
+          provider,
+          piAuth,
+          ctx.modelRegistry,
         );
+        const mergedDisabled = config.disabledProviders.includes(provider);
+
+        let statusLabel = disabledInTarget ? "⏸ disabled" : "✅ enabled";
+        if (disabledInTarget !== mergedDisabled) {
+          statusLabel += ` (overall: ${mergedDisabled ? "disabled" : "enabled"})`;
+        }
+
+        providerOptions.push(
+          `${statusLabel} ${providerLabel} (${provider}) — credentials: ${hasCredentials ? "detected" : "missing"}`,
+        );
+      }
+
+      const selectedProviderLabel = await ctx.ui.select(
+        `Configure providers in ${saveToProject ? "Project" : "Global"}`,
+        providerOptions,
+      );
 
       if (!selectedProviderLabel) return;
       const selectedIndex = providerOptions.indexOf(selectedProviderLabel);
