@@ -149,7 +149,13 @@ function isNonEmptyString(value: unknown): value is string {
 function hasTokenPayload(value: unknown): boolean {
   if (!value || typeof value !== "object") return false;
   const record = value as Record<string, unknown>;
-  return [record.access, record.refresh, record.key].some(isNonEmptyString);
+  return [
+    record.access,
+    record.accessToken,
+    record.token,
+    record.refresh,
+    record.key,
+  ].some(isNonEmptyString);
 }
 
 async function hasProviderCredential(
@@ -241,6 +247,17 @@ async function hasProviderCredential(
           isNonEmptyString(antigravityKey) ||
           hasTokenPayload(antigravityData)
         ) {
+          return true;
+        }
+      }
+
+      if (provider === "anthropic") {
+        const anthropicKey =
+          await modelRegistry.authStorage.getApiKey?.("anthropic");
+        const anthropicData =
+          await modelRegistry.authStorage.get?.("anthropic");
+
+        if (isNonEmptyString(anthropicKey) || hasTokenPayload(anthropicData)) {
           return true;
         }
       }
