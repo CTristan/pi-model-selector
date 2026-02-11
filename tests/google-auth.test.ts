@@ -1,5 +1,8 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { refreshGoogleToken } from "../src/fetchers/common.js";
+import {
+  GOOGLE_CLOUD_SHELL_CLIENT_ID,
+  refreshGoogleToken,
+} from "../src/fetchers/common.js";
 
 describe("Google Auth (common.ts)", () => {
   afterEach(() => {
@@ -46,9 +49,7 @@ describe("Google Auth (common.ts)", () => {
     const body2 = (
       mockFetch.mock.calls[1][1] as { body: URLSearchParams }
     ).body.toString();
-    expect(body2).toContain(
-      "client_id=947318989803-6bn6qk8qdgf4n4g3pfee6491hc0brc4i.apps.googleusercontent.com",
-    );
+    expect(body2).toContain(`client_id=${GOOGLE_CLOUD_SHELL_CLIENT_ID}`);
     expect(body2).not.toContain("client_secret=");
   });
 
@@ -61,10 +62,7 @@ describe("Google Auth (common.ts)", () => {
         const body = (options as RequestInit).body as URLSearchParams;
         attemptedClientIds.push(body.get("client_id") ?? undefined);
 
-        if (
-          body.get("client_id") ===
-          "947318989803-6bn6qk8qdgf4n4g3pfee6491hc0brc4i.apps.googleusercontent.com"
-        ) {
+        if (body.get("client_id") === GOOGLE_CLOUD_SHELL_CLIENT_ID) {
           return Promise.resolve({
             ok: true,
             status: 200,
@@ -90,9 +88,7 @@ describe("Google Auth (common.ts)", () => {
     );
 
     expect(attemptedClientIds).toContain("explicit-client-id");
-    expect(attemptedClientIds).toContain(
-      "947318989803-6bn6qk8qdgf4n4g3pfee6491hc0brc4i.apps.googleusercontent.com",
-    );
+    expect(attemptedClientIds).toContain(GOOGLE_CLOUD_SHELL_CLIENT_ID);
     expect(result?.accessToken).toBe("fallback-token");
   });
 });
