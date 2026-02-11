@@ -1,9 +1,9 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import modelSelectorExtension from "../index.js";
-import * as usageFetchers from "../src/usage-fetchers.js";
 import * as configMod from "../src/config.js";
 import type { LoadedConfig } from "../src/types.js";
+import * as usageFetchers from "../src/usage-fetchers.js";
 
 vi.mock("node:fs", () => ({
   promises: {
@@ -144,8 +144,8 @@ describe("Z.ai Credential Whitespace Handling", () => {
       await runWizard({}, ctx);
 
       const selectCalls = vi.mocked(ctx.ui.select).mock.calls;
-      const providerSelectCall = selectCalls.find(
-        (call) => call[0] && call[0].includes("Configure providers in Global"),
+      const providerSelectCall = selectCalls.find((call) =>
+        call[0]?.includes("Configure providers in Global"),
       );
       const options = providerSelectCall?.[1] as string[];
       const zaiOption = options.find((o) => o.includes("z.ai"));
@@ -186,8 +186,8 @@ describe("Z.ai Credential Whitespace Handling", () => {
       await runWizard({}, ctx);
 
       const selectCalls = vi.mocked(ctx.ui.select).mock.calls;
-      const providerSelectCall = selectCalls.find(
-        (call) => call[0] && call[0].includes("Configure providers in Global"),
+      const providerSelectCall = selectCalls.find((call) =>
+        call[0]?.includes("Configure providers in Global"),
       );
       const options = providerSelectCall?.[1] as string[];
       const zaiOption = options.find((o) => o.includes("z.ai"));
@@ -230,8 +230,8 @@ describe("Z.ai Credential Whitespace Handling", () => {
       await runWizard({}, ctx);
 
       const selectCalls = vi.mocked(ctx.ui.select).mock.calls;
-      const providerSelectCall = selectCalls.find(
-        (call) => call[0] && call[0].includes("Configure providers in Global"),
+      const providerSelectCall = selectCalls.find((call) =>
+        call[0]?.includes("Configure providers in Global"),
       );
       const options = providerSelectCall?.[1] as string[];
       const zaiOption = options.find((o) => o.includes("z.ai"));
@@ -272,8 +272,8 @@ describe("Z.ai Credential Whitespace Handling", () => {
       await runWizard({}, ctx);
 
       const selectCalls = vi.mocked(ctx.ui.select).mock.calls;
-      const providerSelectCall = selectCalls.find(
-        (call) => call[0] && call[0].includes("Configure providers in Global"),
+      const providerSelectCall = selectCalls.find((call) =>
+        call[0]?.includes("Configure providers in Global"),
       );
       const options = providerSelectCall?.[1] as string[];
       const zaiOption = options.find((o) => o.includes("z.ai"));
@@ -316,8 +316,8 @@ describe("Z.ai Credential Whitespace Handling", () => {
       await runWizard({}, ctx);
 
       const selectCalls = vi.mocked(ctx.ui.select).mock.calls;
-      const providerSelectCall = selectCalls.find(
-        (call) => call[0] && call[0].includes("Configure providers in Global"),
+      const providerSelectCall = selectCalls.find((call) =>
+        call[0]?.includes("Configure providers in Global"),
       );
       const options = providerSelectCall?.[1] as string[];
       const zaiOption = options.find((o) => o.includes("z.ai"));
@@ -358,8 +358,8 @@ describe("Z.ai Credential Whitespace Handling", () => {
       await runWizard({}, ctx);
 
       const selectCalls = vi.mocked(ctx.ui.select).mock.calls;
-      const providerSelectCall = selectCalls.find(
-        (call) => call[0] && call[0].includes("Configure providers in Global"),
+      const providerSelectCall = selectCalls.find((call) =>
+        call[0]?.includes("Configure providers in Global"),
       );
       const options = providerSelectCall?.[1] as string[];
       const zaiOption = options.find((o) => o.includes("z.ai"));

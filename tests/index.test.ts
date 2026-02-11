@@ -1,9 +1,8 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-argument, @typescript-eslint/require-await */
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as fs from "node:fs";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import modelSelectorExtension from "../index.js";
-import * as usageFetchers from "../src/usage-fetchers.js";
 import * as configMod from "../src/config.js";
+import * as usageFetchers from "../src/usage-fetchers.js";
 
 // Mock node:fs to prevent real file operations
 vi.mock("node:fs", async () => {
@@ -36,9 +35,9 @@ vi.mock("../src/widget.js", () => ({
 }));
 
 describe("Model Selector Extension", () => {
-  let pi: any; // eslint-disable-line @typescript-eslint/no-explicit-any
-  let ctx: any; // eslint-disable-line @typescript-eslint/no-explicit-any
-  let commands: Record<string, (...args: any[]) => any> = {}; // eslint-disable-line @typescript-eslint/no-explicit-any
+  let pi: any;
+  let ctx: any;
+  let commands: Record<string, (...args: any[]) => any> = {};
 
   const getLastPersistedCooldownState = (): {
     cooldowns: Record<string, number>;

@@ -173,7 +173,8 @@ export async function fetchGeminiUsage(
           sources: new Set(),
         });
       }
-      const group = groupedAuth.get(key)!;
+      const group = groupedAuth.get(key);
+      if (!group) continue;
       if (cred.projectId) group.projectIds.add(cred.projectId);
       if (cred.expiresAt !== undefined) {
         group.expiresAt = Math.max(group.expiresAt ?? 0, cred.expiresAt);
@@ -195,7 +196,7 @@ export async function fetchGeminiUsage(
 
     // 2. For each unique projectId, find matching auth groups
     for (const pid of discoveredProjectIds) {
-      const sourcesForPid = projectSources.get(pid)!;
+      const sourcesForPid = projectSources.get(pid) ?? new Set<string>();
 
       for (const group of groupedAuth.values()) {
         if (group.projectIds.has(pid) || group.projectIds.size === 0) {
@@ -262,8 +263,12 @@ export async function fetchGeminiUsage(
     const projectGroups = new Map<string, GeminiTokenInfo[]>();
     for (const cfg of configs) {
       const pid = cfg.projectId || "no-project";
-      if (!projectGroups.has(pid)) projectGroups.set(pid, []);
-      projectGroups.get(pid)!.push(cfg);
+      const group = projectGroups.get(pid);
+      if (group) {
+        group.push(cfg);
+      } else {
+        projectGroups.set(pid, [cfg]);
+      }
     }
 
     const snapshots = await Promise.all(

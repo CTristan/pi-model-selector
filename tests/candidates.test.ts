@@ -1,12 +1,16 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   buildCandidates,
-  findModelMapping,
-  dedupeCandidates,
-  selectionReason,
   compareCandidates,
+  dedupeCandidates,
+  findModelMapping,
+  selectionReason,
 } from "../src/candidates.js";
-import { UsageSnapshot, UsageCandidate, MappingEntry } from "../src/types.js";
+import type {
+  MappingEntry,
+  UsageCandidate,
+  UsageSnapshot,
+} from "../src/types.js";
 
 describe("Candidate Logic", () => {
   it("should build candidates from usage snapshots and handle NaN/errors", () => {

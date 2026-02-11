@@ -1,6 +1,6 @@
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 
 // ============================================================================
 // Core Types
@@ -189,9 +189,9 @@ export function notify(
 }
 
 export function mappingKey(entry: MappingEntry): string {
-  const escape = (s: string | undefined) =>
+  const esc = (s: string | undefined) =>
     (s ?? "").replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
-  return `${escape(entry.usage.provider)}|${escape(entry.usage.account)}|${escape(entry.usage.window)}|${escape(entry.usage.windowPattern)}`;
+  return `${esc(entry.usage.provider)}|${esc(entry.usage.account)}|${esc(entry.usage.window)}|${esc(entry.usage.windowPattern)}`;
 }
 
 export const DEFAULT_PRIORITY: PriorityRule[] = [

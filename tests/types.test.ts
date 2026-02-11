@@ -1,15 +1,14 @@
-/* eslint-disable @typescript-eslint/no-unsafe-call, @typescript-eslint/unbound-method */
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import {
-  mappingKey,
-  DEFAULT_PRIORITY,
-  writeDebugLog,
-  setGlobalConfig,
-  notify,
-} from "../src/types.js";
-import type { MappingEntry, LoadedConfig } from "../src/types.js";
 import * as fs from "node:fs";
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { LoadedConfig, MappingEntry } from "../src/types.js";
+import {
+  DEFAULT_PRIORITY,
+  mappingKey,
+  notify,
+  setGlobalConfig,
+  writeDebugLog,
+} from "../src/types.js";
 
 vi.mock("node:fs", () => ({
   mkdir: vi.fn(),
@@ -63,7 +62,7 @@ describe("Types / Utilities", () => {
     const mkdirCb = lastMkdirCall[lastMkdirCall.length - 1] as (
       ...args: unknown[]
     ) => unknown;
-    (mkdirCb as any)(null); // eslint-disable-line @typescript-eslint/no-explicit-any
+    (mkdirCb as any)(null);
 
     expect(fs.appendFile).toHaveBeenCalled();
     const appendCalls = vi.mocked(fs.appendFile).mock.calls;
@@ -73,7 +72,7 @@ describe("Types / Utilities", () => {
     ) => unknown;
 
     // Trigger error in appendFile
-    (appendCb as any)(new Error("append fail")); // eslint-disable-line @typescript-eslint/no-explicit-any
+    (appendCb as any)(new Error("append fail"));
     expect(config.debugLog?.enabled).toBe(false);
   });
 
@@ -90,7 +89,7 @@ describe("Types / Utilities", () => {
       ...args: unknown[]
     ) => unknown;
 
-    (mkdirCb as any)(new Error("mkdir fail")); // eslint-disable-line @typescript-eslint/no-explicit-any
+    (mkdirCb as any)(new Error("mkdir fail"));
     expect(config.debugLog?.enabled).toBe(false);
   });
 

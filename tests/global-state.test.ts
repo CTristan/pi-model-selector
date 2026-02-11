@@ -1,10 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
+import type { LoadedConfig } from "../src/types.js";
 import {
-  setGlobalConfig,
   resetGlobalState,
+  setGlobalConfig,
   writeDebugLog,
 } from "../src/types.js";
-import type { LoadedConfig } from "../src/types.js";
 
 describe("Global State Management", () => {
   it("should reset global configuration", () => {

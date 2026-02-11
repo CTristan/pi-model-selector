@@ -1,7 +1,7 @@
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as os from "node:os";
+import * as path from "node:path";
+import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 
 import type {
   LoadedConfig,
@@ -10,14 +10,14 @@ import type {
   WidgetConfig,
 } from "./types.js";
 import {
+  ALL_PROVIDERS,
+  DEFAULT_DISABLED_PROVIDERS,
+  DEFAULT_MAPPINGS,
   DEFAULT_PRIORITY,
   DEFAULT_WIDGET_CONFIG,
-  DEFAULT_MAPPINGS,
-  DEFAULT_DISABLED_PROVIDERS,
-  ALL_PROVIDERS,
-  type ProviderName,
   mappingKey,
   notify,
+  type ProviderName,
 } from "./types.js";
 
 // We'll determine the config path dynamically
@@ -388,7 +388,7 @@ export async function loadConfig(
     return null;
   }
 
-  const globalConfig = asConfigShape(globalRaw!),
+  const globalConfig = asConfigShape(globalRaw ?? {}),
     projectConfig = asConfigShape(projectRaw),
     globalMappings = normalizeMappings(globalConfig, globalConfigPath, errors),
     projectMappings = normalizeMappings(projectConfig, projectPath, errors),
@@ -445,7 +445,7 @@ export async function loadConfig(
     disabledProviders: [...new Set([...globalDisabled, ...projectDisabled])],
     debugLog: projectConfig.debugLog ? projectDebugLog : globalDebugLog,
     sources: { globalPath: globalConfigPath, projectPath },
-    raw: { global: globalRaw!, project: projectRaw },
+    raw: { global: globalRaw ?? {}, project: projectRaw },
   };
 }
 

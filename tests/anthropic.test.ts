@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fetchClaudeUsage } from "../src/fetchers/anthropic.js";
 
 describe("Anthropic Usage Fetcher", () => {
@@ -363,7 +363,6 @@ describe("Anthropic Usage Fetcher", () => {
       expect(vi.mocked(fetch)).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           headers: expect.objectContaining({
             Authorization: "Bearer legacy-token",
           }),
@@ -397,7 +396,6 @@ describe("Anthropic Usage Fetcher", () => {
       expect(vi.mocked(fetch)).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
-          // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
           headers: expect.objectContaining({
             Authorization: "Bearer registry-token",
           }),

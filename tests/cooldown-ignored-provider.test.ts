@@ -1,10 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import * as fs from "node:fs";
+import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import modelSelectorExtension from "../index.js";
-import * as usageFetchers from "../src/usage-fetchers.js";
 import * as configMod from "../src/config.js";
 import type { LoadedConfig } from "../src/types.js";
+import * as usageFetchers from "../src/usage-fetchers.js";
 
 vi.mock("node:fs", () => ({
   promises: {

@@ -24,17 +24,11 @@ echo "Running type check..."
 npm run type-check
 
 if [ "$CHECK_ONLY" = "true" ]; then
-  echo "Running linting (check only)..."
-  npm run lint
-
-  echo "Checking formatting (check only)..."
-  npm run format:check
+  echo "Running linting and formatting (check only)..."
+  npm run check
 else
-  echo "Running linting and auto-fixing..."
-  npm run lint:fix
-
-  echo "Formatting files..."
-  npm run format:fix
+  echo "Running linting and formatting (auto-fixing)..."
+  npm run fix
 fi
 
 echo "Running unit tests..."

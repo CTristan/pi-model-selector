@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { fetchCopilotUsage } from "../src/fetchers/copilot.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { execAsync, URLS } from "../src/fetchers/common.js";
+import { fetchCopilotUsage } from "../src/fetchers/copilot.js";
 
 vi.mock("../src/fetchers/common.js", async () => {
   const actual = await vi.importActual<
@@ -36,7 +36,7 @@ describe("Copilot 401 Error Regression", () => {
 
     fetchMock.mockImplementation((url, options) => {
       const headers = options?.headers as Record<string, string> | undefined;
-      const auth = headers?.["Authorization"];
+      const auth = headers?.Authorization;
 
       if (url === URLS.COPILOT_USER) {
         if (auth === "token gho_token" || auth === "Bearer gho_token") {
@@ -102,7 +102,7 @@ describe("Copilot 401 Error Regression", () => {
 
     fetchMock.mockImplementation((url, options) => {
       const headers = options?.headers as Record<string, string> | undefined;
-      const auth = headers?.["Authorization"];
+      const auth = headers?.Authorization;
 
       if (url === URLS.COPILOT_USER) {
         if (auth === "Bearer tid=invalid_token") {
@@ -145,7 +145,7 @@ describe("Copilot 401 Error Regression", () => {
 
     fetchMock.mockImplementation((url, options) => {
       const headers = options?.headers as Record<string, string> | undefined;
-      const auth = headers?.["Authorization"];
+      const auth = headers?.Authorization;
 
       if (url === URLS.COPILOT_USER) {
         if (auth === "Bearer tid=stale_token") {

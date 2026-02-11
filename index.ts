@@ -1,11 +1,28 @@
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import type {
   ExtensionAPI,
   ExtensionContext,
 } from "@mariozechner/pi-coding-agent";
-import * as fs from "node:fs";
-import * as path from "node:path";
-import * as os from "node:os";
-
+import {
+  buildCandidates,
+  candidateKey,
+  dedupeCandidates,
+  findIgnoreMapping,
+  findModelMapping,
+  selectionReason,
+  sortCandidates,
+} from "./src/candidates.js";
+import {
+  getRawMappings,
+  loadConfig,
+  removeMapping,
+  saveConfigFile,
+  updateWidgetConfig,
+  upsertMapping,
+} from "./src/config.js";
+import { resolveZaiApiKey } from "./src/fetchers/zai.js";
 // Import from modular sources
 import type {
   LoadedConfig,
@@ -24,24 +41,6 @@ import {
   writeDebugLog,
 } from "./src/types.js";
 import { fetchAllUsages, loadPiAuth } from "./src/usage-fetchers.js";
-import { resolveZaiApiKey } from "./src/fetchers/zai.js";
-import {
-  loadConfig,
-  saveConfigFile,
-  updateWidgetConfig,
-  upsertMapping,
-  removeMapping,
-  getRawMappings,
-} from "./src/config.js";
-import {
-  buildCandidates,
-  candidateKey,
-  dedupeCandidates,
-  findIgnoreMapping,
-  findModelMapping,
-  selectionReason,
-  sortCandidates,
-} from "./src/candidates.js";
 import {
   clearWidget,
   getWidgetState,
@@ -651,19 +650,25 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
           windowPattern: pattern,
         } as MappingEntry["usage"];
 
-        const mappingEntry: MappingEntry =
-          actionChoice === "Map to model" || actionChoice === "Map by pattern"
-            ? {
-                usage: usageDesc,
-                model: {
-                  provider: selectedModel!.provider,
-                  id: selectedModel!.id,
-                },
-              }
-            : {
-                usage: usageDesc,
-                ignore: true,
-              };
+        let mappingEntry: MappingEntry;
+        if (
+          (actionChoice === "Map to model" ||
+            actionChoice === "Map by pattern") &&
+          selectedModel
+        ) {
+          mappingEntry = {
+            usage: usageDesc,
+            model: {
+              provider: selectedModel.provider,
+              id: selectedModel.id,
+            },
+          };
+        } else {
+          mappingEntry = {
+            usage: usageDesc,
+            ignore: true,
+          };
+        }
 
         try {
           upsertMapping(targetRaw, mappingEntry);
@@ -997,6 +1002,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 
     if (action === "Configure debug log") {
       await configureDebugLog();
+      // biome-ignore lint/complexity/noUselessContinue: consistency with other handlers
       continue;
     }
   }

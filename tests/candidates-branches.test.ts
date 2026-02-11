@@ -1,12 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   compareCandidates,
-  selectionReason,
-  findModelMapping,
-  findIgnoreMapping,
   dedupeCandidates,
+  findIgnoreMapping,
+  findModelMapping,
+  selectionReason,
 } from "../src/candidates.js";
-import { UsageCandidate, MappingEntry } from "../src/types.js";
+import type { MappingEntry, UsageCandidate } from "../src/types.js";
 
 describe("Candidates Branch Coverage", () => {
   describe("compareCandidates", () => {
