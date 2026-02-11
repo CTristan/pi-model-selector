@@ -188,18 +188,13 @@ async function hasProviderCredential(
   if (modelRegistry?.authStorage) {
     try {
       if (provider === "copilot") {
-        const githubCopilotKey = await Promise.resolve(
-          modelRegistry.authStorage.getApiKey?.("github-copilot"),
-        );
-        const githubKey = await Promise.resolve(
-          modelRegistry.authStorage.getApiKey?.("github"),
-        );
-        const githubCopilotData = await Promise.resolve(
-          modelRegistry.authStorage.get?.("github-copilot"),
-        );
-        const githubData = await Promise.resolve(
-          modelRegistry.authStorage.get?.("github"),
-        );
+        const [githubCopilotKey, githubKey, githubCopilotData, githubData] =
+          await Promise.all([
+            modelRegistry.authStorage.getApiKey?.("github-copilot"),
+            modelRegistry.authStorage.getApiKey?.("github"),
+            modelRegistry.authStorage.get?.("github-copilot"),
+            modelRegistry.authStorage.get?.("github"),
+          ]);
 
         if (
           isNonEmptyString(githubCopilotKey) ||
@@ -212,18 +207,13 @@ async function hasProviderCredential(
       }
 
       if (provider === "gemini") {
-        const geminiKey = await Promise.resolve(
-          modelRegistry.authStorage.getApiKey?.("google-gemini"),
-        );
-        const geminiCliKey = await Promise.resolve(
-          modelRegistry.authStorage.getApiKey?.("google-gemini-cli"),
-        );
-        const geminiData = await Promise.resolve(
-          modelRegistry.authStorage.get?.("google-gemini"),
-        );
-        const geminiCliData = await Promise.resolve(
-          modelRegistry.authStorage.get?.("google-gemini-cli"),
-        );
+        const [geminiKey, geminiCliKey, geminiData, geminiCliData] =
+          await Promise.all([
+            modelRegistry.authStorage.getApiKey?.("google-gemini"),
+            modelRegistry.authStorage.getApiKey?.("google-gemini-cli"),
+            modelRegistry.authStorage.get?.("google-gemini"),
+            modelRegistry.authStorage.get?.("google-gemini-cli"),
+          ]);
 
         if (
           isNonEmptyString(geminiKey) ||
@@ -236,12 +226,10 @@ async function hasProviderCredential(
       }
 
       if (provider === "antigravity") {
-        const antigravityKey = await Promise.resolve(
+        const [antigravityKey, antigravityData] = await Promise.all([
           modelRegistry.authStorage.getApiKey?.("google-antigravity"),
-        );
-        const antigravityData = await Promise.resolve(
           modelRegistry.authStorage.get?.("google-antigravity"),
-        );
+        ]);
 
         if (
           isNonEmptyString(antigravityKey) ||
@@ -1088,10 +1076,9 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
       return true;
     },
     // Check if a candidate is on cooldown (handles exact and wildcard keys)
-    isOnCooldown = (c: UsageCandidate): boolean => {
+    isOnCooldown = (c: UsageCandidate, now = Date.now()): boolean => {
       const key = candidateKey(c),
-        wildcardKey = getWildcardKey(c.provider, c.account),
-        now = Date.now();
+        wildcardKey = getWildcardKey(c.provider, c.account);
 
       const expiry = modelCooldowns.get(key),
         wildcardExpiry = modelCooldowns.get(wildcardKey);
@@ -1198,12 +1185,14 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
         (candidate) => !findIgnoreMapping(candidate, config.mappings),
       );
 
-      // Filter out cooldowns
+      // Filter out cooldowns - reuse the now captured earlier for consistency
       const cooldownCount = eligibleCandidates.filter((c) =>
-        isOnCooldown(c),
+        isOnCooldown(c, now),
       ).length;
       if (cooldownCount > 0) {
-        eligibleCandidates = eligibleCandidates.filter((c) => !isOnCooldown(c));
+        eligibleCandidates = eligibleCandidates.filter(
+          (c) => !isOnCooldown(c, now),
+        );
         if (reason === "command") {
           notify(
             ctx,
