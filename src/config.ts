@@ -234,6 +234,7 @@ interface RawMappingItem {
     id?: unknown;
   };
   ignore?: unknown;
+  combine?: unknown;
 }
 
 function normalizeMappings(
@@ -274,7 +275,8 @@ function normalizeMappings(
     }
 
     const { model } = item,
-      ignore = item.ignore === true;
+      ignore = item.ignore === true,
+      combine = typeof item.combine === "string" ? item.combine : undefined;
 
     if (ignore && model) {
       errors.push(
@@ -283,8 +285,8 @@ function normalizeMappings(
       continue;
     }
 
-    if (!model && !ignore) {
-      continue; // Skip entries without model or ignore
+    if (!model && !ignore && !combine) {
+      continue; // Skip entries without model, ignore, or combine
     }
 
     if (
@@ -311,6 +313,7 @@ function normalizeMappings(
         ? { provider: model.provider as string, id: model.id as string }
         : undefined,
       ignore,
+      combine,
     });
   }
 

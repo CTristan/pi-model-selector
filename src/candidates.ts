@@ -261,6 +261,17 @@ export function findIgnoreMapping(
   );
 }
 
+export function findCombinationMapping(
+  candidate: UsageCandidate,
+  mappings: MappingEntry[],
+): MappingEntry | undefined {
+  return findMappingBy(
+    candidate,
+    mappings,
+    (mapping) => mapping.combine !== undefined,
+  );
+}
+
 export function candidateKey(candidate: UsageCandidate): string {
   return `${candidate.provider}|${candidate.account ?? ""}|${candidate.windowLabel}`;
 }
@@ -277,4 +288,63 @@ export function dedupeCandidates(
     }
   }
   return Array.from(byKey.values());
+}
+
+export function combineCandidates(
+  candidates: UsageCandidate[],
+  mappings: MappingEntry[],
+): UsageCandidate[] {
+  const groupMap = new Map<string, UsageCandidate[]>();
+  const nonGrouped: UsageCandidate[] = [];
+
+  for (const candidate of candidates) {
+    const combineMapping = findMappingBy(
+      candidate,
+      mappings,
+      (m) => m.combine !== undefined,
+    );
+    if (combineMapping?.combine) {
+      const groupName = combineMapping.combine;
+      // Use provider + account + groupName to keep combinations scoped
+      const groupKey = `${candidate.provider}|${candidate.account ?? ""}|${groupName}`;
+      if (!groupMap.has(groupKey)) {
+        groupMap.set(groupKey, []);
+      }
+      groupMap.get(groupKey)?.push(candidate);
+    } else {
+      nonGrouped.push(candidate);
+    }
+  }
+
+  const result: UsageCandidate[] = [...nonGrouped];
+
+  for (const [groupKey, members] of groupMap.entries()) {
+    if (members.length === 0) continue;
+
+    const parts = groupKey.split("|"),
+      provider = parts[0],
+      account = parts[1],
+      groupName = parts.slice(2).join("|");
+
+    // Whichever one has the least remaining availability
+    let bottleneck = members[0];
+    for (const m of members) {
+      if (m.remainingPercent < bottleneck.remainingPercent) {
+        bottleneck = m;
+      }
+    }
+
+    result.push({
+      provider,
+      displayName: bottleneck.displayName,
+      windowLabel: groupName,
+      usedPercent: bottleneck.usedPercent,
+      remainingPercent: bottleneck.remainingPercent,
+      resetsAt: bottleneck.resetsAt,
+      account: account || undefined,
+      isSynthetic: true,
+    });
+  }
+
+  return result;
 }

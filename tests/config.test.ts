@@ -133,13 +133,17 @@ describe("Config Loading", () => {
     vi.mocked(fs.promises.readFile).mockResolvedValueOnce(
       JSON.stringify({
         mappings: [
-          { usage: { provider: "p1" } }, // incomplete, no model or ignore
+          { usage: { provider: "p1" } }, // incomplete, no model, ignore, or combine
           { usage: { provider: "p2" }, ignore: true },
+          { usage: { provider: "p3" }, combine: "group1" }, // complete with combine
         ],
       }),
     );
     const config = await loadConfig(mockCtx);
-    expect(config?.mappings).toHaveLength(1);
+    expect(config?.mappings).toHaveLength(2);
+    expect(
+      config?.mappings.find((m) => m.usage.provider === "p3")?.combine,
+    ).toBe("group1");
   });
 
   it("should handle non-object config or array config", async () => {

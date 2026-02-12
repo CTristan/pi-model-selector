@@ -38,6 +38,7 @@ export interface MappingEntry {
   usage: UsageMappingKey;
   model?: ModelMappingTarget;
   ignore?: boolean;
+  combine?: string;
 }
 
 export type PriorityRule =
@@ -66,6 +67,7 @@ export interface UsageCandidate {
   remainingPercent: number;
   resetsAt?: Date;
   account?: string;
+  isSynthetic?: boolean;
 }
 
 export interface LoadedConfig {

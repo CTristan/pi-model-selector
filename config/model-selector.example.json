@@ -88,6 +88,23 @@
     },
     {
       "usage": {
+        "provider": "codex",
+        "windowPattern": "(5h|1w)"
+      },
+      "combine": "Codex Combined"
+    },
+    {
+      "usage": {
+        "provider": "codex",
+        "window": "Codex Combined"
+      },
+      "model": {
+        "provider": "openai-codex",
+        "id": "gpt-4o"
+      }
+    },
+    {
+      "usage": {
         "provider": "antigravity",
         "window": "Claude"
       },

@@ -5,10 +5,20 @@ import type {
   ExtensionAPI,
   ExtensionContext,
 } from "@mariozechner/pi-coding-agent";
+// Import from modular sources
+import {
+  DynamicBorder,
+  getSelectListTheme,
+  keyHint,
+  rawKeyHint,
+} from "@mariozechner/pi-coding-agent";
+import { Container, SelectList, Spacer, Text } from "@mariozechner/pi-tui";
 import {
   buildCandidates,
   candidateKey,
+  combineCandidates,
   dedupeCandidates,
+  findCombinationMapping,
   findIgnoreMapping,
   findModelMapping,
   selectionReason,
@@ -23,7 +33,6 @@ import {
   upsertMapping,
 } from "./src/config.js";
 import { resolveZaiApiKey } from "./src/fetchers/zai.js";
-// Import from modular sources
 import type {
   LoadedConfig,
   MappingEntry,
@@ -103,6 +112,57 @@ function isProviderIgnored(
 
 function getWildcardKey(provider: string, account?: string | null): string {
   return `${provider}|${account ?? ""}|*`;
+}
+
+async function selectWrapped(
+  ctx: ExtensionContext,
+  title: string,
+  options: string[],
+): Promise<string | undefined> {
+  if (!ctx.hasUI) return options[0];
+
+  // In tests, fall back to standard select for easier mocking
+  if (process.env.VITEST) {
+    return ctx.ui.select(title, options);
+  }
+
+  return ctx.ui.custom<string | undefined>((tui, theme, _kb, done) => {
+    const container = new Container();
+    container.addChild(new DynamicBorder((s: string) => theme.fg("accent", s)));
+    container.addChild(new Spacer(1));
+    container.addChild(new Text(theme.fg("accent", theme.bold(title)), 1, 0));
+    container.addChild(new Spacer(1));
+
+    const items = options.map((o) => ({ value: o, label: o }));
+    const selectList = new SelectList(
+      items,
+      Math.min(items.length, 15),
+      getSelectListTheme(),
+    );
+    selectList.onSelect = (item) => done(item.value);
+    selectList.onCancel = () => done(undefined);
+    container.addChild(selectList);
+
+    container.addChild(new Spacer(1));
+    container.addChild(
+      new Text(
+        `${rawKeyHint("↑↓", "navigate")}  ${keyHint("selectConfirm", "select")}  ${keyHint("selectCancel", "cancel")}`,
+        1,
+        0,
+      ),
+    );
+    container.addChild(new Spacer(1));
+    container.addChild(new DynamicBorder((s: string) => theme.fg("accent", s)));
+
+    return {
+      render: (w) => container.render(w),
+      invalidate: () => container.invalidate(),
+      handleInput: (data) => {
+        selectList.handleInput(data);
+        tui.requestRender();
+      },
+    };
+  });
 }
 
 const priorityOptions: Array<{ label: string; value: PriorityRule[] }> = [
@@ -361,7 +421,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
     `Project (${config.sources.projectPath})`,
   ];
 
-  let cachedCandidates: UsageCandidate[] | null = null,
+  let cachedUsages: UsageSnapshot[] | null = null,
     cachedModels: Array<{ provider: string; id: string }> | null = null,
     cachedPiAuth: Record<string, unknown> | null = null;
 
@@ -371,12 +431,17 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
       return cachedPiAuth;
     },
     loadCandidates = async (): Promise<UsageCandidate[] | null> => {
-      if (cachedCandidates) return cachedCandidates;
-      const usages = await fetchAllUsages(
+      if (!cachedUsages) {
+        cachedUsages = await fetchAllUsages(
           ctx.modelRegistry,
           config.disabledProviders,
-        ),
-        candidates = dedupeCandidates(buildCandidates(usages));
+        );
+      }
+      const rawCandidates = buildCandidates(cachedUsages);
+      const combined = combineCandidates(rawCandidates, config.mappings);
+      // For the wizard, we want to see everything, including members of combinations
+      // so users can remove their individual combination mappings.
+      const candidates = dedupeCandidates([...rawCandidates, ...combined]);
       if (candidates.length === 0) {
         let detail =
           "No usage windows found. Check provider credentials and connectivity.";
@@ -402,7 +467,6 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         notify(ctx, "error", detail);
         return null;
       }
-      cachedCandidates = candidates;
       return candidates;
     },
     loadModels = async (): Promise<Array<{
@@ -436,7 +500,8 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
     configurePriority = async (): Promise<void> => {
       const currentPriority = config.priority.join(" → "),
         priorityLabels = priorityOptions.map((option) => option.label),
-        priorityChoice = await ctx.ui.select(
+        priorityChoice = await selectWrapped(
+          ctx,
           `Select priority order (current: ${currentPriority})`,
           priorityLabels,
         );
@@ -445,7 +510,8 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
       const priorityIndex = priorityLabels.indexOf(priorityChoice);
       if (priorityIndex < 0) return;
       const selectedPriority = priorityOptions[priorityIndex].value,
-        priorityLocation = await ctx.ui.select(
+        priorityLocation = await selectWrapped(
+          ctx,
           "Save priority to",
           locationLabels,
         );
@@ -469,36 +535,43 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
       notify(ctx, "info", `Priority updated: ${selectedPriority.join(" → ")}.`);
     },
     configureMappings = async (): Promise<void> => {
-      const candidates = await loadCandidates();
-      if (!candidates) return;
       const availableModels = await loadModels();
       if (!availableModels) return;
 
-      const sortedCandidates = [...candidates].sort((a, b) => {
-          if (a.provider !== b.provider)
-            return a.provider.localeCompare(b.provider);
-          return a.windowLabel.localeCompare(b.windowLabel);
-        }),
-        modelLabels = availableModels.map(
-          (model) => `${model.provider}/${model.id}`,
-        );
+      const modelLabels = availableModels.map(
+        (model) => `${model.provider}/${model.id}`,
+      );
 
       let continueMapping = true;
       while (continueMapping) {
+        const candidates = await loadCandidates();
+        if (!candidates) return;
+
+        const sortedCandidates = [...candidates].sort((a, b) => {
+          if (a.provider !== b.provider)
+            return a.provider.localeCompare(b.provider);
+          return a.windowLabel.localeCompare(b.windowLabel);
+        });
+
         const optionLabels = sortedCandidates.map((candidate) => {
-            const ignored = findIgnoreMapping(candidate, config.mappings),
-              mapping = findModelMapping(candidate, config.mappings),
-              mappingLabel = ignored
-                ? "ignored"
-                : mapping
-                  ? `mapped: ${mapping.model?.provider}/${mapping.model?.id}`
+          const ignored = findIgnoreMapping(candidate, config.mappings),
+            mapping = findModelMapping(candidate, config.mappings),
+            combination = findCombinationMapping(candidate, config.mappings),
+            mappingLabel = ignored
+              ? "ignored"
+              : mapping
+                ? `mapped: ${mapping.model?.provider}/${mapping.model?.id}`
+                : combination
+                  ? `combined: ${combination.combine}`
                   : "unmapped";
-            return `${candidate.provider}/${candidate.windowLabel} (${candidate.remainingPercent.toFixed(0)}% remaining, ${candidate.displayName}) [${mappingLabel}]`;
-          }),
-          selectedLabel = await ctx.ui.select(
-            "Select a usage bucket to map",
-            optionLabels,
-          );
+          return `${candidate.provider}/${candidate.windowLabel} (${candidate.remainingPercent.toFixed(0)}% remaining, ${candidate.displayName}) [${mappingLabel}]`;
+        });
+
+        const selectedLabel = await selectWrapped(
+          ctx,
+          "Select a usage bucket to map",
+          optionLabels,
+        );
         if (!selectedLabel) return;
 
         const selectedIndex = optionLabels.indexOf(selectedLabel);
@@ -506,7 +579,8 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         const selectedCandidate = sortedCandidates[selectedIndex];
 
         // Ask which config file (Global / Project) the user wants to modify first
-        const locationChoice = await ctx.ui.select(
+        const locationChoice = await selectWrapped(
+          ctx,
           `Modify mapping in`,
           locationLabels,
         );
@@ -530,39 +604,119 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
             selectedCandidate,
             targetMappings,
           ),
+          matchedCombinationInTarget = findCombinationMapping(
+            selectedCandidate,
+            targetMappings,
+          ),
           hasIgnoreInTarget = matchedIgnoreInTarget !== undefined,
-          hasModelInTarget = matchedModelInTarget !== undefined;
+          hasModelInTarget = matchedModelInTarget !== undefined,
+          hasCombinationInTarget = matchedCombinationInTarget !== undefined,
+          isSynthetic = selectedCandidate.isSynthetic === true;
 
         const actionOptions = [
           "Map to model",
           "Map by pattern",
           "Ignore bucket",
           "Ignore by pattern",
+          "Combine bucket",
+          "Combine by pattern",
         ];
         if (hasIgnoreInTarget) actionOptions.push("Stop ignoring");
-        if (hasIgnoreInTarget || hasModelInTarget)
+        if (hasCombinationInTarget) actionOptions.push("Stop combining");
+        if (isSynthetic) actionOptions.push("Dissolve combination");
+        if (hasIgnoreInTarget || hasModelInTarget || hasCombinationInTarget)
           actionOptions.push("Remove mapping");
 
-        const actionChoice = await ctx.ui.select(
+        const actionChoice = await selectWrapped(
+          ctx,
           `Select action for ${selectedCandidate.provider}/${selectedCandidate.windowLabel}`,
           actionOptions,
         );
         if (!actionChoice) return;
 
+        if (actionChoice === "Dissolve combination") {
+          try {
+            const existing = Array.isArray(targetRaw.mappings)
+              ? targetRaw.mappings
+              : [];
+            const filtered = existing.filter((entry: unknown) => {
+              if (!entry || typeof entry !== "object") return true;
+              const e = entry as MappingEntry;
+              if (e.combine !== selectedCandidate.windowLabel) return true;
+
+              const isMatch =
+                e.usage?.provider === selectedCandidate.provider &&
+                (e.usage?.account === undefined ||
+                  e.usage?.account === selectedCandidate.account);
+
+              return !isMatch;
+            });
+
+            if (filtered.length === existing.length) {
+              notify(
+                ctx,
+                "warning",
+                `No combination group "${selectedCandidate.windowLabel}" found in ${targetPath}.`,
+              );
+            } else {
+              targetRaw.mappings = filtered;
+              await saveConfigFile(targetPath, targetRaw);
+
+              const reloaded = await loadConfig(ctx, {
+                requireMappings: false,
+              });
+              if (reloaded) {
+                config.mappings = reloaded.mappings;
+              }
+
+              notify(
+                ctx,
+                "info",
+                `Dissolved combination group "${selectedCandidate.windowLabel}" in ${targetPath}.`,
+              );
+            }
+          } catch (error: unknown) {
+            notify(
+              ctx,
+              "error",
+              `Failed to write ${targetPath}: ${String(error)}`,
+            );
+            return;
+          }
+
+          const addMoreAfterDissolve = await ctx.ui.confirm(
+            "Modify another mapping?",
+            "Do you want to modify another usage bucket?",
+          );
+          if (!addMoreAfterDissolve) continueMapping = false;
+          continue;
+        }
+
         if (
           actionChoice === "Stop ignoring" ||
+          actionChoice === "Stop combining" ||
           actionChoice === "Remove mapping"
         ) {
           const mappingToRemove =
             actionChoice === "Stop ignoring"
               ? matchedIgnoreInTarget
-              : (matchedModelInTarget ?? matchedIgnoreInTarget);
+              : actionChoice === "Stop combining"
+                ? matchedCombinationInTarget
+                : (matchedModelInTarget ??
+                  matchedIgnoreInTarget ??
+                  matchedCombinationInTarget);
 
           if (!mappingToRemove) {
             notify(
               ctx,
               "warning",
-              `No matching ${actionChoice === "Stop ignoring" ? "ignore" : "mapping"} found in ${targetPath}.`,
+              `No matching ${
+                actionChoice === "Stop ignoring"
+                  ? "ignore"
+                  : actionChoice === "Stop combining"
+                    ? "combination"
+                    : "mapping"
+              } found in ${targetPath}.`,
             );
           } else {
             try {
@@ -573,7 +727,13 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
                 notify(
                   ctx,
                   "warning",
-                  `No matching ${actionChoice === "Stop ignoring" ? "ignore" : "mapping"} found in ${targetPath}.`,
+                  `No matching ${
+                    actionChoice === "Stop ignoring"
+                      ? "ignore"
+                      : actionChoice === "Stop combining"
+                        ? "combination"
+                        : "mapping"
+                  } found in ${targetPath}.`,
                 );
               } else {
                 await saveConfigFile(targetPath, targetRaw);
@@ -588,7 +748,13 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
                 notify(
                   ctx,
                   "info",
-                  `Removed ${actionChoice === "Stop ignoring" ? "ignore mapping" : "mapping"} for ${selectedCandidate.provider}/${selectedCandidate.windowLabel}.`,
+                  `Removed ${
+                    actionChoice === "Stop ignoring"
+                      ? "ignore mapping"
+                      : actionChoice === "Stop combining"
+                        ? "combination mapping"
+                        : "mapping"
+                  } for ${selectedCandidate.provider}/${selectedCandidate.windowLabel}.`,
                 );
               }
             } catch (error: unknown) {
@@ -612,7 +778,8 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         let pattern: string | undefined;
         if (
           actionChoice === "Map by pattern" ||
-          actionChoice === "Ignore by pattern"
+          actionChoice === "Ignore by pattern" ||
+          actionChoice === "Combine by pattern"
         ) {
           pattern = await ctx.ui.input(
             `Enter regex pattern (e.g. ^${selectedCandidate.windowLabel}$)`,
@@ -631,7 +798,8 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
           actionChoice === "Map to model" ||
           actionChoice === "Map by pattern"
         ) {
-          const modelChoice = await ctx.ui.select(
+          const modelChoice = await selectWrapped(
+            ctx,
             `Select model for ${selectedCandidate.provider}/${pattern || selectedCandidate.windowLabel}`,
             modelLabels,
           );
@@ -640,6 +808,43 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
           const modelIndex = modelLabels.indexOf(modelChoice);
           if (modelIndex < 0) return;
           selectedModel = availableModels[modelIndex];
+        }
+
+        let combineName: string | undefined;
+        if (
+          actionChoice === "Combine bucket" ||
+          actionChoice === "Combine by pattern"
+        ) {
+          const existingCombineNames = Array.from(
+            new Set(
+              config.mappings
+                .map((m) => m.combine)
+                .filter((name): name is string => typeof name === "string"),
+            ),
+          ).sort();
+
+          if (existingCombineNames.length > 0) {
+            const options = [...existingCombineNames, "Enter new name..."];
+            const choice = await selectWrapped(
+              ctx,
+              "Select combination group",
+              options,
+            );
+            if (!choice) return;
+
+            if (choice === "Enter new name...") {
+              combineName = await ctx.ui.input(
+                "Enter new combination group name (e.g. 'Codex Combined')",
+              );
+            } else {
+              combineName = choice;
+            }
+          } else {
+            combineName = await ctx.ui.input(
+              "Enter combination group name (e.g. 'Codex Combined')",
+            );
+          }
+          if (!combineName) return;
         }
 
         // Build the usage descriptor for this candidate/pattern
@@ -662,6 +867,11 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
               provider: selectedModel.provider,
               id: selectedModel.id,
             },
+          };
+        } else if (combineName) {
+          mappingEntry = {
+            usage: usageDesc,
+            combine: combineName,
           };
         } else {
           mappingEntry = {
@@ -687,9 +897,11 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
           config.mappings = reloaded.mappings;
         }
 
-        const actionSummary = mappingEntry.ignore
-          ? `Ignored ${selectedCandidate.provider}/${selectedCandidate.windowLabel}.`
-          : `Mapped ${selectedCandidate.provider}/${pattern || selectedCandidate.windowLabel} to ${mappingEntry.model?.provider}/${mappingEntry.model?.id}.`;
+        const actionSummary = mappingEntry.combine
+          ? `Combined ${selectedCandidate.provider}/${pattern || selectedCandidate.windowLabel} into "${mappingEntry.combine}".`
+          : mappingEntry.ignore
+            ? `Ignored ${selectedCandidate.provider}/${selectedCandidate.windowLabel}.`
+            : `Mapped ${selectedCandidate.provider}/${pattern || selectedCandidate.windowLabel} to ${mappingEntry.model?.provider}/${mappingEntry.model?.id}.`;
         notify(ctx, "info", actionSummary);
 
         const addMore = await ctx.ui.confirm(
@@ -701,7 +913,8 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
     },
     configureWidget = async (): Promise<void> => {
       const currentStatus = config.widget.enabled ? "enabled" : "disabled",
-        widgetChoice = await ctx.ui.select(
+        widgetChoice = await selectWrapped(
+          ctx,
           `Usage widget (current: ${currentStatus})`,
           [
             "Enable widget",
@@ -719,7 +932,8 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
       } else if (widgetChoice === "Disable widget") {
         widgetUpdate.enabled = false;
       } else if (widgetChoice === "Configure placement") {
-        const placementChoice = await ctx.ui.select(
+        const placementChoice = await selectWrapped(
+          ctx,
           `Widget placement (current: ${config.widget.placement})`,
           ["Above editor", "Below editor"],
         );
@@ -727,7 +941,8 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         widgetUpdate.placement =
           placementChoice === "Above editor" ? "aboveEditor" : "belowEditor";
       } else if (widgetChoice === "Configure count") {
-        const countChoice = await ctx.ui.select(
+        const countChoice = await selectWrapped(
+          ctx,
           `Number of candidates to show (current: ${config.widget.showCount})`,
           ["1", "2", "3", "4", "5"],
         );
@@ -737,7 +952,8 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 
       if (Object.keys(widgetUpdate).length === 0) return;
 
-      const locationChoice = await ctx.ui.select(
+      const locationChoice = await selectWrapped(
+        ctx,
         "Save widget settings to",
         locationLabels,
       );
@@ -773,7 +989,8 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
     configureDebugLog = async (): Promise<void> => {
       const currentLog = config.debugLog?.path || "model-selector.log",
         currentStatus = config.debugLog?.enabled ? "enabled" : "disabled",
-        choice = await ctx.ui.select(
+        choice = await selectWrapped(
+          ctx,
           `Debug logging (current: ${currentStatus}, path: ${currentLog})`,
           [
             config.debugLog?.enabled ? "Disable logging" : "Enable logging",
@@ -798,7 +1015,8 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         debugUpdate.path = newPath;
       }
 
-      const locationChoice = await ctx.ui.select(
+      const locationChoice = await selectWrapped(
+        ctx,
         "Save debug log setting to",
         locationLabels,
       );
@@ -833,14 +1051,16 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
     },
     configureAutoRun = async (): Promise<void> => {
       const currentStatus = config.autoRun ? "enabled" : "disabled",
-        choice = await ctx.ui.select(
+        choice = await selectWrapped(
+          ctx,
           `Auto-run after every turn (current: ${currentStatus})`,
           [config.autoRun ? "Disable auto-run" : "Enable auto-run"],
         );
       if (!choice) return;
 
       const newValue = choice === "Enable auto-run",
-        locationChoice = await ctx.ui.select(
+        locationChoice = await selectWrapped(
+          ctx,
           "Save auto-run setting to",
           locationLabels,
         );
@@ -865,7 +1085,8 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
     },
     configureProviders = async (): Promise<void> => {
       const piAuth = await loadAuth();
-      const locationChoice = await ctx.ui.select(
+      const locationChoice = await selectWrapped(
+        ctx,
         "Select configuration scope",
         locationLabels,
       );
@@ -910,7 +1131,8 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         );
       }
 
-      const selectedProviderLabel = await ctx.ui.select(
+      const selectedProviderLabel = await selectWrapped(
+        ctx,
         `Configure providers in ${saveToProject ? "Project" : "Global"}`,
         providerOptions,
       );
@@ -945,7 +1167,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         config.raw = reloaded.raw;
       }
 
-      cachedCandidates = null;
+      cachedUsages = null;
 
       const selectedProviderLabelFriendly = PROVIDER_LABELS[selectedProvider];
       const isActuallyDisabled =
@@ -969,7 +1191,8 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
     ];
 
   while (true) {
-    const action = await ctx.ui.select(
+    const action = await selectWrapped(
+      ctx,
       "Model selector configuration",
       menuOptions,
     );
@@ -1183,7 +1406,10 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
       // Clean up any cooldowns that may have just expired.
       pruneExpiredCooldowns();
 
-      const candidates = buildCandidates(usages);
+      const candidates = combineCandidates(
+        buildCandidates(usages),
+        config.mappings,
+      );
       let eligibleCandidates = candidates.filter(
         (candidate) => !findIgnoreMapping(candidate, config.mappings),
       );
@@ -1374,7 +1600,10 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
       );
 
       if (!lastSelectedCandidateKey) {
-        const candidates = buildCandidates(usages),
+        const candidates = combineCandidates(
+            buildCandidates(usages),
+            config.mappings,
+          ),
           eligible = candidates.filter(
             (c) => !findIgnoreMapping(c, config.mappings),
           ),
