@@ -51,7 +51,7 @@
 1. **Trigger**: Extension runs on session start or `/model-select` command.
 2. **Configuration Load**: Reads and merges global + project configs.
 3. **Quota Retrieval**: Fetches usage from all configured providers in parallel.
-4. **Candidate Evaluation**: Builds candidates, dedupes, applies combinations, filters ignored, sorts by priority.
+4. **Candidate Evaluation**: Builds candidates, applies combinations, filters ignored, sorts by priority.
 5. **Widget Update**: Updates the visual widget with top N candidates.
 6. **Model Selection**: Selects best candidate, looks up mapping, calls `pi.setModel()`.
 

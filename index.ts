@@ -441,7 +441,11 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
       const combined = combineCandidates(rawCandidates, config.mappings);
       // For the wizard, we want to see everything, including members of combinations
       // so users can remove their individual combination mappings.
-      const candidates = dedupeCandidates([...rawCandidates, ...combined]);
+      const dedupedRaw = dedupeCandidates(rawCandidates);
+      const syntheticOnly = combined.filter((c) => c.isSynthetic);
+      const dedupedCombined = dedupeCandidates(syntheticOnly);
+      // Avoid cross-deduping raw vs. synthetic candidates so both remain visible.
+      const candidates = [...dedupedRaw, ...dedupedCombined];
       if (candidates.length === 0) {
         let detail =
           "No usage windows found. Check provider credentials and connectivity.";
@@ -618,9 +622,10 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
           "Map by pattern",
           "Ignore bucket",
           "Ignore by pattern",
-          "Combine bucket",
-          "Combine by pattern",
         ];
+        if (!isSynthetic) {
+          actionOptions.push("Combine bucket", "Combine by pattern");
+        }
         if (hasIgnoreInTarget) actionOptions.push("Stop ignoring");
         if (hasCombinationInTarget) actionOptions.push("Stop combining");
         if (isSynthetic) actionOptions.push("Dissolve combination");
@@ -844,6 +849,11 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
               "Enter combination group name (e.g. 'Codex Combined')",
             );
           }
+
+          if (combineName != null) {
+            combineName = combineName.trim();
+          }
+
           if (!combineName) return;
         }
 

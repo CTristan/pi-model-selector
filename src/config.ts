@@ -275,12 +275,16 @@ function normalizeMappings(
     }
 
     const { model } = item,
-      ignore = item.ignore === true,
-      combine = typeof item.combine === "string" ? item.combine : undefined;
+      ignore = item.ignore === true;
+    let combine =
+      typeof item.combine === "string" ? item.combine.trim() : undefined;
+    if (combine === "") {
+      combine = undefined;
+    }
 
-    if (ignore && model) {
+    if ((ignore && model) || (ignore && combine) || (model && combine)) {
       errors.push(
-        `[${sourceLabel}] invalid mapping entry: cannot specify both "ignore: true" and a "model"`,
+        `[${sourceLabel}] invalid mapping entry: "model", "ignore: true", and "combine" are mutually exclusive`,
       );
       continue;
     }
