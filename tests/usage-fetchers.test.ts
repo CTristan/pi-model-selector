@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RateWindow } from "../src/types.js";
+import { resetGlobalState } from "../src/types.js";
 import {
   fetchAllCodexUsages,
   fetchAllUsages,
@@ -79,6 +80,7 @@ vi.mock("node:child_process", async () => {
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
+  resetGlobalState();
 });
 
 describe("Usage Fetchers Utilities", () => {
@@ -93,8 +95,11 @@ describe("Usage Fetchers Utilities", () => {
   });
 
   it("formatReset branches", () => {
+    const now = 1739318400000;
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+
     expect(formatReset(new Date("invalid"))).toBe("");
-    const now = Date.now();
     expect(formatReset(new Date(now - 10000))).toBe("now");
     expect(formatReset(new Date(now + 30 * 1000))).toBe("now");
     expect(formatReset(new Date(now + 65 * 1000))).toBe("1m");

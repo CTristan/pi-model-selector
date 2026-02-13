@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { resetGlobalState } from "../src/types.js";
 import {
   fetchAllCodexUsages,
   fetchAntigravityUsage,
@@ -70,6 +71,8 @@ describe("Usage Fetchers Branch Coverage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.resetAllMocks(); // This clears implementations too
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-01-01T12:00:00Z"));
 
     // Re-establish default mocks
     vi.mocked(fs.promises.readFile).mockResolvedValue("");
@@ -96,6 +99,7 @@ describe("Usage Fetchers Branch Coverage", () => {
     vi.unstubAllEnvs();
     vi.useRealTimers();
     vi.restoreAllMocks();
+    resetGlobalState();
   });
 
   // ========================================================================
@@ -104,8 +108,8 @@ describe("Usage Fetchers Branch Coverage", () => {
   describe("formatReset", () => {
     it("should format hours without minutes if minutes is 0", () => {
       const now = Date.now();
-      expect(formatReset(new Date(now + 120 * 60000 + 1000))).toBe("2h");
-      expect(formatReset(new Date(now + 121 * 60000 + 1000))).toBe("2h 1m");
+      expect(formatReset(new Date(now + 120 * 60000 + 10000))).toBe("2h");
+      expect(formatReset(new Date(now + 121 * 60000 + 10000))).toBe("2h 1m");
     });
 
     it("formatReset should handle minutes < 60", () => {

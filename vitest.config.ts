@@ -4,6 +4,11 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
+    server: {
+      deps: {
+        inline: ["@mariozechner/pi-coding-agent"],
+      },
+    },
     testTimeout: 1000,
     coverage: {
       provider: "v8",

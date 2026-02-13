@@ -76,10 +76,18 @@
         "id": "gpt-4o"
       }
     },
+
     {
       "usage": {
         "provider": "codex",
-        "window": "1w"
+        "windowPattern": "(5h|1w)"
+      },
+      "combine": "Codex Combined"
+    },
+    {
+      "usage": {
+        "provider": "codex",
+        "window": "Codex Combined"
       },
       "model": {
         "provider": "openai-codex",

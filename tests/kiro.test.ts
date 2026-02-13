@@ -1,21 +1,50 @@
+import * as child_process from "node:child_process";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { execAsync } from "../src/fetchers/common.js";
 import { fetchKiroUsage } from "../src/fetchers/kiro.js";
 
-vi.mock("../src/fetchers/common.js", async () => {
-  const actual = await vi.importActual<
-    typeof import("../src/fetchers/common.js")
-  >("../src/fetchers/common.js");
+vi.mock("node:child_process", async () => {
+  const util = await import("node:util");
+  const execMock = vi.fn(
+    (
+      _cmd: string,
+      options: unknown,
+      cb?: (err: Error | null, stdout: string, stderr: string) => void,
+    ) => {
+      if (typeof options === "function")
+        cb = options as (
+          err: Error | null,
+          stdout: string,
+          stderr: string,
+        ) => void;
+      if (cb) cb(null, "{}", "");
+    },
+  );
+
+  Object.defineProperty(execMock, util.promisify.custom, {
+    value: (cmd: string, options: any) => {
+      return new Promise((resolve, reject) => {
+        execMock(
+          cmd,
+          options,
+          (err: Error | null, stdout: string, stderr: string) => {
+            if (err) reject(err);
+            else resolve({ stdout, stderr });
+          },
+        );
+      });
+    },
+  });
+
   return {
-    ...actual,
-    execAsync: vi.fn(),
+    exec: execMock,
   };
 });
 
 describe("Kiro Quota Detection", () => {
   beforeEach(() => {
+    vi.resetAllMocks();
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-01-01T12:00:00Z"));
+    vi.setSystemTime(new Date("2024-01-01T12:00:00Z"));
   });
 
   afterEach(() => {
@@ -23,14 +52,19 @@ describe("Kiro Quota Detection", () => {
   });
 
   it("should detect both percentage and ratio quotas and return multiple windows", async () => {
-    vi.mocked(execAsync).mockImplementation(((cmd: string) => {
+    vi.mocked(child_process.exec).mockImplementation(((
+      cmd: string,
+      options: any,
+      cb: any,
+    ) => {
+      if (typeof options === "function") cb = options;
       if (cmd.includes("which") || cmd.includes("where"))
-        return Promise.resolve({ stdout: "/bin/kiro-cli", stderr: "" });
-      if (cmd.includes("whoami"))
-        return Promise.resolve({ stdout: "user", stderr: "" });
-      if (cmd.includes("/usage")) {
-        return Promise.resolve({
-          stdout: `
+        cb(null, "/bin/kiro-cli", "");
+      else if (cmd.includes("whoami")) cb(null, "user", "");
+      else if (cmd.includes("/usage")) {
+        cb(
+          null,
+          `
 | KIRO PRO |
 System Health: 100%
 Model A Quota: 50/100
@@ -39,10 +73,11 @@ resets on 10/11
 Bonus credits: 2/10
 resets on 12/11
 `,
-          stderr: "",
-        });
+          "",
+        );
+      } else {
+        cb(null, "", "");
       }
-      return Promise.resolve({ stdout: "", stderr: "" });
     }) as any);
 
     const result = await fetchKiroUsage();
@@ -59,23 +94,29 @@ resets on 12/11
   });
 
   it("should correctly handle multi-quota reset dates", async () => {
-    vi.mocked(execAsync).mockImplementation(((cmd: string) => {
+    vi.mocked(child_process.exec).mockImplementation(((
+      cmd: string,
+      options: any,
+      cb: any,
+    ) => {
+      if (typeof options === "function") cb = options;
       if (cmd.includes("which") || cmd.includes("where"))
-        return Promise.resolve({ stdout: "/bin/kiro-cli", stderr: "" });
-      if (cmd.includes("whoami"))
-        return Promise.resolve({ stdout: "user", stderr: "" });
-      if (cmd.includes("/usage")) {
-        return Promise.resolve({
-          stdout: `
+        cb(null, "/bin/kiro-cli", "");
+      else if (cmd.includes("whoami")) cb(null, "user", "");
+      else if (cmd.includes("/usage")) {
+        cb(
+          null,
+          `
 Model 1 Quota: 90%
 resets on 02/10
 Model 2 Quota: 10%
 resets on 05/10
 `,
-          stderr: "",
-        });
+          "",
+        );
+      } else {
+        cb(null, "", "");
       }
-      return Promise.resolve({ stdout: "", stderr: "" });
     }) as any);
 
     const result = await fetchKiroUsage();
@@ -89,21 +130,27 @@ resets on 05/10
   });
 
   it("should not duplicate bonus windows when bonus credits are already parsed", async () => {
-    vi.mocked(execAsync).mockImplementation(((cmd: string) => {
+    vi.mocked(child_process.exec).mockImplementation(((
+      cmd: string,
+      options: any,
+      cb: any,
+    ) => {
+      if (typeof options === "function") cb = options;
       if (cmd.includes("which") || cmd.includes("where"))
-        return Promise.resolve({ stdout: "/bin/kiro-cli", stderr: "" });
-      if (cmd.includes("whoami"))
-        return Promise.resolve({ stdout: "user", stderr: "" });
-      if (cmd.includes("/usage")) {
-        return Promise.resolve({
-          stdout: `
+        cb(null, "/bin/kiro-cli", "");
+      else if (cmd.includes("whoami")) cb(null, "user", "");
+      else if (cmd.includes("/usage")) {
+        cb(
+          null,
+          `
 Bonus credits: 2/10
 expires in 3 days
 `,
-          stderr: "",
-        });
+          "",
+        );
+      } else {
+        cb(null, "", "");
       }
-      return Promise.resolve({ stdout: "", stderr: "" });
     }) as any);
 
     const result = await fetchKiroUsage();

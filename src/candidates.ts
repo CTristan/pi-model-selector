@@ -261,8 +261,20 @@ export function findIgnoreMapping(
   );
 }
 
+export function findCombinationMapping(
+  candidate: UsageCandidate,
+  mappings: MappingEntry[],
+): MappingEntry | undefined {
+  if (candidate.isSynthetic) return undefined;
+  return findMappingBy(
+    candidate,
+    mappings,
+    (mapping) => mapping.combine !== undefined,
+  );
+}
+
 export function candidateKey(candidate: UsageCandidate): string {
-  return `${candidate.provider}|${candidate.account ?? ""}|${candidate.windowLabel}`;
+  return `${candidate.provider}|${candidate.account ?? ""}|${candidate.windowLabel}|${candidate.isSynthetic ? "synthetic" : "raw"}`;
 }
 
 export function dedupeCandidates(
@@ -277,4 +289,73 @@ export function dedupeCandidates(
     }
   }
   return Array.from(byKey.values());
+}
+
+export function combineCandidates(
+  candidates: UsageCandidate[],
+  mappings: MappingEntry[],
+): UsageCandidate[] {
+  type GroupData = {
+    provider: string;
+    account: string | undefined;
+    groupName: string;
+    members: UsageCandidate[];
+  };
+  const groupMap = new Map<string, GroupData>();
+  const nonGrouped: UsageCandidate[] = [];
+
+  for (const candidate of candidates) {
+    const combineMapping = findMappingBy(
+      candidate,
+      mappings,
+      (m) => m.combine !== undefined,
+    );
+    if (combineMapping?.combine) {
+      const groupName = combineMapping.combine.trim();
+      // Use JSON.stringify for a safe, unique key
+      const groupKey = JSON.stringify([
+        candidate.provider,
+        candidate.account,
+        groupName,
+      ]);
+      if (!groupMap.has(groupKey)) {
+        groupMap.set(groupKey, {
+          provider: candidate.provider,
+          account: candidate.account,
+          groupName,
+          members: [],
+        });
+      }
+      groupMap.get(groupKey)?.members.push(candidate);
+    } else {
+      nonGrouped.push(candidate);
+    }
+  }
+
+  const result: UsageCandidate[] = [...nonGrouped];
+
+  for (const { provider, account, groupName, members } of groupMap.values()) {
+    if (members.length === 0) continue;
+
+    // Whichever one has the least remaining availability
+    let bottleneck = members[0];
+    for (const m of members) {
+      if (m.remainingPercent < bottleneck.remainingPercent) {
+        bottleneck = m;
+      }
+    }
+
+    result.push({
+      provider,
+      displayName: bottleneck.displayName,
+      windowLabel: groupName,
+      usedPercent: bottleneck.usedPercent,
+      remainingPercent: bottleneck.remainingPercent,
+      resetsAt: bottleneck.resetsAt,
+      account: account || undefined,
+      isSynthetic: true,
+    });
+  }
+
+  return result;
 }

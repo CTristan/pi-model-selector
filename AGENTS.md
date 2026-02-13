@@ -18,7 +18,7 @@
 - **`src/usage-fetchers.ts`**: Usage aggregation entry point. Exports `fetchAllUsages()` and re-exports fetcher utilities for compatibility.
 - **`src/fetchers/*.ts`**: Provider-specific usage fetchers and shared fetch utilities (`anthropic.ts`, `copilot.ts`, `gemini.ts`, `antigravity.ts`, `codex.ts`, `kiro.ts`, `zai.ts`, `common.ts`).
 - **`src/config.ts`**: Configuration loading, parsing, validation, and saving. Handles merging global and project configs. Exports `loadConfig()`, `saveConfigFile()`, `upsertMapping()`, `updateWidgetConfig()`.
-- **`src/candidates.ts`**: Candidate building and ranking logic. Exports `buildCandidates()`, `sortCandidates()`, `findModelMapping()`, `findIgnoreMapping()`, `selectionReason()`.
+- **`src/candidates.ts`**: Candidate building and ranking logic. Exports `buildCandidates()`, `combineCandidates()`, `sortCandidates()`, `findModelMapping()`, `findIgnoreMapping()`, `selectionReason()`.
 - **`src/widget.ts`**: Visual sub-bar widget rendering. Displays top N ranked candidates with progress bars. Exports `updateWidgetState()`, `renderUsageWidget()`, `clearWidget()`.
 
 ### Documentation
@@ -51,7 +51,7 @@
 1. **Trigger**: Extension runs on session start or `/model-select` command.
 2. **Configuration Load**: Reads and merges global + project configs.
 3. **Quota Retrieval**: Fetches usage from all configured providers in parallel.
-4. **Candidate Evaluation**: Builds candidates, filters ignored, sorts by priority.
+4. **Candidate Evaluation**: Builds candidates, applies combinations, filters ignored, sorts by priority.
 5. **Widget Update**: Updates the visual widget with top N candidates.
 6. **Model Selection**: Selects best candidate, looks up mapping, calls `pi.setModel()`.
 
@@ -81,6 +81,14 @@ To handle transient "No capacity" (503) errors that aren't reflected in quota us
     {
       "usage": { "provider": "gemini", "window": "Flash" },
       "ignore": true
+    },
+    {
+      "usage": { "provider": "codex", "windowPattern": "(5h|1w)" },
+      "combine": "Codex Combined"
+    },
+    {
+      "usage": { "provider": "codex", "window": "Codex Combined" },
+      "model": { "provider": "openai-codex", "id": "gpt-4o" }
     }
   ]
 }
@@ -92,7 +100,8 @@ To handle transient "No capacity" (503) errors that aren't reflected in quota us
 - **`widget.enabled`**: Boolean to enable/disable the usage widget.
 - **`widget.placement`**: `"aboveEditor"` or `"belowEditor"`.
 - **`widget.showCount`**: Number of top candidates to display (default: 3).
-- **`mappings`**: Array linking usage sources to models or marking as ignored.
+- **`mappings`**: Array linking usage sources to models, marking as ignored, or grouping for combination.
+  - **`combine`**: Optional string. If specified, candidates matching this mapping are grouped together. A new synthetic candidate is created with this name, using the minimum availability (bottleneck) among all group members.
 
 ## Development Guidelines
 
