@@ -5,8 +5,8 @@ import * as configMod from "../src/config.js";
 import * as usageFetchers from "../src/usage-fetchers.js";
 
 // Mock node:fs to prevent real file operations
-vi.mock(import("node:fs"), async (importOriginal) => {
-  const actual = await importOriginal();
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs")>();
   return {
     ...actual,
     existsSync: vi.fn(actual.existsSync),

@@ -76,16 +76,7 @@
         "id": "gpt-4o"
       }
     },
-    {
-      "usage": {
-        "provider": "codex",
-        "window": "1w"
-      },
-      "model": {
-        "provider": "openai-codex",
-        "id": "gpt-4o"
-      }
-    },
+
     {
       "usage": {
         "provider": "codex",
