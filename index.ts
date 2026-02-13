@@ -688,6 +688,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
               });
               if (reloaded) {
                 config.mappings = reloaded.mappings;
+                cachedUsages = null;
               }
 
               notify(
@@ -764,6 +765,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
                 });
                 if (reloaded) {
                   config.mappings = reloaded.mappings;
+                  cachedUsages = null;
                 }
 
                 notify(
@@ -923,6 +925,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         const reloaded = await loadConfig(ctx, { requireMappings: false });
         if (reloaded) {
           config.mappings = reloaded.mappings;
+          cachedUsages = null;
         }
 
         const actionSummary = mappingEntry.combine
