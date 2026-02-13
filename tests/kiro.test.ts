@@ -43,9 +43,13 @@ vi.mock("node:child_process", async () => {
 describe("Kiro Quota Detection", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2024-01-01T12:00:00Z"));
   });
 
-  afterEach(() => {});
+  afterEach(() => {
+    vi.useRealTimers();
+  });
 
   it("should detect both percentage and ratio quotas and return multiple windows", async () => {
     vi.mocked(child_process.exec).mockImplementation(((

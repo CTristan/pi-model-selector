@@ -577,7 +577,8 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
                 : combination
                   ? `combined: ${combination.combine}`
                   : "unmapped";
-          return `${candidate.provider}/${candidate.windowLabel} (${candidate.remainingPercent.toFixed(0)}% remaining, ${candidate.displayName}) [${mappingLabel}]`;
+          const accountPart = candidate.account ? `${candidate.account}/` : "";
+          return `${candidate.provider}/${accountPart}${candidate.windowLabel} (${candidate.remainingPercent.toFixed(0)}% remaining, ${candidate.displayName}) [${mappingLabel}]`;
         });
 
         const selectedLabel = await selectWrapped(
@@ -661,10 +662,13 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
               const targetLabel = selectedCandidate.windowLabel.trim();
               if (combineRaw !== targetLabel) return true;
 
-              const isMatch =
-                e.usage?.provider === selectedCandidate.provider &&
-                (e.usage?.account === undefined ||
-                  e.usage?.account === selectedCandidate.account);
+              const providerMatch =
+                e.usage?.provider === selectedCandidate.provider;
+              const accountsMatch =
+                selectedCandidate.account === undefined
+                  ? e.usage?.account === undefined
+                  : e.usage?.account === selectedCandidate.account;
+              const isMatch = providerMatch && accountsMatch;
 
               return !isMatch;
             });
@@ -1280,12 +1284,29 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
       for (const [key, expiry] of Object.entries(state.cooldowns)) {
         if (expiry > now) {
           modelCooldowns.set(key, expiry);
+          // Migration for legacy keys (missing |raw/|synthetic suffix)
+          // Wildcard keys end with |*, leave them alone
+          if (
+            !key.endsWith("|raw") &&
+            !key.endsWith("|synthetic") &&
+            !key.endsWith("|*")
+          ) {
+            modelCooldowns.set(`${key}|raw`, expiry);
+          }
         }
       }
 
       // Restore last selected (useful for /model-skip in print mode)
       if (state.lastSelected) {
         lastSelectedCandidateKey = state.lastSelected;
+        // Migrate legacy lastSelected key if needed
+        if (
+          !lastSelectedCandidateKey.endsWith("|raw") &&
+          !lastSelectedCandidateKey.endsWith("|synthetic") &&
+          !lastSelectedCandidateKey.endsWith("|*")
+        ) {
+          lastSelectedCandidateKey = `${lastSelectedCandidateKey}|raw`;
+        }
       }
       cooldownsLoaded = true;
     },
