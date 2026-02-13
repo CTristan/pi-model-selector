@@ -5,14 +5,21 @@ import type {
   ExtensionAPI,
   ExtensionContext,
 } from "@mariozechner/pi-coding-agent";
-// Import from modular sources
 import {
   DynamicBorder,
   getSelectListTheme,
   keyHint,
   rawKeyHint,
 } from "@mariozechner/pi-coding-agent";
-import { Container, SelectList, Spacer, Text } from "@mariozechner/pi-tui";
+
+import {
+  Container,
+  type SelectItem,
+  SelectList,
+  Spacer,
+  Text,
+} from "@mariozechner/pi-tui";
+
 import {
   buildCandidates,
   candidateKey,
@@ -24,6 +31,7 @@ import {
   selectionReason,
   sortCandidates,
 } from "./src/candidates.js";
+
 import {
   getRawMappings,
   loadConfig,
@@ -32,7 +40,9 @@ import {
   updateWidgetConfig,
   upsertMapping,
 } from "./src/config.js";
+
 import { resolveZaiApiKey } from "./src/fetchers/zai.js";
+
 import type {
   LoadedConfig,
   MappingEntry,
@@ -43,28 +53,22 @@ import type {
   UsageSnapshot,
   WidgetConfig,
 } from "./src/types.js";
+
 import {
   ALL_PROVIDERS,
   notify,
   setGlobalConfig,
   writeDebugLog,
 } from "./src/types.js";
+
 import { fetchAllUsages, loadPiAuth } from "./src/usage-fetchers.js";
+
 import {
   clearWidget,
   getWidgetState,
   renderUsageWidget,
   updateWidgetState,
 } from "./src/widget.js";
-
-// Re-export for external use
-export type {
-  MappingEntry,
-  PriorityRule,
-  UsageCandidate,
-  LoadedConfig,
-  WidgetConfig,
-};
 
 // ============================================================================
 // Helpers
@@ -122,7 +126,11 @@ async function selectWrapped(
   if (!ctx.hasUI) return options[0];
 
   // In tests, fall back to standard select for easier mocking
-  if (process.env.VITEST) {
+  const isVitest =
+    (import.meta as unknown as { env?: { VITEST?: boolean } }).env?.VITEST ||
+    (typeof process !== "undefined" && !!process.env.VITEST);
+
+  if (isVitest || !ctx.ui.custom) {
     return ctx.ui.select(title, options);
   }
 
@@ -139,7 +147,7 @@ async function selectWrapped(
       Math.min(items.length, 15),
       getSelectListTheme(),
     );
-    selectList.onSelect = (item) => done(item.value);
+    selectList.onSelect = (item: SelectItem) => done(item.value);
     selectList.onCancel = () => done(undefined);
     container.addChild(selectList);
 
@@ -426,8 +434,8 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
     cachedPiAuth: Record<string, unknown> | null = null;
 
   const loadAuth = async (): Promise<Record<string, unknown>> => {
-      if (cachedPiAuth) return cachedPiAuth;
-      cachedPiAuth = await loadPiAuth();
+      if (cachedPiAuth !== null) return cachedPiAuth;
+      cachedPiAuth = (await loadPiAuth()) || {};
       return cachedPiAuth;
     },
     loadCandidates = async (): Promise<UsageCandidate[] | null> => {
@@ -442,10 +450,11 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
       // For the wizard, we want to see everything, including members of combinations
       // so users can remove their individual combination mappings.
       const dedupedRaw = dedupeCandidates(rawCandidates);
-      const syntheticOnly = combined.filter((c) => c.isSynthetic);
-      const dedupedCombined = dedupeCandidates(syntheticOnly);
+      const syntheticOnly = combined.filter(
+        (c: UsageCandidate) => c.isSynthetic,
+      );
       // Avoid cross-deduping raw vs. synthetic candidates so both remain visible.
-      const candidates = [...dedupedRaw, ...dedupedCombined];
+      const candidates = [...dedupedRaw, ...syntheticOnly];
       if (candidates.length === 0) {
         let detail =
           "No usage windows found. Check provider credentials and connectivity.";
@@ -647,7 +656,10 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
             const filtered = existing.filter((entry: unknown) => {
               if (!entry || typeof entry !== "object") return true;
               const e = entry as MappingEntry;
-              if (e.combine !== selectedCandidate.windowLabel) return true;
+              const combineRaw =
+                typeof e.combine === "string" ? e.combine.trim() : e.combine;
+              const targetLabel = selectedCandidate.windowLabel.trim();
+              if (combineRaw !== targetLabel) return true;
 
               const isMatch =
                 e.usage?.provider === selectedCandidate.provider &&
@@ -821,10 +833,12 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
           actionChoice === "Combine by pattern"
         ) {
           const existingCombineNames = Array.from(
-            new Set(
+            new Set<string>(
               config.mappings
-                .map((m) => m.combine)
-                .filter((name): name is string => typeof name === "string"),
+                .map((m: MappingEntry) => m.combine)
+                .filter(
+                  (name: unknown): name is string => typeof name === "string",
+                ),
             ),
           ).sort();
 
@@ -1109,16 +1123,15 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
           : config.sources.globalPath;
 
       const currentRawDisabled = Array.isArray(targetRaw.disabledProviders)
-        ? targetRaw.disabledProviders.filter(
-            (value): value is ProviderName =>
+        ? (targetRaw.disabledProviders as unknown[]).filter(
+            (value: unknown): value is ProviderName =>
               typeof value === "string" &&
-              ALL_PROVIDERS.includes(value as ProviderName),
+              (ALL_PROVIDERS as readonly string[]).includes(value),
           )
         : [];
 
-      // Check credentials for all providers in parallel to avoid UI sluggishness
       const credentialChecks = await Promise.all(
-        ALL_PROVIDERS.map((provider) =>
+        ALL_PROVIDERS.map((provider: ProviderName) =>
           hasProviderCredential(provider, piAuth, ctx.modelRegistry).then(
             (hasCredentials) => ({ provider, hasCredentials }),
           ),
@@ -1127,9 +1140,13 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 
       const providerOptions: string[] = [];
       for (const { provider, hasCredentials } of credentialChecks) {
-        const disabledInTarget = currentRawDisabled.includes(provider);
-        const providerLabel = PROVIDER_LABELS[provider];
-        const mergedDisabled = config.disabledProviders.includes(provider);
+        const disabledInTarget = currentRawDisabled.includes(
+          provider as ProviderName,
+        );
+        const providerLabel = PROVIDER_LABELS[provider as ProviderName];
+        const mergedDisabled = config.disabledProviders.includes(
+          provider as ProviderName,
+        );
 
         let statusLabel = disabledInTarget ? "⏸ disabled" : "✅ enabled";
         if (disabledInTarget !== mergedDisabled) {
@@ -1151,7 +1168,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
       const selectedIndex = providerOptions.indexOf(selectedProviderLabel);
       if (selectedIndex < 0) return;
 
-      const selectedProvider = ALL_PROVIDERS[selectedIndex],
+      const selectedProvider = ALL_PROVIDERS[selectedIndex] as ProviderName,
         currentlyDisabledInTarget =
           currentRawDisabled.includes(selectedProvider),
         nextDisabled = !currentlyDisabledInTarget,
@@ -1179,7 +1196,8 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 
       cachedUsages = null;
 
-      const selectedProviderLabelFriendly = PROVIDER_LABELS[selectedProvider];
+      const selectedProviderLabelFriendly =
+        PROVIDER_LABELS[selectedProvider as ProviderName];
       const isActuallyDisabled =
         config.disabledProviders.includes(selectedProvider);
       const scopeLabel = saveToProject ? "Project" : "Global";
@@ -1421,16 +1439,17 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
         config.mappings,
       );
       let eligibleCandidates = candidates.filter(
-        (candidate) => !findIgnoreMapping(candidate, config.mappings),
+        (candidate: UsageCandidate) =>
+          !findIgnoreMapping(candidate, config.mappings),
       );
 
       // Filter out cooldowns - reuse the now captured earlier for consistency
-      const cooldownCount = eligibleCandidates.filter((c) =>
+      const cooldownCount = eligibleCandidates.filter((c: UsageCandidate) =>
         isOnCooldown(c, now),
       ).length;
       if (cooldownCount > 0) {
         eligibleCandidates = eligibleCandidates.filter(
-          (c) => !isOnCooldown(c, now),
+          (c: UsageCandidate) => !isOnCooldown(c, now),
         );
         if (reason === "command") {
           notify(
@@ -1451,7 +1470,8 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
           modelCooldowns.clear();
           await persistCooldowns();
           eligibleCandidates = candidates.filter(
-            (candidate) => !findIgnoreMapping(candidate, config.mappings),
+            (candidate: UsageCandidate) =>
+              !findIgnoreMapping(candidate, config.mappings),
           );
         } else {
           const detail =
@@ -1611,13 +1631,17 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
 
       if (!lastSelectedCandidateKey) {
         const candidates = combineCandidates(
-            buildCandidates(usages),
-            config.mappings,
-          ),
-          eligible = candidates.filter(
-            (c) => !findIgnoreMapping(c, config.mappings),
-          ),
-          ranked = sortCandidates(eligible, config.priority, config.mappings);
+          buildCandidates(usages),
+          config.mappings,
+        );
+        const eligible = candidates.filter(
+          (c: UsageCandidate) => !findIgnoreMapping(c, config.mappings),
+        );
+        const ranked = sortCandidates(
+          eligible,
+          config.priority,
+          config.mappings,
+        );
         if (ranked.length > 0) {
           lastSelectedCandidateKey = candidateKey(ranked[0]);
         }

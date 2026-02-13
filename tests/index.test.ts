@@ -5,16 +5,18 @@ import * as configMod from "../src/config.js";
 import * as usageFetchers from "../src/usage-fetchers.js";
 
 // Mock node:fs to prevent real file operations
-vi.mock("node:fs", async () => {
+vi.mock(import("node:fs"), async (importOriginal) => {
+  const actual = await importOriginal();
   return {
-    existsSync: vi.fn(),
-    unlinkSync: vi.fn(),
+    ...actual,
+    existsSync: vi.fn(actual.existsSync),
     promises: {
-      access: vi.fn(),
-      readFile: vi.fn(),
-      writeFile: vi.fn(),
-      rename: vi.fn(),
-      mkdir: vi.fn(),
+      ...actual.promises,
+      access: vi.fn().mockResolvedValue(undefined),
+      readFile: vi.fn().mockResolvedValue("{}"),
+      writeFile: vi.fn().mockResolvedValue(undefined),
+      rename: vi.fn().mockResolvedValue(undefined),
+      mkdir: vi.fn().mockResolvedValue(undefined),
     },
   };
 });

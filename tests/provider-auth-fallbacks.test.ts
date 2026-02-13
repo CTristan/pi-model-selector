@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import * as os from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   fetchClaudeUsage,
@@ -6,10 +7,19 @@ import {
   refreshGoogleToken,
 } from "../src/usage-fetchers.js";
 
+vi.mock("node:os", async () => {
+  const actual = await vi.importActual<typeof import("node:os")>("node:os");
+  return {
+    ...actual,
+    platform: vi.fn(),
+  };
+});
+
 describe("Provider auth fallback behavior", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.stubGlobal("fetch", vi.fn());
+    vi.mocked(os.platform).mockReturnValue("linux");
   });
 
   afterEach(() => {

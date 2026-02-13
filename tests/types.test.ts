@@ -1,24 +1,33 @@
 import * as fs from "node:fs";
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LoadedConfig, MappingEntry } from "../src/types.js";
 import {
   DEFAULT_PRIORITY,
   mappingKey,
   notify,
+  resetGlobalState,
   setGlobalConfig,
   writeDebugLog,
 } from "../src/types.js";
 
 vi.mock("node:fs", () => ({
-  mkdir: vi.fn(),
-  appendFile: vi.fn(),
+  mkdir: vi.fn((_path, _options, cb) => {
+    if (typeof _options === "function") cb = _options;
+    if (cb) cb(null);
+  }),
+  appendFile: vi.fn((_path, _data, cb) => {
+    if (cb) cb(null);
+  }),
 }));
 
 describe("Types / Utilities", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Reset global config state if possible, or just re-set it in tests
+  });
+
+  afterEach(() => {
+    resetGlobalState();
   });
 
   it("should generate correct mapping keys", () => {

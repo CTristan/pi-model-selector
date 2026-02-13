@@ -265,6 +265,7 @@ export function findCombinationMapping(
   candidate: UsageCandidate,
   mappings: MappingEntry[],
 ): MappingEntry | undefined {
+  if (candidate.isSynthetic) return undefined;
   return findMappingBy(
     candidate,
     mappings,
@@ -273,7 +274,7 @@ export function findCombinationMapping(
 }
 
 export function candidateKey(candidate: UsageCandidate): string {
-  return `${candidate.provider}|${candidate.account ?? ""}|${candidate.windowLabel}`;
+  return `${candidate.provider}|${candidate.account ?? ""}|${candidate.windowLabel}|${candidate.isSynthetic ? "synthetic" : "raw"}`;
 }
 
 export function dedupeCandidates(
@@ -294,7 +295,13 @@ export function combineCandidates(
   candidates: UsageCandidate[],
   mappings: MappingEntry[],
 ): UsageCandidate[] {
-  const groupMap = new Map<string, UsageCandidate[]>();
+  type GroupData = {
+    provider: string;
+    account: string | undefined;
+    groupName: string;
+    members: UsageCandidate[];
+  };
+  const groupMap = new Map<string, GroupData>();
   const nonGrouped: UsageCandidate[] = [];
 
   for (const candidate of candidates) {
@@ -304,13 +311,22 @@ export function combineCandidates(
       (m) => m.combine !== undefined,
     );
     if (combineMapping?.combine) {
-      const groupName = combineMapping.combine;
-      // Use provider + account + groupName to keep combinations scoped
-      const groupKey = `${candidate.provider}|${candidate.account ?? ""}|${groupName}`;
+      const groupName = combineMapping.combine.trim();
+      // Use JSON.stringify for a safe, unique key
+      const groupKey = JSON.stringify([
+        candidate.provider,
+        candidate.account,
+        groupName,
+      ]);
       if (!groupMap.has(groupKey)) {
-        groupMap.set(groupKey, []);
+        groupMap.set(groupKey, {
+          provider: candidate.provider,
+          account: candidate.account,
+          groupName,
+          members: [],
+        });
       }
-      groupMap.get(groupKey)?.push(candidate);
+      groupMap.get(groupKey)?.members.push(candidate);
     } else {
       nonGrouped.push(candidate);
     }
@@ -318,13 +334,8 @@ export function combineCandidates(
 
   const result: UsageCandidate[] = [...nonGrouped];
 
-  for (const [groupKey, members] of groupMap.entries()) {
+  for (const { provider, account, groupName, members } of groupMap.values()) {
     if (members.length === 0) continue;
-
-    const parts = groupKey.split("|"),
-      provider = parts[0],
-      account = parts[1],
-      groupName = parts.slice(2).join("|");
 
     // Whichever one has the least remaining availability
     let bottleneck = members[0];

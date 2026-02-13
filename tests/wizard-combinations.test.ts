@@ -10,15 +10,20 @@ import type {
 import * as usageFetchers from "../src/usage-fetchers.js";
 
 // Mocks
-vi.mock("node:fs", () => ({
-  promises: {
-    access: vi.fn().mockResolvedValue(undefined),
-    readFile: vi.fn().mockResolvedValue("{}"),
-    writeFile: vi.fn().mockResolvedValue(undefined),
-    rename: vi.fn().mockResolvedValue(undefined),
-    mkdir: vi.fn().mockResolvedValue(undefined),
-  },
-}));
+vi.mock("node:fs", async (importOriginal) => {
+  const actual = (await importOriginal()) as any;
+  return {
+    ...actual,
+    promises: {
+      ...actual.promises,
+      access: vi.fn().mockResolvedValue(undefined),
+      readFile: vi.fn().mockResolvedValue("{}"),
+      writeFile: vi.fn().mockResolvedValue(undefined),
+      rename: vi.fn().mockResolvedValue(undefined),
+      mkdir: vi.fn().mockResolvedValue(undefined),
+    },
+  };
+});
 
 vi.mock("node:os", () => ({
   homedir: () => "/mock/home",

@@ -1,6 +1,16 @@
+import * as os from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { execAsync } from "../src/fetchers/common.js";
 import { fetchCopilotUsage } from "../src/fetchers/copilot.js";
+import { resetGlobalState } from "../src/types.js";
+
+vi.mock("node:os", async () => {
+  const actual = await vi.importActual<typeof import("node:os")>("node:os");
+  return {
+    ...actual,
+    platform: vi.fn(),
+  };
+});
 
 vi.mock("../src/fetchers/common.js", async () => {
   const actual = await vi.importActual<
@@ -14,21 +24,28 @@ vi.mock("../src/fetchers/common.js", async () => {
 
 describe("Copilot Deduplication", () => {
   beforeEach(() => {
+    vi.useFakeTimers();
     vi.resetAllMocks();
     vi.stubGlobal("fetch", vi.fn());
     vi.mocked(execAsync).mockResolvedValue({ stdout: "", stderr: "" });
+    vi.mocked(os.platform).mockReturnValue("linux");
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
+    resetGlobalState();
   });
 
   it("should deduplicate by account, preferring success over error", async () => {
     // Mock tokens
     const modelRegistry = {
       authStorage: {
-        getApiKey: vi.fn().mockResolvedValue("tok1"),
-        get: vi.fn().mockResolvedValue({}),
+        getApiKey: (id: string) =>
+          id === "github-copilot"
+            ? Promise.resolve("tok1")
+            : Promise.resolve(undefined),
+        get: () => Promise.resolve(undefined),
       },
     };
 
@@ -82,8 +99,11 @@ describe("Copilot Deduplication", () => {
     // Mock tokens
     const modelRegistry = {
       authStorage: {
-        getApiKey: vi.fn().mockResolvedValue("tok1"),
-        get: vi.fn().mockResolvedValue({}),
+        getApiKey: (id: string) =>
+          id === "github-copilot"
+            ? Promise.resolve("tok1")
+            : Promise.resolve(undefined),
+        get: () => Promise.resolve(undefined),
       },
     };
 
