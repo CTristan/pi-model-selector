@@ -33,6 +33,7 @@ import {
 } from "./src/candidates.js";
 
 import {
+  cleanupConfigRaw,
   getRawMappings,
   loadConfig,
   removeMapping,
@@ -1215,6 +1216,67 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         `${nextDisabled ? "Disabled" : "Enabled"} ${selectedProviderLabelFriendly} in ${scopeLabel} config. Overall status: ${isActuallyDisabled ? "Disabled" : "Enabled"}.`,
       );
     },
+    configureCleanup = async (): Promise<void> => {
+      const locationChoice = await selectWrapped(
+        ctx,
+        "Select config file to clean",
+        locationLabels,
+      );
+      if (!locationChoice) return;
+
+      const saveToProject = locationChoice === locationLabels[1],
+        targetRaw = saveToProject ? config.raw.project : config.raw.global,
+        targetPath = saveToProject
+          ? config.sources.projectPath
+          : config.sources.globalPath,
+        candidateRaw = JSON.parse(JSON.stringify(targetRaw)) as Record<
+          string,
+          unknown
+        >,
+        cleanupResult = cleanupConfigRaw(candidateRaw, {
+          scope: saveToProject ? "project" : "global",
+        });
+
+      if (!cleanupResult.changed) {
+        notify(ctx, "info", `No cleanup changes needed for ${targetPath}.`);
+        return;
+      }
+
+      const summaryLines = cleanupResult.summary.map((item) => `• ${item}`),
+        confirmed = await ctx.ui.confirm(
+          "Apply config cleanup?",
+          `This will update ${targetPath}:\n${summaryLines.join("\n")}`,
+        );
+      if (!confirmed) {
+        notify(ctx, "info", "Config cleanup cancelled.");
+        return;
+      }
+
+      try {
+        await saveConfigFile(targetPath, candidateRaw);
+      } catch (error: unknown) {
+        notify(ctx, "error", `Failed to write ${targetPath}: ${String(error)}`);
+        return;
+      }
+
+      const reloaded = await loadConfig(ctx, { requireMappings: false });
+      if (reloaded) {
+        config.mappings = reloaded.mappings;
+        config.priority = reloaded.priority;
+        config.widget = reloaded.widget;
+        config.autoRun = reloaded.autoRun;
+        config.disabledProviders = reloaded.disabledProviders;
+        config.debugLog = reloaded.debugLog;
+        config.raw = reloaded.raw;
+      }
+
+      cachedUsages = null;
+      notify(
+        ctx,
+        "info",
+        `Config cleanup applied to ${targetPath}: ${cleanupResult.summary.join(" ")}`,
+      );
+    },
     menuOptions = [
       "Edit mappings",
       "Configure providers",
@@ -1222,6 +1284,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
       "Configure widget",
       "Configure auto-run",
       "Configure debug log",
+      "Clean up config",
       "Done",
     ];
 
@@ -1260,8 +1323,11 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 
     if (action === "Configure debug log") {
       await configureDebugLog();
-      // biome-ignore lint/complexity/noUselessContinue: consistency with other handlers
       continue;
+    }
+
+    if (action === "Clean up config") {
+      await configureCleanup();
     }
   }
 }

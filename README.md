@@ -42,6 +42,7 @@ The extension runs automatically when you start a new session. You can also use 
   - Map usage "buckets" (e.g., Claude 5h limit) to specific Pi models.
   - Ignore specific buckets you don't want to use.
   - Set the priority order for selection.
+  - Run a config cleanup pass (remove unused `examples`, fix global debug log path, and remove invalid/duplicate mapping entries).
 
 ## Configuration
 

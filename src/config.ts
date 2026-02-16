@@ -457,6 +457,104 @@ export async function loadConfig(
 }
 
 // ============================================================================
+// Config Cleanup
+// ============================================================================
+
+export interface CleanupConfigResult {
+  changed: boolean;
+  summary: string[];
+  removedExamples: boolean;
+  fixedDebugLogPath: boolean;
+  removedInvalidMappings: number;
+  removedDuplicateMappings: number;
+}
+
+export function cleanupConfigRaw(
+  raw: Record<string, unknown>,
+  options: { scope?: "global" | "project" } = {},
+): CleanupConfigResult {
+  const summary: string[] = [];
+  let removedExamples = false,
+    fixedDebugLogPath = false,
+    removedInvalidMappings = 0,
+    removedDuplicateMappings = 0,
+    changed = false;
+
+  if (Object.hasOwn(raw, "examples")) {
+    delete raw.examples;
+    removedExamples = true;
+    changed = true;
+    summary.push('Removed unused top-level "examples" block.');
+  }
+
+  if (raw.debugLog && typeof raw.debugLog === "object") {
+    const debug = raw.debugLog as Record<string, unknown>;
+    if (options.scope === "global" && typeof debug.path === "string") {
+      const originalPath = debug.path.trim(),
+        correctedPath = originalPath.replace(/^(?:\.\/)?\.pi\//, "");
+      if (correctedPath.length > 0 && correctedPath !== originalPath) {
+        debug.path = correctedPath;
+        fixedDebugLogPath = true;
+        changed = true;
+        summary.push(
+          `Fixed global debug log path from "${originalPath}" to "${correctedPath}".`,
+        );
+      }
+    }
+  }
+
+  if (Array.isArray(raw.mappings)) {
+    const originalMappings = raw.mappings,
+      shape = asConfigShape({ mappings: originalMappings }),
+      errors: string[] = [],
+      normalizedMappings = normalizeMappings(shape, "<cleanup>", errors);
+
+    removedInvalidMappings = Math.max(
+      0,
+      originalMappings.length - normalizedMappings.length,
+    );
+
+    const dedupedByKey = new Map<string, MappingEntry>();
+    for (const mapping of normalizedMappings) {
+      const key = mappingKey(mapping);
+      dedupedByKey.set(key, mapping);
+    }
+
+    const dedupedMappings = Array.from(dedupedByKey.values());
+    removedDuplicateMappings = Math.max(
+      0,
+      normalizedMappings.length - dedupedMappings.length,
+    );
+
+    if (removedInvalidMappings > 0 || removedDuplicateMappings > 0) {
+      raw.mappings = dedupedMappings;
+      changed = true;
+    }
+
+    if (removedInvalidMappings > 0) {
+      summary.push(
+        `Removed ${removedInvalidMappings} invalid mapping entr${removedInvalidMappings === 1 ? "y" : "ies"}.`,
+      );
+    }
+
+    if (removedDuplicateMappings > 0) {
+      summary.push(
+        `Removed ${removedDuplicateMappings} duplicate mapping entr${removedDuplicateMappings === 1 ? "y" : "ies"}.`,
+      );
+    }
+  }
+
+  return {
+    changed,
+    summary,
+    removedExamples,
+    fixedDebugLogPath,
+    removedInvalidMappings,
+    removedDuplicateMappings,
+  };
+}
+
+// ============================================================================
 // Config Mutation
 // ============================================================================
 
