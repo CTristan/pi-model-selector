@@ -1328,6 +1328,8 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 
     if (action === "Clean up config") {
       await configureCleanup();
+      // biome-ignore lint/complexity/noUselessContinue: consistency with other handlers
+      continue;
     }
   }
 }
