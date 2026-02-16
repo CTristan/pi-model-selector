@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  cleanupConfigRaw,
   loadConfig,
   removeMapping,
   saveConfigFile,
@@ -268,6 +269,74 @@ describe("Config Loading", () => {
       "fail",
     );
     expect(fs.promises.unlink).toHaveBeenCalled();
+  });
+});
+
+describe("Config Cleanup", () => {
+  it("removes unused examples, fixes global debug path, and deduplicates mappings", () => {
+    const raw: Record<string, unknown> = {
+      debugLog: { enabled: true, path: ".pi/model-selector.log" },
+      examples: [{ usage: { provider: "p1", window: "w1" } }],
+      mappings: [
+        {
+          usage: { provider: "p1", window: "w1" },
+          model: { provider: "p1", id: "m1" },
+        },
+        {
+          usage: { provider: "p1" }, // invalid (no model/ignore/combine)
+        },
+        {
+          usage: { provider: "p1", window: "w1" },
+          model: { provider: "p1", id: "m2" },
+        },
+      ],
+    };
+
+    const result = cleanupConfigRaw(raw, { scope: "global" });
+
+    expect(result.changed).toBe(true);
+    expect(result.removedExamples).toBe(true);
+    expect(result.fixedDebugLogPath).toBe(true);
+    expect(result.removedInvalidMappings).toBe(1);
+    expect(result.removedDuplicateMappings).toBe(1);
+
+    expect(raw.examples).toBeUndefined();
+    expect((raw.debugLog as Record<string, unknown>).path).toBe(
+      "model-selector.log",
+    );
+    expect(raw.mappings).toEqual([
+      {
+        usage: {
+          provider: "p1",
+          account: undefined,
+          window: "w1",
+          windowPattern: undefined,
+        },
+        model: { provider: "p1", id: "m2" },
+        ignore: false,
+        combine: undefined,
+      },
+    ]);
+  });
+
+  it("keeps project debug paths unchanged", () => {
+    const raw: Record<string, unknown> = {
+      debugLog: { enabled: true, path: ".pi/model-selector.log" },
+      mappings: [
+        {
+          usage: { provider: "p1", window: "w1" },
+          model: { provider: "p1", id: "m1" },
+        },
+      ],
+    };
+
+    const result = cleanupConfigRaw(raw, { scope: "project" });
+
+    expect(result.changed).toBe(false);
+    expect(result.fixedDebugLogPath).toBe(false);
+    expect((raw.debugLog as Record<string, unknown>).path).toBe(
+      ".pi/model-selector.log",
+    );
   });
 });
 
