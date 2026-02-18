@@ -1272,8 +1272,13 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
               ? (provider, id) => {
                   try {
                     return Boolean(modelFinder(provider, id));
-                  } catch {
-                    return false;
+                  } catch (error) {
+                    writeDebugLog(
+                      `Error while checking model existence for ${provider}/${id}: ${String(
+                        error,
+                      )}`,
+                    );
+                    throw error;
                   }
                 }
               : undefined,
@@ -1445,7 +1450,8 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
   let cooldownsLoaded = false,
     lastSelectedCandidateKey: string | null = null,
     activeModelLockKey: string | null = null,
-    lockHeartbeatTimer: NodeJS.Timeout | null = null;
+    lockHeartbeatTimer: NodeJS.Timeout | null = null,
+    heartbeatInProgress = false;
 
   // Load persisted cooldown state from file
   const loadPersistedCooldowns = async (): Promise<void> => {
@@ -1546,12 +1552,18 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
         clearInterval(lockHeartbeatTimer);
         lockHeartbeatTimer = null;
       }
+      heartbeatInProgress = false;
     },
     startLockHeartbeat = (lockKey: string): void => {
       stopLockHeartbeat();
       lockHeartbeatTimer = setInterval(() => {
         void (async () => {
+          if (heartbeatInProgress) {
+            return;
+          }
+
           try {
+            heartbeatInProgress = true;
             const stillHeld = await modelLockCoordinator.refresh(lockKey);
             if (!stillHeld) {
               if (activeModelLockKey === lockKey) {
@@ -1569,6 +1581,8 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
                 err,
               )}`,
             );
+          } finally {
+            heartbeatInProgress = false;
           }
         })();
       }, MODEL_LOCK_HEARTBEAT_MS);
@@ -1579,7 +1593,13 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
       const lockKey = activeModelLockKey;
       activeModelLockKey = null;
       stopLockHeartbeat();
-      await modelLockCoordinator.release(lockKey);
+      try {
+        await modelLockCoordinator.release(lockKey);
+      } catch (err) {
+        writeDebugLog(
+          `Error while releasing model lock for key "${lockKey}": ${String(err)}`,
+        );
+      }
     };
 
   let running = false;

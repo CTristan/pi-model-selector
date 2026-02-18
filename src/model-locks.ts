@@ -242,9 +242,14 @@ export class ModelLockCoordinator {
 
     try {
       const state = await this.readState();
+      const before = JSON.stringify(state);
       this.pruneStaleLocks(state);
       const result = mutate(state);
-      await this.writeState(state);
+      const after = JSON.stringify(state);
+      // Only write if state actually changed to avoid unnecessary disk churn
+      if (before !== after) {
+        await this.writeState(state);
+      }
       return result;
     } finally {
       await this.releaseStateLock(fileHandle);
