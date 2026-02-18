@@ -519,8 +519,11 @@ export function cleanupConfigRaw(
         if (!mapping.model || !options.modelExists) return true;
         try {
           return options.modelExists(mapping.model.provider, mapping.model.id);
-        } catch {
-          return false;
+        } catch (err) {
+          summary.push(
+            `Could not verify availability of model "${mapping.model.provider}/${mapping.model.id}" due to an error; keeping the mapping. Error: ${String(err)}`,
+          );
+          return true;
         }
       });
 

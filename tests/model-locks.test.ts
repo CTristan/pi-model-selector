@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createModelLockCoordinator,
   modelLockKey,
@@ -251,6 +251,35 @@ describe("model locks", () => {
     await expect(
       coordinator.acquire("anthropic/sonnet", { timeoutMs: 0 }),
     ).rejects.toThrow("Timed out waiting for model-selector state lock");
+  });
+
+  it("removes temporary state files when writes fail", async () => {
+    const { statePath } = createTempStatePath();
+    const coordinator = createModelLockCoordinator({
+      statePath,
+      instanceId: "inst-write-fail",
+      pid: 9150,
+    });
+
+    const renameSpy = vi
+      .spyOn(fs.promises, "rename")
+      .mockRejectedValueOnce(new Error("rename failed"));
+
+    try {
+      await expect(
+        coordinator.acquire("anthropic/sonnet", { timeoutMs: 0 }),
+      ).rejects.toThrow("rename failed");
+    } finally {
+      renameSpy.mockRestore();
+    }
+
+    const stateDir = path.dirname(statePath),
+      stateBase = path.basename(statePath),
+      tempFiles = fs
+        .readdirSync(stateDir)
+        .filter((name) => name.startsWith(`${stateBase}.tmp.`));
+
+    expect(tempFiles).toEqual([]);
   });
 
   it("handles malformed state files gracefully", async () => {

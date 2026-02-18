@@ -262,12 +262,21 @@ export class ModelLockCoordinator {
 
   private async writeState(state: ModelLockState): Promise<void> {
     const tempPath = `${this.statePath}.tmp.${Math.random().toString(36).slice(2)}`;
-    await fs.promises.writeFile(
-      tempPath,
-      JSON.stringify(state, null, 2),
-      "utf-8",
-    );
-    await fs.promises.rename(tempPath, this.statePath);
+    try {
+      await fs.promises.writeFile(
+        tempPath,
+        JSON.stringify(state, null, 2),
+        "utf-8",
+      );
+      await fs.promises.rename(tempPath, this.statePath);
+    } catch (error) {
+      try {
+        await fs.promises.unlink(tempPath);
+      } catch {
+        // best-effort cleanup; ignore unlink errors
+      }
+      throw error;
+    }
   }
 
   private pruneStaleLocks(state: ModelLockState): void {

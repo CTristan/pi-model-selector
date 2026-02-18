@@ -1550,7 +1550,27 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
     startLockHeartbeat = (lockKey: string): void => {
       stopLockHeartbeat();
       lockHeartbeatTimer = setInterval(() => {
-        void modelLockCoordinator.refresh(lockKey);
+        void (async () => {
+          try {
+            const stillHeld = await modelLockCoordinator.refresh(lockKey);
+            if (!stillHeld) {
+              if (activeModelLockKey === lockKey) {
+                activeModelLockKey = null;
+              }
+              stopLockHeartbeat();
+              writeDebugLog(
+                `Model lock heartbeat lost lock for key "${lockKey}", stopping heartbeat.`,
+              );
+            }
+          } catch (err) {
+            stopLockHeartbeat();
+            writeDebugLog(
+              `Error while refreshing model lock heartbeat for key "${lockKey}": ${String(
+                err,
+              )}`,
+            );
+          }
+        })();
       }, MODEL_LOCK_HEARTBEAT_MS);
       lockHeartbeatTimer.unref?.();
     },

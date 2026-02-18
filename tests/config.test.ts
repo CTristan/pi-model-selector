@@ -355,6 +355,31 @@ describe("Config Cleanup", () => {
     );
   });
 
+  it("keeps mappings when model availability checks throw", () => {
+    const raw: Record<string, unknown> = {
+      mappings: [
+        {
+          usage: { provider: "p1", window: "w1" },
+          model: { provider: "google", id: "gemini-1.5-flash" },
+        },
+      ],
+    };
+
+    const result = cleanupConfigRaw(raw, {
+      scope: "global",
+      modelExists: () => {
+        throw new Error("registry temporarily unavailable");
+      },
+    });
+
+    expect(result.changed).toBe(false);
+    expect(result.removedUnavailableModelMappings).toBe(0);
+    expect(raw.mappings as MappingEntry[]).toHaveLength(1);
+    expect(result.summary.join(" ")).toContain(
+      'Could not verify availability of model "google/gemini-1.5-flash"',
+    );
+  });
+
   it("keeps project debug paths unchanged", () => {
     const raw: Record<string, unknown> = {
       debugLog: { enabled: true, path: ".pi/model-selector.log" },

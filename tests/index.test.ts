@@ -391,4 +391,34 @@ describe("Model Selector Extension", () => {
 
     expect(secondExpiry).toBeGreaterThan(firstExpiry);
   });
+
+  it("stops lock heartbeat after losing lock ownership", async () => {
+    vi.useFakeTimers();
+
+    modelSelectorExtension(pi);
+    const beforeAgentStart = events.before_agent_start,
+      agentEnd = events.agent_end;
+
+    expect(beforeAgentStart).toBeTypeOf("function");
+    expect(agentEnd).toBeTypeOf("function");
+
+    await beforeAgentStart({}, ctx);
+
+    const countModelLockWrites = (): number =>
+      vi
+        .mocked(fs.promises.writeFile)
+        .mock.calls.filter(
+          ([filePath]) =>
+            typeof filePath === "string" &&
+            filePath.includes("model-selector-model-locks.json.tmp."),
+        ).length;
+
+    expect(countModelLockWrites()).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(countModelLockWrites()).toBe(2);
+
+    await agentEnd({}, ctx);
+    expect(countModelLockWrites()).toBe(2);
+  });
 });
