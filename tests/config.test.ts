@@ -3,6 +3,7 @@ import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanupConfigRaw,
+  clearBucketMappings,
   loadConfig,
   removeMapping,
   saveConfigFile,
@@ -299,6 +300,7 @@ describe("Config Cleanup", () => {
     expect(result.fixedDebugLogPath).toBe(true);
     expect(result.removedInvalidMappings).toBe(1);
     expect(result.removedDuplicateMappings).toBe(1);
+    expect(result.removedUnavailableModelMappings).toBe(0);
 
     expect(raw.examples).toBeUndefined();
     expect((raw.debugLog as Record<string, unknown>).path).toBe(
@@ -317,6 +319,40 @@ describe("Config Cleanup", () => {
         combine: undefined,
       },
     ]);
+  });
+
+  it("removes model mappings that do not resolve to a Pi provider/id", () => {
+    const raw: Record<string, unknown> = {
+      mappings: [
+        {
+          usage: { provider: "p1", window: "w1" },
+          model: { provider: "google", id: "gemini-1.5-flash" },
+        },
+        {
+          usage: { provider: "p2", window: "w2" },
+          model: { provider: "google", id: "missing-model" },
+        },
+        {
+          usage: { provider: "p3", window: "w3" },
+          ignore: true,
+        },
+      ],
+    };
+
+    const result = cleanupConfigRaw(raw, {
+      scope: "global",
+      modelExists: (provider, id) =>
+        provider === "google" && id === "gemini-1.5-flash",
+    });
+
+    expect(result.changed).toBe(true);
+    expect(result.removedUnavailableModelMappings).toBe(1);
+    const cleanedMappings = raw.mappings as MappingEntry[];
+    expect(cleanedMappings).toHaveLength(2);
+    expect(cleanedMappings.some((m) => m.usage.provider === "p2")).toBe(false);
+    expect(result.summary.join(" ")).toContain(
+      "unavailable Pi model provider/id combinations",
+    );
   });
 
   it("keeps project debug paths unchanged", () => {
@@ -358,6 +394,83 @@ describe("Config Mutation", () => {
     upsertMapping(raw, updated);
     expect(raw.mappings).toHaveLength(1);
     expect((raw.mappings as MappingEntry[])[0].model?.id).toBe("m2");
+  });
+
+  it("should clear exact bucket mappings for both generic and account-specific entries", () => {
+    const raw: Record<string, unknown> = {
+      mappings: [
+        {
+          usage: { provider: "codex", window: "1w" },
+          model: { provider: "openai-codex", id: "gpt-5" },
+        },
+        {
+          usage: { provider: "codex", account: "acct-1", window: "1w" },
+          combine: "Codex Combined",
+        },
+        {
+          usage: { provider: "codex", account: "acct-2", window: "1w" },
+          ignore: true,
+        },
+        {
+          usage: { provider: "codex", account: "acct-1", window: "5h" },
+          ignore: true,
+        },
+      ],
+    };
+
+    const removed = clearBucketMappings(raw, {
+      provider: "codex",
+      account: "acct-1",
+      window: "1w",
+    });
+
+    expect(removed).toBe(2);
+    expect(raw.mappings).toEqual([
+      {
+        usage: { provider: "codex", account: "acct-2", window: "1w" },
+        ignore: true,
+      },
+      {
+        usage: { provider: "codex", account: "acct-1", window: "5h" },
+        ignore: true,
+      },
+    ]);
+  });
+
+  it("should clear only generic mappings when candidate has no account", () => {
+    const raw: Record<string, unknown> = {
+      mappings: [
+        {
+          usage: { provider: "anthropic", window: "Week" },
+          model: { provider: "anthropic", id: "claude-opus-4-5" },
+        },
+        {
+          usage: {
+            provider: "anthropic",
+            account: "registry:anthropic:apiKey",
+            window: "Week",
+          },
+          combine: "Anthropic Combined",
+        },
+      ],
+    };
+
+    const removed = clearBucketMappings(raw, {
+      provider: "anthropic",
+      window: "Week",
+    });
+
+    expect(removed).toBe(1);
+    expect(raw.mappings).toEqual([
+      {
+        usage: {
+          provider: "anthropic",
+          account: "registry:anthropic:apiKey",
+          window: "Week",
+        },
+        combine: "Anthropic Combined",
+      },
+    ]);
   });
 
   it("should update widget config", () => {

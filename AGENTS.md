@@ -10,15 +10,16 @@
 
 ### Entry Point
 
-- **`index.ts`**: Main extension entry point. Wires together all modules, registers commands (`/model-select`, `/model-select-config`, `/model-skip`), and handles session events. Implements the model cooldown persistence logic and the config wizard cleanup workflow.
+- **`index.ts`**: Main extension entry point. Wires together all modules, registers commands (`/model-select`, `/model-select-config`, `/model-skip`), and handles session events. Implements cooldown persistence, cross-instance model lock acquisition/release, and the config wizard cleanup workflow.
 
 ### Source Modules (`src/`)
 
 - **`src/types.ts`**: Core TypeScript interfaces and types (`UsageSnapshot`, `RateWindow`, `UsageCandidate`, `MappingEntry`, `LoadedConfig`, `WidgetConfig`). Also exports utility functions like `notify()` and default constants.
 - **`src/usage-fetchers.ts`**: Usage aggregation entry point. Exports `fetchAllUsages()` and re-exports fetcher utilities for compatibility.
 - **`src/fetchers/*.ts`**: Provider-specific usage fetchers and shared fetch utilities (`anthropic.ts`, `copilot.ts`, `gemini.ts`, `antigravity.ts`, `codex.ts`, `kiro.ts`, `zai.ts`, `common.ts`).
-- **`src/config.ts`**: Configuration loading, parsing, validation, saving, and cleanup. Handles merging global and project configs. Exports `loadConfig()`, `saveConfigFile()`, `cleanupConfigRaw()`, `upsertMapping()`, `updateWidgetConfig()`.
+- **`src/config.ts`**: Configuration loading, parsing, validation, saving, and cleanup. Handles merging global and project configs. Cleanup also prunes mappings that reference unavailable Pi provider/model IDs when a model resolver is provided. Exports `loadConfig()`, `saveConfigFile()`, `cleanupConfigRaw()`, `upsertMapping()`, `updateWidgetConfig()`.
 - **`src/candidates.ts`**: Candidate building and ranking logic. Exports `buildCandidates()`, `combineCandidates()`, `sortCandidates()`, `findModelMapping()`, `findIgnoreMapping()`, `selectionReason()`.
+- **`src/model-locks.ts`**: Cross-instance model lock coordinator. Manages cooperative per-model mutexes in `~/.pi/model-selector-model-locks.json` with heartbeat refresh, stale lock cleanup, and atomic file-based updates.
 - **`src/widget.ts`**: Visual sub-bar widget rendering. Displays top N ranked candidates with progress bars. Exports `updateWidgetState()`, `renderUsageWidget()`, `clearWidget()`.
 
 ### Documentation
@@ -48,12 +49,13 @@
 
 ## Data Flow
 
-1. **Trigger**: Extension runs on session start or `/model-select` command.
+1. **Trigger**: Extension runs on session start, `/model-select`, or `before_agent_start` (request preflight).
 2. **Configuration Load**: Reads and merges global + project configs.
 3. **Quota Retrieval**: Fetches usage from all configured providers in parallel.
-4. **Candidate Evaluation**: Builds candidates, applies combinations, filters ignored, sorts by priority.
+4. **Candidate Evaluation**: Builds candidates, applies combinations, filters ignored/cooldowned/exhausted (0% remaining), sorts by priority.
 5. **Widget Update**: Updates the visual widget with top N candidates.
 6. **Model Selection**: Selects best candidate, looks up mapping, calls `pi.setModel()`.
+7. **Lock Coordination**: For request preflight, acquires a per-model cross-instance lock (fall through ranked candidates; wait/poll only when all mapped models are busy).
 
 ## Cooldown Mechanism
 
@@ -62,6 +64,17 @@ To handle transient "No capacity" (503) errors that aren't reflected in quota us
 1. **`/model-skip` Command**: Manually triggers a 1-hour cooldown for the most recently selected usage bucket.
 2. **Persistence**: Cooldown state and the last selected model key are persisted to `~/.pi/model-selector-cooldowns.json`. This ensures cooldowns survive across Pi invocations (critical for print-mode automation).
 3. **Filtering**: `runSelector` filters out any candidates currently on cooldown before ranking.
+
+## Cross-Instance Model Lock Mechanism
+
+To ensure one Pi instance uses a given mapped model at a time:
+
+1. **Lock File**: Cooperative lock state is stored in `~/.pi/model-selector-model-locks.json`.
+2. **Acquire on Request**: During `before_agent_start`, selector attempts locks in ranked order and picks the first unlocked mapped model.
+3. **Wait/Poll Fallback**: If all mapped models are locked, selector waits and polls until one is released (or timeout).
+4. **Hold + Heartbeat**: Active lock is refreshed periodically while the agent runs.
+5. **Release**: Lock is released on `agent_end` and `session_shutdown`.
+6. **Stale Recovery**: Locks from dead or stale owners are cleaned up automatically.
 
 ## Configuration Schema
 
@@ -116,6 +129,7 @@ To handle transient "No capacity" (503) errors that aren't reflected in quota us
 - Keep ranking/comparison logic in `candidates.ts`
 - Keep UI/widget code in `widget.ts`
 - Keep config I/O in `config.ts`
+- Keep cross-instance lock coordination in `model-locks.ts`
 - Keep types and shared constants in `types.ts`
 
 ### Testing Best Practices

@@ -17,6 +17,11 @@ vi.mock("node:fs", async (importOriginal) => {
       writeFile: vi.fn().mockResolvedValue(undefined),
       rename: vi.fn().mockResolvedValue(undefined),
       mkdir: vi.fn().mockResolvedValue(undefined),
+      open: vi
+        .fn()
+        .mockResolvedValue({ close: vi.fn().mockResolvedValue(undefined) }),
+      unlink: vi.fn().mockResolvedValue(undefined),
+      stat: vi.fn().mockResolvedValue({ mtimeMs: Date.now() }),
     },
   };
 });
@@ -40,6 +45,7 @@ describe("Model Selector Extension", () => {
   let pi: any;
   let ctx: any;
   let commands: Record<string, (...args: any[]) => any> = {};
+  let events: Record<string, (...args: any[]) => any> = {};
 
   const getLastPersistedCooldownState = (): {
     cooldowns: Record<string, number>;
@@ -75,8 +81,11 @@ describe("Model Selector Extension", () => {
     vi.mocked(fs.promises.mkdir).mockResolvedValue(undefined);
 
     commands = {};
+    events = {};
     pi = {
-      on: vi.fn(),
+      on: vi.fn((eventName, handler) => {
+        events[eventName] = handler;
+      }),
       registerCommand: vi.fn((name, opts) => {
         commands[name] = opts.handler;
       }),
@@ -91,6 +100,7 @@ describe("Model Selector Extension", () => {
         notify: vi.fn(),
         select: vi.fn(),
         confirm: vi.fn(),
+        setStatus: vi.fn(),
       },
       hasUI: true,
     };
@@ -145,6 +155,42 @@ describe("Model Selector Extension", () => {
     );
   });
 
+  it("only fetches usage for providers referenced by mappings", async () => {
+    vi.mocked(configMod.loadConfig).mockResolvedValueOnce({
+      mappings: [
+        {
+          usage: { provider: "anthropic", window: "Sonnet" },
+          model: { provider: "anthropic", id: "claude-sonnet" },
+        },
+      ],
+      priority: ["remainingPercent"],
+      widget: { enabled: true, placement: "belowEditor", showCount: 3 },
+      autoRun: false,
+      disabledProviders: [],
+      sources: { globalPath: "", projectPath: "" },
+      raw: { global: {}, project: {} },
+    });
+
+    vi.mocked(usageFetchers.fetchAllUsages).mockResolvedValueOnce([
+      {
+        provider: "anthropic",
+        displayName: "Claude",
+        windows: [{ label: "Sonnet", usedPercent: 10, resetsAt: new Date() }],
+      },
+    ]);
+
+    modelSelectorExtension(pi);
+    const handler = commands["model-select"];
+
+    await handler({}, ctx);
+
+    const disabledProviders = vi.mocked(usageFetchers.fetchAllUsages).mock
+      .calls[0]?.[1] as string[];
+    expect(disabledProviders).toContain("gemini");
+    expect(disabledProviders).toContain("antigravity");
+    expect(disabledProviders).not.toContain("anthropic");
+  });
+
   it("should select best model on command", async () => {
     modelSelectorExtension(pi);
     const handler = commands["model-select"];
@@ -156,6 +202,70 @@ describe("Model Selector Extension", () => {
     expect(ctx.ui.notify).toHaveBeenCalledWith(
       expect.stringContaining("Already using p1/m1"),
       "info",
+    );
+  });
+
+  it("should skip zero-availability candidates", async () => {
+    vi.mocked(usageFetchers.fetchAllUsages).mockResolvedValue([
+      {
+        provider: "p1",
+        displayName: "Provider 1",
+        windows: [{ label: "w1", usedPercent: 100, resetsAt: new Date() }],
+      },
+      {
+        provider: "p2",
+        displayName: "Provider 2",
+        windows: [{ label: "w2", usedPercent: 20, resetsAt: new Date() }],
+      },
+    ]);
+
+    modelSelectorExtension(pi);
+    const handler = commands["model-select"];
+
+    await handler({}, ctx);
+
+    expect(pi.setModel).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: "p2", id: "m2" }),
+    );
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("Set model to p2/m2"),
+      "info",
+    );
+  });
+
+  it("should choose the next unlocked model before agent start", async () => {
+    const lockFileState = {
+      version: 1,
+      locks: {
+        "p1/m1": {
+          instanceId: "other-instance",
+          pid: 7777,
+          acquiredAt: Date.now(),
+          heartbeatAt: Date.now(),
+        },
+      },
+    };
+
+    vi.mocked(fs.promises.readFile).mockImplementation(async (filePath) => {
+      const file = String(filePath);
+      if (file.includes("model-selector-cooldowns.json")) {
+        return JSON.stringify({ cooldowns: {}, lastSelected: null });
+      }
+      if (file.includes("model-selector-model-locks.json")) {
+        return JSON.stringify(lockFileState);
+      }
+      return "{}";
+    });
+
+    modelSelectorExtension(pi);
+
+    const beforeAgentStart = events.before_agent_start;
+    expect(beforeAgentStart).toBeTypeOf("function");
+
+    await beforeAgentStart({}, ctx);
+
+    expect(pi.setModel).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: "p2", id: "m2" }),
     );
   });
 

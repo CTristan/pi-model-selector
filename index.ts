@@ -34,6 +34,7 @@ import {
 
 import {
   cleanupConfigRaw,
+  clearBucketMappings,
   getRawMappings,
   loadConfig,
   removeMapping,
@@ -43,7 +44,7 @@ import {
 } from "./src/config.js";
 
 import { resolveZaiApiKey } from "./src/fetchers/zai.js";
-
+import { createModelLockCoordinator, modelLockKey } from "./src/model-locks.js";
 import type {
   LoadedConfig,
   MappingEntry,
@@ -54,14 +55,12 @@ import type {
   UsageSnapshot,
   WidgetConfig,
 } from "./src/types.js";
-
 import {
   ALL_PROVIDERS,
   notify,
   setGlobalConfig,
   writeDebugLog,
 } from "./src/types.js";
-
 import { fetchAllUsages, loadPiAuth } from "./src/usage-fetchers.js";
 
 import {
@@ -210,6 +209,10 @@ const PROVIDER_LABELS: Record<ProviderName, string> = {
   kiro: "Kiro",
   zai: "z.ai",
 };
+
+function isProviderName(value: string): value is ProviderName {
+  return (ALL_PROVIDERS as readonly string[]).includes(value);
+}
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
@@ -912,6 +915,12 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         }
 
         try {
+          clearBucketMappings(targetRaw, {
+            provider: selectedCandidate.provider,
+            account: selectedCandidate.account,
+            window: selectedCandidate.windowLabel,
+          });
+
           upsertMapping(targetRaw, mappingEntry);
           await saveConfigFile(targetPath, targetRaw);
         } catch (error: unknown) {
@@ -1233,16 +1242,99 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
           string,
           unknown
         >,
-        cleanupResult = cleanupConfigRaw(candidateRaw, {
-          scope: saveToProject ? "project" : "global",
-        });
+        modelFinder =
+          typeof ctx.modelRegistry?.find === "function"
+            ? ctx.modelRegistry.find.bind(ctx.modelRegistry)
+            : undefined;
 
-      if (!cleanupResult.changed) {
+      let availableModelKeys: Set<string> | null = null;
+      if (typeof ctx.modelRegistry?.getAvailable === "function") {
+        try {
+          const availableModels = await Promise.resolve(
+            ctx.modelRegistry.getAvailable(),
+          );
+          availableModelKeys = new Set(
+            availableModels.map(
+              (model) => `${model.provider}\u0000${model.id}`,
+            ),
+          );
+        } catch {
+          // If availability cannot be loaded, fall back to find() when possible.
+        }
+      }
+
+      const cleanupResult = cleanupConfigRaw(candidateRaw, {
+        scope: saveToProject ? "project" : "global",
+        modelExists:
+          availableModelKeys !== null
+            ? (provider, id) => availableModelKeys.has(`${provider}\u0000${id}`)
+            : modelFinder
+              ? (provider, id) => {
+                  try {
+                    return Boolean(modelFinder(provider, id));
+                  } catch {
+                    return false;
+                  }
+                }
+              : undefined,
+      });
+
+      const cleanupSummary = [...cleanupResult.summary],
+        autoDisabledProviders: ProviderName[] = [];
+
+      const mappedUsageProviders = new Set(
+        (Array.isArray(candidateRaw.mappings) ? candidateRaw.mappings : [])
+          .map((entry) => {
+            if (!entry || typeof entry !== "object") return undefined;
+            const usage = (entry as { usage?: { provider?: unknown } }).usage;
+            return usage?.provider;
+          })
+          .filter(
+            (provider): provider is string => typeof provider === "string",
+          )
+          .filter(isProviderName),
+      );
+
+      if (mappedUsageProviders.size > 0) {
+        const piAuth = await loadAuth();
+        const existingDisabled = Array.isArray(candidateRaw.disabledProviders)
+          ? candidateRaw.disabledProviders
+              .filter((value): value is string => typeof value === "string")
+              .filter(isProviderName)
+          : [];
+        const disabledSet = new Set<ProviderName>(existingDisabled);
+
+        for (const provider of mappedUsageProviders) {
+          if (disabledSet.has(provider)) continue;
+          const hasCredential = await hasProviderCredential(
+            provider,
+            piAuth,
+            ctx.modelRegistry,
+          );
+          if (!hasCredential) {
+            disabledSet.add(provider);
+            autoDisabledProviders.push(provider);
+          }
+        }
+
+        if (autoDisabledProviders.length > 0) {
+          candidateRaw.disabledProviders = [...disabledSet];
+          const providerLabels = autoDisabledProviders.map(
+            (provider) => `${PROVIDER_LABELS[provider]} (${provider})`,
+          );
+          cleanupSummary.push(
+            `Disabled ${autoDisabledProviders.length} provider${autoDisabledProviders.length === 1 ? "" : "s"} with missing credentials: ${providerLabels.join(", ")}.`,
+          );
+        }
+      }
+
+      const changed = cleanupResult.changed || autoDisabledProviders.length > 0;
+      if (!changed) {
         notify(ctx, "info", `No cleanup changes needed for ${targetPath}.`);
         return;
       }
 
-      const summaryLines = cleanupResult.summary.map((item) => `• ${item}`),
+      const summaryLines = cleanupSummary.map((item) => `• ${item}`),
         confirmed = await ctx.ui.confirm(
           "Apply config cleanup?",
           `This will update ${targetPath}:\n${summaryLines.join("\n")}`,
@@ -1274,7 +1366,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
       notify(
         ctx,
         "info",
-        `Config cleanup applied to ${targetPath}: ${cleanupResult.summary.join(" ")}`,
+        `Config cleanup applied to ${targetPath}: ${cleanupSummary.join(" ")}`,
       );
     },
     menuOptions = [
@@ -1342,8 +1434,18 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
   // Cooldown State - backed by file for cross-invocation persistence
   const modelCooldowns = new Map<string, number>(),
     COOLDOWN_DURATION = 60 * 60 * 1000; // 1 hour
+
+  const MODEL_LOCK_WAIT_TIMEOUT_MS = 10 * 60 * 1000,
+    MODEL_LOCK_POLL_MS = 1250,
+    MODEL_LOCK_HEARTBEAT_MS = 5000,
+    modelLockStatusKey = "model-selector-lock";
+
+  const modelLockCoordinator = createModelLockCoordinator();
+
   let cooldownsLoaded = false,
-    lastSelectedCandidateKey: string | null = null;
+    lastSelectedCandidateKey: string | null = null,
+    activeModelLockKey: string | null = null,
+    lockHeartbeatTimer: NodeJS.Timeout | null = null;
 
   // Load persisted cooldown state from file
   const loadPersistedCooldowns = async (): Promise<void> => {
@@ -1435,19 +1537,48 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
       );
     };
 
+  const setLockStatus = (ctx: ExtensionContext, message?: string): void => {
+      if (!ctx.hasUI || typeof ctx.ui.setStatus !== "function") return;
+      ctx.ui.setStatus(modelLockStatusKey, message);
+    },
+    stopLockHeartbeat = (): void => {
+      if (lockHeartbeatTimer) {
+        clearInterval(lockHeartbeatTimer);
+        lockHeartbeatTimer = null;
+      }
+    },
+    startLockHeartbeat = (lockKey: string): void => {
+      stopLockHeartbeat();
+      lockHeartbeatTimer = setInterval(() => {
+        void modelLockCoordinator.refresh(lockKey);
+      }, MODEL_LOCK_HEARTBEAT_MS);
+      lockHeartbeatTimer.unref?.();
+    },
+    releaseActiveModelLock = async (): Promise<void> => {
+      if (!activeModelLockKey) return;
+      const lockKey = activeModelLockKey;
+      activeModelLockKey = null;
+      stopLockHeartbeat();
+      await modelLockCoordinator.release(lockKey);
+    };
+
   let running = false;
 
   const runSelector = async (
     ctx: ExtensionContext,
-    reason: "startup" | "command" | "auto",
+    reason: "startup" | "command" | "auto" | "request",
     options: {
       preloadedConfig?: LoadedConfig;
       preloadedUsages?: UsageSnapshot[];
+      acquireModelLock?: boolean;
+      waitForModelLock?: boolean;
     } = {},
-  ) => {
+  ): Promise<boolean> => {
     if (running) {
-      notify(ctx, "warning", "Model selector is already running.");
-      return;
+      if (reason !== "request") {
+        notify(ctx, "warning", "Model selector is already running.");
+      }
+      return false;
     }
     running = true;
 
@@ -1456,13 +1587,25 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
       await loadPersistedCooldowns();
 
       const config = options.preloadedConfig || (await loadConfig(ctx));
-      if (!config) return;
+      if (!config) return false;
       setGlobalConfig(config);
       writeDebugLog(`Running selector (reason: ${reason})`);
 
-      const usages =
-        options.preloadedUsages ||
-        (await fetchAllUsages(ctx.modelRegistry, config.disabledProviders));
+      const mappedUsageProviders = new Set(
+          config.mappings.map((mapping) => mapping.usage.provider),
+        ),
+        implicitDisabledProviders = ALL_PROVIDERS.filter(
+          (provider) => !mappedUsageProviders.has(provider),
+        ),
+        effectiveDisabledProviders = [
+          ...new Set([
+            ...config.disabledProviders,
+            ...implicitDisabledProviders,
+          ]),
+        ],
+        usages =
+          options.preloadedUsages ||
+          (await fetchAllUsages(ctx.modelRegistry, effectiveDisabledProviders));
 
       // Clean up stale cooldowns first so fresh 429s can always re-arm cooldowns.
       pruneExpiredCooldowns();
@@ -1572,29 +1715,161 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
               : "All usage buckets are ignored. Remove an ignore mapping or add a model mapping.";
           notify(ctx, "error", detail);
           clearWidget(ctx);
-          return;
+          return false;
         }
       }
 
+      // Save candidates for widget display (includes exhausted buckets)
+      const displayCandidates = eligibleCandidates.slice();
+
+      // Hard filter: never pick fully exhausted buckets for model selection.
+      eligibleCandidates = eligibleCandidates.filter(
+        (candidate: UsageCandidate) => candidate.remainingPercent > 0,
+      );
+
+      // Sort display candidates for the widget (includes exhausted buckets)
+      const rankedDisplayCandidates = sortCandidates(
+        displayCandidates,
+        config.priority,
+        config.mappings,
+      );
+
+      // Update widget with all non-ignored, non-cooldown candidates (including exhausted)
+      updateWidgetState({ candidates: rankedDisplayCandidates, config });
+      renderUsageWidget(ctx);
+
+      if (eligibleCandidates.length === 0) {
+        notify(
+          ctx,
+          "error",
+          "All non-ignored usage buckets are exhausted (0% remaining).",
+        );
+        return false;
+      }
+
+      // Rank eligible candidates (excluded exhausted) for model selection
       const rankedCandidates = sortCandidates(
         eligibleCandidates,
         config.priority,
         config.mappings,
       );
 
-      // Update widget with ranked candidates
-      updateWidgetState({ candidates: rankedCandidates, config });
-      renderUsageWidget(ctx);
-
-      const best = rankedCandidates[0];
-      if (!best) {
+      const initialBest = rankedCandidates[0];
+      if (!initialBest) {
         notify(ctx, "error", "Unable to determine a best usage window.");
-        return;
+        return false;
       }
+
+      let best = initialBest,
+        bestIndex = 0,
+        mapping = findModelMapping(best, config.mappings),
+        model =
+          mapping?.model &&
+          ctx.modelRegistry.find(mapping.model.provider, mapping.model.id),
+        lockKey: string | undefined,
+        waitedForLockMs = 0;
+
+      if (options.acquireModelLock) {
+        type LockableCandidate = {
+          candidate: UsageCandidate;
+          mapping: NonNullable<typeof mapping>;
+          model: NonNullable<typeof model>;
+          lockKey: string;
+          index: number;
+        };
+
+        const lockableCandidates: LockableCandidate[] = [],
+          seenModelLocks = new Set<string>();
+
+        for (const [index, candidate] of rankedCandidates.entries()) {
+          const candidateMapping = findModelMapping(candidate, config.mappings);
+          if (!candidateMapping?.model) continue;
+
+          const candidateModel = ctx.modelRegistry.find(
+            candidateMapping.model.provider,
+            candidateMapping.model.id,
+          );
+          if (!candidateModel) continue;
+
+          const candidateLockKey = modelLockKey(
+            candidateMapping.model.provider,
+            candidateMapping.model.id,
+          );
+          if (seenModelLocks.has(candidateLockKey)) continue;
+          seenModelLocks.add(candidateLockKey);
+
+          lockableCandidates.push({
+            candidate,
+            mapping: candidateMapping,
+            model: candidateModel,
+            lockKey: candidateLockKey,
+            index,
+          });
+        }
+
+        if (lockableCandidates.length > 0) {
+          const tryAcquireLock = async (): Promise<
+            LockableCandidate | undefined
+          > => {
+            for (const candidate of lockableCandidates) {
+              const result = await modelLockCoordinator.acquire(
+                candidate.lockKey,
+                { timeoutMs: 0 },
+              );
+              if (result.acquired) {
+                return candidate;
+              }
+            }
+            return undefined;
+          };
+
+          let selectedWithLock = await tryAcquireLock();
+          if (!selectedWithLock && options.waitForModelLock) {
+            const waitStart = Date.now();
+            notify(
+              ctx,
+              "info",
+              "All mapped models are busy. Waiting for an available model lock...",
+            );
+
+            while (Date.now() - waitStart < MODEL_LOCK_WAIT_TIMEOUT_MS) {
+              const elapsedMs = Date.now() - waitStart;
+              setLockStatus(
+                ctx,
+                `Waiting for available model lock (${Math.floor(elapsedMs / 1000)}s)...`,
+              );
+              await new Promise((resolve) => {
+                setTimeout(resolve, MODEL_LOCK_POLL_MS);
+              });
+
+              selectedWithLock = await tryAcquireLock();
+              if (selectedWithLock) {
+                waitedForLockMs = Date.now() - waitStart;
+                break;
+              }
+            }
+          }
+
+          if (!selectedWithLock) {
+            notify(
+              ctx,
+              "error",
+              "All mapped models are busy and no lock became available in time.",
+            );
+            return false;
+          }
+
+          best = selectedWithLock.candidate;
+          bestIndex = selectedWithLock.index;
+          mapping = selectedWithLock.mapping;
+          model = selectedWithLock.model;
+          lockKey = selectedWithLock.lockKey;
+        }
+      }
+
       lastSelectedCandidateKey = candidateKey(best);
       await persistCooldowns(); // Save state for print-mode support
-      const runnerUp = rankedCandidates[1],
-        mapping = findModelMapping(best, config.mappings);
+
       if (!mapping || !mapping.model) {
         const usage: UsageMappingKey = { provider: best.provider };
         if (best.account && best.account !== "none") {
@@ -1623,20 +1898,22 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
           "error",
           `No model mapping for best usage bucket ${best.provider}/${best.windowLabel} (${best.remainingPercent.toFixed(0)}% remaining, ${best.displayName}).\nAdd a mapping to ${config.sources.projectPath} or ${config.sources.globalPath}:\n${suggestedMapping}\n\nOr ignore this bucket:\n${suggestedIgnore}`,
         );
-        return;
+        if (lockKey) {
+          await modelLockCoordinator.release(lockKey);
+        }
+        return false;
       }
 
-      const model = ctx.modelRegistry.find(
-        mapping.model.provider,
-        mapping.model.id,
-      );
       if (!model) {
         notify(
           ctx,
           "error",
           `Mapped model not found: ${mapping.model.provider}/${mapping.model.id}.`,
         );
-        return;
+        if (lockKey) {
+          await modelLockCoordinator.release(lockKey);
+        }
+        return false;
       }
 
       const current = ctx.model,
@@ -1653,24 +1930,59 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
             "error",
             `Failed to set model to ${mapping.model.provider}/${mapping.model.id}. Check provider status or credentials.`,
           );
-          return;
+          if (lockKey) {
+            await modelLockCoordinator.release(lockKey);
+          }
+          return false;
         }
       }
 
-      const reasonDetail = runnerUp
+      if (lockKey) {
+        if (activeModelLockKey && activeModelLockKey !== lockKey) {
+          await releaseActiveModelLock();
+        }
+        activeModelLockKey = lockKey;
+        startLockHeartbeat(lockKey);
+      }
+
+      const runnerUp = rankedCandidates[bestIndex + 1],
+        baseReason = runnerUp
           ? selectionReason(best, runnerUp, config.priority, config.mappings)
           : "Only one candidate available",
+        lockReason =
+          bestIndex > 0
+            ? `first unlocked model (rank #${bestIndex + 1})`
+            : undefined,
+        waitReason =
+          waitedForLockMs > 0
+            ? `waited ${(waitedForLockMs / 1000).toFixed(1)}s for lock`
+            : undefined,
+        reasonDetail = [lockReason, waitReason, baseReason]
+          .filter(Boolean)
+          .join("; "),
         selectionMsg = isAlreadySelected
           ? `Already using ${mapping.model.provider}/${mapping.model.id}`
           : `Set model to ${mapping.model.provider}/${mapping.model.id}`,
         bucketMsg = `${best.displayName}/${best.windowLabel} (${best.remainingPercent.toFixed(0)}% left)`;
 
-      notify(
-        ctx,
-        "info",
-        `${selectionMsg} via ${bucketMsg}. Reason: ${reasonDetail}.`,
-      );
+      const shouldNotifySelection =
+        reason !== "request" ||
+        !isAlreadySelected ||
+        bestIndex > 0 ||
+        waitedForLockMs > 0;
+      if (shouldNotifySelection) {
+        notify(
+          ctx,
+          "info",
+          `${selectionMsg} via ${bucketMsg}. Reason: ${reasonDetail}.`,
+        );
+      }
+
+      return true;
     } finally {
+      if (options.acquireModelLock) {
+        setLockStatus(ctx);
+      }
       running = false;
     }
   };
@@ -1685,11 +1997,25 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
     }
   });
 
+  pi.on("before_agent_start", async (_event, ctx) => {
+    await releaseActiveModelLock();
+    await runSelector(ctx, "request", {
+      acquireModelLock: true,
+      waitForModelLock: true,
+    });
+  });
+
   pi.on("agent_end", async (_event, ctx) => {
+    await releaseActiveModelLock();
     const config = await loadConfig(ctx, { requireMappings: false });
     if (config?.autoRun) {
       await runSelector(ctx, "auto", { preloadedConfig: config });
     }
+  });
+
+  pi.on("session_shutdown", async () => {
+    await releaseActiveModelLock();
+    await modelLockCoordinator.releaseAll();
   });
 
   pi.registerCommand("model-select", {
@@ -1727,7 +2053,8 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
           config.mappings,
         );
         const eligible = candidates.filter(
-          (c: UsageCandidate) => !findIgnoreMapping(c, config.mappings),
+          (c: UsageCandidate) =>
+            !findIgnoreMapping(c, config.mappings) && c.remainingPercent > 0,
         );
         const ranked = sortCandidates(
           eligible,

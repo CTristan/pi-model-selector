@@ -38,6 +38,10 @@ describe("mapping wizard config cleanup", () => {
   let ctx: {
     modelRegistry: {
       getAvailable: () => Promise<Array<{ provider: string; id: string }>>;
+      find: (
+        provider: string,
+        id: string,
+      ) => { provider: string; id: string } | undefined;
     };
     ui: {
       notify: (message: string, level: "info" | "warning" | "error") => void;
@@ -115,6 +119,8 @@ describe("mapping wizard config cleanup", () => {
     ctx = {
       modelRegistry: {
         getAvailable: () => Promise.resolve([{ provider: "p1", id: "m1" }]),
+        find: (provider: string, id: string) =>
+          provider === "p1" && id === "m1" ? { provider, id } : undefined,
       },
       ui: {
         notify: vi.fn(),
@@ -138,6 +144,7 @@ describe("mapping wizard config cleanup", () => {
         fixedDebugLogPath: false,
         removedInvalidMappings: 0,
         removedDuplicateMappings: 0,
+        removedUnavailableModelMappings: 0,
       };
     });
 
@@ -166,7 +173,10 @@ describe("mapping wizard config cleanup", () => {
 
     expect(configMod.cleanupConfigRaw).toHaveBeenCalledWith(
       expect.any(Object),
-      { scope: "global" },
+      expect.objectContaining({
+        scope: "global",
+        modelExists: expect.any(Function),
+      }),
     );
     expect(configMod.saveConfigFile).toHaveBeenCalledWith(
       "global.json",
@@ -174,6 +184,72 @@ describe("mapping wizard config cleanup", () => {
     );
     expect(ctx.ui.notify).toHaveBeenCalledWith(
       expect.stringContaining("Config cleanup applied to global.json"),
+      "info",
+    );
+  });
+
+  it("disables mapped providers with missing credentials during cleanup", async () => {
+    const credentiallessConfig: LoadedConfig = {
+      ...initialConfig,
+      disabledProviders: [],
+      raw: {
+        global: {
+          mappings: [
+            {
+              usage: { provider: "gemini", window: "Flash" },
+              model: { provider: "google", id: "gemini-1.5-flash" },
+            },
+          ],
+        },
+        project: {},
+      },
+    };
+
+    const reloadedWithDisabled: LoadedConfig = {
+      ...credentiallessConfig,
+      disabledProviders: ["gemini"],
+    };
+
+    vi.mocked(configMod.loadConfig)
+      .mockReset()
+      .mockResolvedValueOnce(credentiallessConfig)
+      .mockResolvedValueOnce(reloadedWithDisabled);
+
+    vi.mocked(configMod.cleanupConfigRaw).mockReset();
+    vi.mocked(configMod.cleanupConfigRaw).mockImplementation(() => ({
+      changed: false,
+      summary: [],
+      removedExamples: false,
+      fixedDebugLogPath: false,
+      removedInvalidMappings: 0,
+      removedDuplicateMappings: 0,
+      removedUnavailableModelMappings: 0,
+    }));
+
+    let menuVisits = 0;
+    ctx.ui.select = vi.fn((message: string) => {
+      if (message === "Model selector configuration") {
+        menuVisits += 1;
+        return Promise.resolve(menuVisits === 1 ? "Clean up config" : "Done");
+      }
+      if (message === "Select config file to clean") {
+        return Promise.resolve("Global (global.json)");
+      }
+      return Promise.resolve(undefined);
+    });
+    ctx.ui.confirm = vi.fn(() => Promise.resolve(true));
+
+    const runWizard = commands["model-select-config"];
+    await runWizard({}, ctx as unknown as Record<string, unknown>);
+
+    expect(configMod.saveConfigFile).toHaveBeenCalledWith(
+      "global.json",
+      expect.objectContaining({
+        disabledProviders: expect.arrayContaining(["gemini"]),
+      }),
+    );
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("Disabled 1 provider with missing credentials"),
       "info",
     );
   });
