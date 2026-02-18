@@ -89,6 +89,7 @@ describe("Wizard Combination Flow", () => {
     vi.mocked(usageFetchers.fetchAllUsages).mockResolvedValue(usageSnapshots);
     vi.mocked(configMod.loadConfig).mockResolvedValue(initialConfig);
     vi.mocked(configMod.getRawMappings).mockReturnValue([]);
+    vi.mocked(configMod.clearBucketMappings).mockReturnValue(0);
     vi.mocked(configMod.saveConfigFile).mockResolvedValue(undefined);
 
     modelSelectorExtension(pi as unknown as ExtensionAPI);
@@ -125,6 +126,15 @@ describe("Wizard Combination Flow", () => {
       },
       combine: "My Combined Group",
     });
+
+    expect(configMod.clearBucketMappings).toHaveBeenCalledWith(
+      initialConfig.raw.project,
+      {
+        provider: "anthropic",
+        account: undefined,
+        window: "Sonnet",
+      },
+    );
 
     expect(ctx.ui.notify).toHaveBeenCalledWith(
       expect.stringContaining(

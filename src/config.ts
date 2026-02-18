@@ -467,17 +467,24 @@ export interface CleanupConfigResult {
   fixedDebugLogPath: boolean;
   removedInvalidMappings: number;
   removedDuplicateMappings: number;
+  removedUnavailableModelMappings: number;
+}
+
+export interface CleanupConfigOptions {
+  scope?: "global" | "project";
+  modelExists?: (provider: string, id: string) => boolean;
 }
 
 export function cleanupConfigRaw(
   raw: Record<string, unknown>,
-  options: { scope?: "global" | "project" } = {},
+  options: CleanupConfigOptions = {},
 ): CleanupConfigResult {
   const summary: string[] = [];
   let removedExamples = false,
     fixedDebugLogPath = false,
     removedInvalidMappings = 0,
     removedDuplicateMappings = 0,
+    removedUnavailableModelMappings = 0,
     changed = false;
 
   if (Object.hasOwn(raw, "examples")) {
@@ -507,15 +514,31 @@ export function cleanupConfigRaw(
     const originalMappings = raw.mappings,
       shape = asConfigShape({ mappings: originalMappings }),
       errors: string[] = [],
-      normalizedMappings = normalizeMappings(shape, "<cleanup>", errors);
+      normalizedMappings = normalizeMappings(shape, "<cleanup>", errors),
+      modelFilteredMappings = normalizedMappings.filter((mapping) => {
+        if (!mapping.model || !options.modelExists) return true;
+        try {
+          return options.modelExists(mapping.model.provider, mapping.model.id);
+        } catch (err) {
+          summary.push(
+            `Could not verify availability of model "${mapping.model.provider}/${mapping.model.id}" due to an error; keeping the mapping. Error: ${String(err)}`,
+          );
+          return true;
+        }
+      });
 
     removedInvalidMappings = Math.max(
       0,
       originalMappings.length - normalizedMappings.length,
     );
 
+    removedUnavailableModelMappings = Math.max(
+      0,
+      normalizedMappings.length - modelFilteredMappings.length,
+    );
+
     const dedupedByKey = new Map<string, MappingEntry>();
-    for (const mapping of normalizedMappings) {
+    for (const mapping of modelFilteredMappings) {
       const key = mappingKey(mapping);
       dedupedByKey.set(key, mapping);
     }
@@ -523,10 +546,14 @@ export function cleanupConfigRaw(
     const dedupedMappings = Array.from(dedupedByKey.values());
     removedDuplicateMappings = Math.max(
       0,
-      normalizedMappings.length - dedupedMappings.length,
+      modelFilteredMappings.length - dedupedMappings.length,
     );
 
-    if (removedInvalidMappings > 0 || removedDuplicateMappings > 0) {
+    if (
+      removedInvalidMappings > 0 ||
+      removedUnavailableModelMappings > 0 ||
+      removedDuplicateMappings > 0
+    ) {
       raw.mappings = dedupedMappings;
       changed = true;
     }
@@ -534,6 +561,12 @@ export function cleanupConfigRaw(
     if (removedInvalidMappings > 0) {
       summary.push(
         `Removed ${removedInvalidMappings} invalid mapping entr${removedInvalidMappings === 1 ? "y" : "ies"}.`,
+      );
+    }
+
+    if (removedUnavailableModelMappings > 0) {
+      summary.push(
+        `Removed ${removedUnavailableModelMappings} mapping entr${removedUnavailableModelMappings === 1 ? "y" : "ies"} with unavailable Pi model provider/id combinations.`,
       );
     }
 
@@ -551,12 +584,61 @@ export function cleanupConfigRaw(
     fixedDebugLogPath,
     removedInvalidMappings,
     removedDuplicateMappings,
+    removedUnavailableModelMappings,
   };
 }
 
 // ============================================================================
 // Config Mutation
 // ============================================================================
+
+export interface ClearBucketMappingsOptions {
+  provider: string;
+  account?: string;
+  window: string;
+}
+
+export function clearBucketMappings(
+  raw: Record<string, unknown>,
+  options: ClearBucketMappingsOptions,
+): number {
+  const existing: unknown[] = Array.isArray(raw.mappings) ? raw.mappings : [];
+  let removed = 0;
+
+  const filtered = existing.filter((entry: unknown) => {
+    if (!entry || typeof entry !== "object") return true;
+
+    const item = entry as RawMappingItem;
+    if (!item.usage || typeof item.usage !== "object") return true;
+    if (typeof item.usage.provider !== "string") return true;
+    if (item.usage.provider !== options.provider) return true;
+
+    const entryAccount =
+      typeof item.usage.account === "string" ? item.usage.account : undefined;
+
+    const accountMatches =
+      options.account === undefined
+        ? entryAccount === undefined
+        : entryAccount === undefined || entryAccount === options.account;
+    if (!accountMatches) return true;
+
+    const entryWindow =
+      typeof item.usage.window === "string" ? item.usage.window : undefined;
+    if (entryWindow !== options.window) return true;
+
+    const hasAction =
+      item.ignore === true ||
+      (typeof item.combine === "string" && item.combine.trim() !== "") ||
+      (item.model !== undefined && typeof item.model === "object");
+    if (!hasAction) return true;
+
+    removed += 1;
+    return false;
+  });
+
+  raw.mappings = filtered;
+  return removed;
+}
 
 export function upsertMapping(
   raw: Record<string, unknown>,

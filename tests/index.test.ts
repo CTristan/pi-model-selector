@@ -17,6 +17,11 @@ vi.mock("node:fs", async (importOriginal) => {
       writeFile: vi.fn().mockResolvedValue(undefined),
       rename: vi.fn().mockResolvedValue(undefined),
       mkdir: vi.fn().mockResolvedValue(undefined),
+      open: vi
+        .fn()
+        .mockResolvedValue({ close: vi.fn().mockResolvedValue(undefined) }),
+      unlink: vi.fn().mockResolvedValue(undefined),
+      stat: vi.fn().mockResolvedValue({ mtimeMs: Date.now() }),
     },
   };
 });
@@ -40,6 +45,10 @@ describe("Model Selector Extension", () => {
   let pi: any;
   let ctx: any;
   let commands: Record<string, (...args: any[]) => any> = {};
+  let events: Record<string, (...args: any[]) => any> = {};
+
+  // Persist file contents to simulate real file system
+  const persistedFiles = new Map<string, string>();
 
   const getLastPersistedCooldownState = (): {
     cooldowns: Record<string, number>;
@@ -65,18 +74,51 @@ describe("Model Selector Extension", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    persistedFiles.clear();
 
-    // Setup FS mocks
+    // Setup FS mocks with persistence
     vi.mocked(fs.existsSync).mockReturnValue(true);
     vi.mocked(fs.promises.access).mockResolvedValue(undefined);
-    vi.mocked(fs.promises.readFile).mockResolvedValue(
-      JSON.stringify({ cooldowns: {}, lastSelected: null }),
+    vi.mocked(fs.promises.readFile).mockImplementation(async (filePath) => {
+      if (typeof filePath === "string") {
+        // Check if we have persisted content for this file
+        const normalizedPath = filePath as string;
+        if (persistedFiles.has(normalizedPath)) {
+          return persistedFiles.get(normalizedPath)!;
+        }
+        // For lock state file, return last persisted temp file content
+        if (
+          normalizedPath.includes("model-selector-model-locks.json") &&
+          !normalizedPath.includes(".tmp.")
+        ) {
+          for (const [path, content] of persistedFiles.entries()) {
+            if (path.includes("model-selector-model-locks.json.tmp.")) {
+              return content;
+            }
+          }
+        }
+        // Default cooldown state
+        if (normalizedPath.includes("model-selector-cooldowns.json")) {
+          return JSON.stringify({ cooldowns: {}, lastSelected: null });
+        }
+      }
+      return "{}";
+    });
+    vi.mocked(fs.promises.writeFile).mockImplementation(
+      async (filePath, content) => {
+        if (typeof filePath === "string" && typeof content === "string") {
+          persistedFiles.set(filePath, content);
+        }
+      },
     );
     vi.mocked(fs.promises.mkdir).mockResolvedValue(undefined);
 
     commands = {};
+    events = {};
     pi = {
-      on: vi.fn(),
+      on: vi.fn((eventName, handler) => {
+        events[eventName] = handler;
+      }),
       registerCommand: vi.fn((name, opts) => {
         commands[name] = opts.handler;
       }),
@@ -91,6 +133,7 @@ describe("Model Selector Extension", () => {
         notify: vi.fn(),
         select: vi.fn(),
         confirm: vi.fn(),
+        setStatus: vi.fn(),
       },
       hasUI: true,
     };
@@ -145,6 +188,42 @@ describe("Model Selector Extension", () => {
     );
   });
 
+  it("only fetches usage for providers referenced by mappings", async () => {
+    vi.mocked(configMod.loadConfig).mockResolvedValueOnce({
+      mappings: [
+        {
+          usage: { provider: "anthropic", window: "Sonnet" },
+          model: { provider: "anthropic", id: "claude-sonnet" },
+        },
+      ],
+      priority: ["remainingPercent"],
+      widget: { enabled: true, placement: "belowEditor", showCount: 3 },
+      autoRun: false,
+      disabledProviders: [],
+      sources: { globalPath: "", projectPath: "" },
+      raw: { global: {}, project: {} },
+    });
+
+    vi.mocked(usageFetchers.fetchAllUsages).mockResolvedValueOnce([
+      {
+        provider: "anthropic",
+        displayName: "Claude",
+        windows: [{ label: "Sonnet", usedPercent: 10, resetsAt: new Date() }],
+      },
+    ]);
+
+    modelSelectorExtension(pi);
+    const handler = commands["model-select"];
+
+    await handler({}, ctx);
+
+    const disabledProviders = vi.mocked(usageFetchers.fetchAllUsages).mock
+      .calls[0]?.[1] as string[];
+    expect(disabledProviders).toContain("gemini");
+    expect(disabledProviders).toContain("antigravity");
+    expect(disabledProviders).not.toContain("anthropic");
+  });
+
   it("should select best model on command", async () => {
     modelSelectorExtension(pi);
     const handler = commands["model-select"];
@@ -156,6 +235,70 @@ describe("Model Selector Extension", () => {
     expect(ctx.ui.notify).toHaveBeenCalledWith(
       expect.stringContaining("Already using p1/m1"),
       "info",
+    );
+  });
+
+  it("should skip zero-availability candidates", async () => {
+    vi.mocked(usageFetchers.fetchAllUsages).mockResolvedValue([
+      {
+        provider: "p1",
+        displayName: "Provider 1",
+        windows: [{ label: "w1", usedPercent: 100, resetsAt: new Date() }],
+      },
+      {
+        provider: "p2",
+        displayName: "Provider 2",
+        windows: [{ label: "w2", usedPercent: 20, resetsAt: new Date() }],
+      },
+    ]);
+
+    modelSelectorExtension(pi);
+    const handler = commands["model-select"];
+
+    await handler({}, ctx);
+
+    expect(pi.setModel).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: "p2", id: "m2" }),
+    );
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("Set model to p2/m2"),
+      "info",
+    );
+  });
+
+  it("should choose the next unlocked model before agent start", async () => {
+    const lockFileState = {
+      version: 1,
+      locks: {
+        "p1/m1": {
+          instanceId: "other-instance",
+          pid: 7777,
+          acquiredAt: Date.now(),
+          heartbeatAt: Date.now(),
+        },
+      },
+    };
+
+    vi.mocked(fs.promises.readFile).mockImplementation(async (filePath) => {
+      const file = String(filePath);
+      if (file.includes("model-selector-cooldowns.json")) {
+        return JSON.stringify({ cooldowns: {}, lastSelected: null });
+      }
+      if (file.includes("model-selector-model-locks.json")) {
+        return JSON.stringify(lockFileState);
+      }
+      return "{}";
+    });
+
+    modelSelectorExtension(pi);
+
+    const beforeAgentStart = events.before_agent_start;
+    expect(beforeAgentStart).toBeTypeOf("function");
+
+    await beforeAgentStart({}, ctx);
+
+    expect(pi.setModel).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: "p2", id: "m2" }),
     );
   });
 
@@ -280,5 +423,56 @@ describe("Model Selector Extension", () => {
       secondExpiry = secondState.cooldowns["p1|acc1|*"];
 
     expect(secondExpiry).toBeGreaterThan(firstExpiry);
+  });
+
+  it("stops lock heartbeat after losing lock ownership", async () => {
+    vi.useFakeTimers();
+
+    modelSelectorExtension(pi);
+    const beforeAgentStart = events.before_agent_start,
+      agentEnd = events.agent_end;
+
+    expect(beforeAgentStart).toBeTypeOf("function");
+    expect(agentEnd).toBeTypeOf("function");
+
+    await beforeAgentStart({}, ctx);
+
+    const countModelLockWrites = (): number =>
+      vi
+        .mocked(fs.promises.writeFile)
+        .mock.calls.filter(
+          ([filePath]) =>
+            typeof filePath === "string" &&
+            filePath.includes("model-selector-model-locks.json.tmp."),
+        ).length;
+
+    expect(countModelLockWrites()).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(20_000);
+    // Heartbeat runs every 5s, so after 20s we get 4 heartbeat writes
+    // (at 5s, 10s, 15s, 20s) plus the initial acquire write = 5 total
+    expect(countModelLockWrites()).toBeGreaterThanOrEqual(2);
+
+    await agentEnd({}, ctx);
+    expect(countModelLockWrites()).toBeGreaterThanOrEqual(2);
+  });
+
+  it("handles lock acquisition errors in before_agent_start without throwing", async () => {
+    vi.mocked(fs.promises.open).mockRejectedValueOnce(
+      new Error(
+        "Timed out waiting for model-selector state lock: /mock/home/.pi/model-selector-model-locks.json.lock",
+      ),
+    );
+
+    modelSelectorExtension(pi);
+    const beforeAgentStart = events.before_agent_start;
+
+    expect(beforeAgentStart).toBeTypeOf("function");
+    await expect(beforeAgentStart({}, ctx)).resolves.toBeUndefined();
+
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("Model selection failed before request start"),
+      "error",
+    );
   });
 });
