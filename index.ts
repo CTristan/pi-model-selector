@@ -1602,6 +1602,8 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
     }
     running = true;
 
+    let lockKeyForErrorCleanup: string | undefined;
+
     try {
       // Load persisted cooldowns on startup (for print-mode support)
       await loadPersistedCooldowns();
@@ -1884,6 +1886,7 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
           mapping = selectedWithLock.mapping;
           model = selectedWithLock.model;
           lockKey = selectedWithLock.lockKey;
+          lockKeyForErrorCleanup = lockKey;
         }
       }
 
@@ -1962,6 +1965,7 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
           await releaseActiveModelLock();
         }
         activeModelLockKey = lockKey;
+        lockKeyForErrorCleanup = undefined;
         startLockHeartbeat(lockKey);
       }
 
@@ -1999,6 +2003,25 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
       }
 
       return true;
+    } catch (error: unknown) {
+      if (lockKeyForErrorCleanup) {
+        try {
+          await modelLockCoordinator.release(lockKeyForErrorCleanup);
+        } catch {
+          // Best-effort cleanup of partially acquired lock.
+        }
+      }
+
+      const errorMessage = String(error);
+      writeDebugLog(`runSelector failed (reason: ${reason}): ${errorMessage}`);
+      notify(
+        ctx,
+        "error",
+        reason === "request"
+          ? `Model selection failed before request start: ${errorMessage}`
+          : `Model selection failed: ${errorMessage}`,
+      );
+      return false;
     } finally {
       if (options.acquireModelLock) {
         setLockStatus(ctx);

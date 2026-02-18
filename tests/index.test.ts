@@ -421,4 +421,23 @@ describe("Model Selector Extension", () => {
     await agentEnd({}, ctx);
     expect(countModelLockWrites()).toBe(2);
   });
+
+  it("handles lock acquisition errors in before_agent_start without throwing", async () => {
+    vi.mocked(fs.promises.open).mockRejectedValueOnce(
+      new Error(
+        "Timed out waiting for model-selector state lock: /mock/home/.pi/model-selector-model-locks.json.lock",
+      ),
+    );
+
+    modelSelectorExtension(pi);
+    const beforeAgentStart = events.before_agent_start;
+
+    expect(beforeAgentStart).toBeTypeOf("function");
+    await expect(beforeAgentStart({}, ctx)).resolves.toBeUndefined();
+
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("Model selection failed before request start"),
+      "error",
+    );
+  });
 });
