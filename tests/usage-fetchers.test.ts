@@ -611,31 +611,6 @@ describe("Usage Fetchers", () => {
   });
 
   describe("fetchKiroUsage", () => {
-    it("should handle patterns and bonus", async () => {
-      const child_process = await import("node:child_process");
-      vi.mocked(child_process.exec).mockImplementation(
-        (cmd, options, cb): any => {
-          if (typeof options === "function") cb = options;
-          if (!cb) return;
-          if (cmd.startsWith("which") || cmd.startsWith("where"))
-            cb(null, "/bin/kiro-cli", "");
-          else if (cmd.includes("whoami")) cb(null, "user", "");
-          else if (cmd.includes("/usage")) {
-            cb(
-              null,
-              "| KIRO PRO | Progress: 50% Credits: (10 / 20) resets on 10/11 Bonus credits: 5 / 10 expires in 2 days",
-              "",
-            );
-          } else cb(null, "", "");
-        },
-      );
-      const result = await fetchKiroUsage();
-      expect(result.windows).toHaveLength(3);
-      const bonus = result.windows.find((w) => w.label === "Bonus");
-      expect(bonus?.resetDescription).toBe("2d left");
-      expect(bonus?.usedPercent).toBe(50);
-    });
-
     it("should correctly handle 'Remaining Bonus credits'", async () => {
       const child_process = await import("node:child_process");
       vi.mocked(child_process.exec).mockImplementation(

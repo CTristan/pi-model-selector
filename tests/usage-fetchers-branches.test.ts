@@ -117,21 +117,14 @@ describe("Usage Fetchers Branch Coverage", () => {
       expect(formatReset(new Date(now + 45 * 60000 + 1000))).toBe("45m");
     });
 
-    it("should format days", () => {
-      const now = Date.now();
-      // Add buffer to ensure we don't drop below the hour due to execution time
-      expect(formatReset(new Date(now + 25 * 60 * 60 * 1000 + 5000))).toBe(
-        "1d 1h",
-      );
-      expect(
-        formatReset(new Date(now + 7 * 24 * 60 * 60 * 1000 + 1000)),
-      ).not.toContain("d"); // > 7 days falls back to date
-    });
+    it("should format days and long ranges", () => {
+      // Fixed offsets relative to fake system time from beforeEach.
+      const oneDayOneHour = new Date(Date.now() + 25 * 60 * 60 * 1000);
+      const beyondSevenDays = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000);
 
-    it("should return date string for > 7 days", () => {
-      const future = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000);
-      expect(formatReset(future)).not.toBe("");
-      expect(formatReset(future)).not.toContain("d ");
+      expect(formatReset(oneDayOneHour)).toBe("1d 1h");
+      expect(formatReset(beyondSevenDays)).not.toBe("");
+      expect(formatReset(beyondSevenDays)).not.toContain("d ");
     });
   });
 
