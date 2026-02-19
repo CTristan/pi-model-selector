@@ -4,12 +4,32 @@ import modelSelectorExtension from "../index.js";
 import * as configMod from "../src/config.js";
 import * as usageFetchers from "../src/usage-fetchers.js";
 
+// Capture debug log writes for testing
+const capturedDebugLogs: string[] = [];
+
+// Mock writeDebugLog directly for reliable log capture
+vi.mock("../src/types.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/types.js")>();
+  return {
+    ...actual,
+    writeDebugLog: vi.fn((message: string) => {
+      capturedDebugLogs.push(message);
+    }),
+  };
+});
+
 // Mock node:fs to prevent real file operations
 vi.mock("node:fs", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs")>();
   return {
     ...actual,
     existsSync: vi.fn(actual.existsSync),
+    mkdir: vi.fn((_path, _opts, callback) => {
+      callback?.();
+    }),
+    appendFile: vi.fn((_path, _data, callback) => {
+      callback?.();
+    }),
     promises: {
       ...actual.promises,
       access: vi.fn().mockResolvedValue(undefined),
@@ -17,6 +37,7 @@ vi.mock("node:fs", async (importOriginal) => {
       writeFile: vi.fn().mockResolvedValue(undefined),
       rename: vi.fn().mockResolvedValue(undefined),
       mkdir: vi.fn().mockResolvedValue(undefined),
+      appendFile: vi.fn().mockResolvedValue(undefined),
       open: vi
         .fn()
         .mockResolvedValue({ close: vi.fn().mockResolvedValue(undefined) }),
@@ -73,6 +94,7 @@ describe("Model Selector Extension", () => {
   };
 
   beforeEach(() => {
+    capturedDebugLogs.length = 0;
     vi.clearAllMocks();
     persistedFiles.clear();
 
@@ -267,12 +289,18 @@ describe("Model Selector Extension", () => {
   });
 
   it("should choose the next unlocked model before agent start", async () => {
+    // Note: This test uses process.pid which means the lock appears to be held by a
+    // live process (the test runner itself). The original version of this test used
+    // pid: 7777, which tested the dead process reclamation scenario (a lock held by
+    // a potentially dead process). The change to process.pid shifts the semantics to
+    // testing the scenario where a lock is held by the same process but a different
+    // instance, and the selector falls through to the next unlocked model.
     const lockFileState = {
       version: 1,
       locks: {
         "p1/m1": {
           instanceId: "other-instance",
-          pid: 7777,
+          pid: process.pid,
           acquiredAt: Date.now(),
           heartbeatAt: Date.now(),
         },
@@ -300,6 +328,112 @@ describe("Model Selector Extension", () => {
     expect(pi.setModel).toHaveBeenCalledWith(
       expect.objectContaining({ provider: "p2", id: "m2" }),
     );
+  });
+
+  it("should reclaim locks from dead processes immediately", async () => {
+    // Use a non-existent PID to simulate a dead process
+    const deadPid = 999999999;
+    const lockFileState = {
+      version: 1,
+      locks: {
+        "p1/m1": {
+          instanceId: "other-instance",
+          pid: deadPid,
+          acquiredAt: Date.now() - 1_000,
+          heartbeatAt: Date.now(),
+        },
+      },
+    };
+
+    // Set a different initial model so we can verify p1/m1 is selected
+    ctx.model = { provider: "other", id: "other-model" };
+
+    vi.mocked(fs.promises.readFile).mockImplementation(async (filePath) => {
+      const file = String(filePath);
+      if (file.includes("model-selector-cooldowns.json")) {
+        return JSON.stringify({ cooldowns: {}, lastSelected: null });
+      }
+      if (file.includes("model-selector-model-locks.json")) {
+        return JSON.stringify(lockFileState);
+      }
+      return "{}";
+    });
+
+    modelSelectorExtension(pi);
+
+    const beforeAgentStart = events.before_agent_start;
+    expect(beforeAgentStart).toBeTypeOf("function");
+
+    await beforeAgentStart({}, ctx);
+
+    // The lock for p1/m1 should be reclaimed since the process is dead,
+    // allowing p1/m1 to be selected instead of falling through to p2/m2
+    expect(pi.setModel).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: "p1", id: "m1" }),
+    );
+  });
+
+  it("writes debug log when a higher-ranked model lock is busy", async () => {
+    const now = Date.now();
+    const lockFileState = {
+      version: 1,
+      locks: {
+        "p1/m1": {
+          instanceId: "other-instance",
+          pid: process.pid,
+          acquiredAt: now - 2_000,
+          heartbeatAt: now - 1_000,
+        },
+      },
+    };
+
+    vi.mocked(configMod.loadConfig).mockResolvedValueOnce({
+      mappings: [
+        {
+          usage: { provider: "p1", window: "w1" },
+          model: { provider: "p1", id: "m1" },
+        },
+        {
+          usage: { provider: "p2", window: "w2" },
+          model: { provider: "p2", id: "m2" },
+        },
+      ],
+      priority: ["remainingPercent"],
+      widget: { enabled: true, placement: "belowEditor", showCount: 3 },
+      autoRun: false,
+      disabledProviders: [],
+      debugLog: {
+        enabled: true,
+        path: "/mock/home/.pi/model-selector-debug.log",
+      },
+      sources: { globalPath: "", projectPath: "" },
+      raw: { global: {}, project: {} },
+    });
+
+    vi.mocked(fs.promises.readFile).mockImplementation(async (filePath) => {
+      const file = String(filePath);
+      if (file.includes("model-selector-cooldowns.json")) {
+        return JSON.stringify({ cooldowns: {}, lastSelected: null });
+      }
+      if (file.includes("model-selector-model-locks.json")) {
+        return JSON.stringify(lockFileState);
+      }
+      return "{}";
+    });
+
+    modelSelectorExtension(pi);
+
+    const beforeAgentStart = events.before_agent_start;
+    expect(beforeAgentStart).toBeTypeOf("function");
+
+    await beforeAgentStart({}, ctx);
+
+    // Check captured debug logs for busy lock message
+    expect(
+      capturedDebugLogs.some((line) =>
+        line.includes('Model lock busy for key "p1/m1"'),
+      ),
+    ).toBe(true);
   });
 
   it("should skip model on /model-skip", async () => {
