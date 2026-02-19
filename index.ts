@@ -1850,6 +1850,17 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
         }
 
         if (lockableCandidates.length > 0) {
+          // Track which busy locks have been logged to avoid duplicate log entries.
+          // This is useful for debugging lock contention, especially when multiple
+          // Pi instances are competing for the same models. The log includes:
+          // - The model lock key (provider/model)
+          // - The holding instance ID and PID
+          // - Lock age (time since acquisition)
+          // - Heartbeat age (time since last heartbeat refresh)
+          const loggedBusyLocks = new Set<string>();
+
+          // Try to acquire a lock for each candidate in ranked order.
+          // Logs details about busy locks to help debug lock contention.
           const tryAcquireLock = async (): Promise<
             LockableCandidate | undefined
           > => {
@@ -1861,6 +1872,31 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
               if (result.acquired) {
                 return candidate;
               }
+
+              const heldBy = result.heldBy;
+              if (!heldBy) {
+                continue;
+              }
+
+              const signature = `${candidate.lockKey}|${heldBy.instanceId}|${heldBy.pid}`;
+              if (loggedBusyLocks.has(signature)) {
+                continue;
+              }
+              loggedBusyLocks.add(signature);
+
+              const nowMs = Date.now();
+              const heartbeatAgeSeconds = Math.max(
+                0,
+                Math.floor((nowMs - heldBy.heartbeatAt) / 1000),
+              );
+              const lockAgeSeconds = Math.max(
+                0,
+                Math.floor((nowMs - heldBy.acquiredAt) / 1000),
+              );
+
+              writeDebugLog(
+                `Model lock busy for key "${candidate.lockKey}" (rank #${candidate.index + 1}); held by instance "${heldBy.instanceId}" (pid ${heldBy.pid}), lock age ${lockAgeSeconds}s, heartbeat age ${heartbeatAgeSeconds}s.`,
+              );
             }
             return undefined;
           };

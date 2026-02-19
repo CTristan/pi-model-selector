@@ -75,6 +75,7 @@ To ensure one Pi instance uses a given mapped model at a time:
 4. **Hold + Heartbeat**: Active lock is refreshed periodically while the agent runs.
 5. **Release**: Lock is released on `agent_end` and `session_shutdown`.
 6. **Stale Recovery**: Locks from dead or stale owners are cleaned up automatically.
+7. **Busy Lock Logging**: When a model lock is already held by another instance, details are logged to the debug log (if enabled) to help diagnose lock contention. The log includes the model key, holding instance ID and PID, lock age, and heartbeat age.
 
 ## Configuration Schema
 

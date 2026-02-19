@@ -12,6 +12,16 @@ function createTempStatePath(): { dir: string; statePath: string } {
   return { dir, statePath: path.join(dir, "locks.json") };
 }
 
+function createTestCoordinator(
+  options?: Parameters<typeof createModelLockCoordinator>[0],
+): ReturnType<typeof createModelLockCoordinator> {
+  // Apply common test defaults: assume all PIDs are alive unless specified
+  return createModelLockCoordinator({
+    ...options,
+    isPidAlive: options?.isPidAlive ?? (() => true),
+  });
+}
+
 afterEach(() => {
   for (const entry of fs.readdirSync(os.tmpdir())) {
     if (!entry.startsWith("model-locks-test-")) continue;
@@ -51,12 +61,12 @@ describe("model locks", () => {
 
   it("enforces exclusivity across instances", async () => {
     const { statePath } = createTempStatePath();
-    const owner = createModelLockCoordinator({
+    const owner = createTestCoordinator({
       statePath,
       instanceId: "owner",
       pid: 2001,
     });
-    const contender = createModelLockCoordinator({
+    const contender = createTestCoordinator({
       statePath,
       instanceId: "contender",
       pid: 2002,
@@ -78,12 +88,12 @@ describe("model locks", () => {
 
   it("waits/polls until a lock is released", async () => {
     const { statePath } = createTempStatePath();
-    const owner = createModelLockCoordinator({
+    const owner = createTestCoordinator({
       statePath,
       instanceId: "owner",
       pid: 3001,
     });
-    const waiter = createModelLockCoordinator({
+    const waiter = createTestCoordinator({
       statePath,
       instanceId: "waiter",
       pid: 3002,
@@ -107,12 +117,12 @@ describe("model locks", () => {
 
   it("refreshes/releaseAll only for owned locks", async () => {
     const { statePath } = createTempStatePath();
-    const owner = createModelLockCoordinator({
+    const owner = createTestCoordinator({
       statePath,
       instanceId: "owner",
       pid: 4001,
     });
-    const other = createModelLockCoordinator({
+    const other = createTestCoordinator({
       statePath,
       instanceId: "other",
       pid: 4002,
@@ -170,6 +180,46 @@ describe("model locks", () => {
     expect(acquired.acquired).toBe(true);
   });
 
+  it("reclaims dead-owner locks immediately even with fresh heartbeat", async () => {
+    const { statePath } = createTempStatePath();
+    const now = Date.now();
+
+    await fs.promises.writeFile(
+      statePath,
+      JSON.stringify(
+        {
+          version: 1,
+          locks: {
+            "openai/gpt-5": {
+              instanceId: "dead-but-fresh",
+              pid: 777_777,
+              acquiredAt: now - 500,
+              heartbeatAt: now - 500,
+            },
+          },
+        },
+        null,
+        2,
+      ),
+      "utf-8",
+    );
+
+    const coordinator = createModelLockCoordinator({
+      statePath,
+      instanceId: "new-owner",
+      pid: 5003,
+      leaseMs: 15_000,
+      hardStaleMs: 60_000,
+      isPidAlive: (pid) => pid !== 777_777,
+    });
+
+    const acquired = await coordinator.acquire("openai/gpt-5", {
+      timeoutMs: 0,
+    });
+
+    expect(acquired.acquired).toBe(true);
+  });
+
   it("reclaims hard-stale locks even if pid appears alive", async () => {
     const { statePath } = createTempStatePath();
     const now = Date.now();
@@ -194,13 +244,12 @@ describe("model locks", () => {
       "utf-8",
     );
 
-    const coordinator = createModelLockCoordinator({
+    const coordinator = createTestCoordinator({
       statePath,
       instanceId: "new-owner",
       pid: 5002,
       leaseMs: 1_000,
       hardStaleMs: 5_000,
-      isPidAlive: () => true,
     });
 
     expect(

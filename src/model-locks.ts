@@ -292,9 +292,20 @@ export class ModelLockCoordinator {
 
       const heartbeatAge = now - entry.heartbeatAt;
 
+      // Reclaim immediately if the owning process is gone, even when the
+      // heartbeat is still fresh. This avoids short-lived invocations (e.g.
+      // wrapper scripts spawning `pi` repeatedly) blocking follow-up runs for
+      // an entire lease interval.
+      if (!this.isPidAlive(entry.pid)) {
+        delete state.locks[key];
+        continue;
+      }
+
+      // Keep live owners through the normal lease window.
       if (heartbeatAge <= this.leaseMs) continue;
 
-      if (heartbeatAge > this.hardStaleMs || !this.isPidAlive(entry.pid)) {
+      // If a live owner stops heartbeating for too long, force cleanup.
+      if (heartbeatAge > this.hardStaleMs) {
         delete state.locks[key];
       }
     }
