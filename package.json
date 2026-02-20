@@ -16,7 +16,7 @@
     "@mariozechner/pi-coding-agent": "*"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.2",
+    "@biomejs/biome": "2.4.4",
     "@mariozechner/pi-coding-agent": "latest",
     "@types/node": "^24.0.0",
     "@vitest/coverage-v8": "^4.0.18",
