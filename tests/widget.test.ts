@@ -185,5 +185,110 @@ describe("Widget", () => {
       expect(widget.render(5)).toHaveLength(3);
       expect(widget.invalidate()).toBeUndefined();
     });
+
+    it("should render auto-selection disabled status in red", () => {
+      const setWidgetMock = vi.fn();
+      const mockCtx = {
+        hasUI: true,
+        ui: { setWidget: setWidgetMock },
+      } as unknown as ExtensionContext;
+      const config = {
+        mappings: [],
+        widget: { enabled: true, showCount: 3, placement: "belowEditor" },
+      } as unknown as LoadedConfig;
+      const candidates = [
+        {
+          provider: "p1",
+          displayName: "D1",
+          windowLabel: "W1",
+          usedPercent: 0,
+          remainingPercent: 100,
+        },
+        {
+          provider: "p2",
+          displayName: "D2",
+          windowLabel: "W2",
+          usedPercent: 20,
+          remainingPercent: 80,
+        },
+      ] as unknown as UsageCandidate[];
+      updateWidgetState({ candidates, config, autoSelectionDisabled: true });
+      renderUsageWidget(mockCtx);
+      const renderFn = setWidgetMock.mock.calls[0][1];
+      const widget = renderFn(null, theme);
+      const output = widget.render(500);
+      // Should show AUTO OFF message only, no candidates
+      expect(output[1]).toContain("[error]AUTO OFF[/error]");
+      expect(output[1]).not.toContain("D1");
+      expect(output[1]).not.toContain("D2");
+    });
+
+    it("should show AUTO OFF even without candidates", () => {
+      const setWidgetMock = vi.fn();
+      const mockCtx = {
+        hasUI: true,
+        ui: { setWidget: setWidgetMock },
+      } as unknown as ExtensionContext;
+      const config = {
+        mappings: [],
+        widget: { enabled: true, showCount: 3, placement: "belowEditor" },
+      } as unknown as LoadedConfig;
+      updateWidgetState({
+        candidates: [],
+        config,
+        autoSelectionDisabled: true,
+      });
+      renderUsageWidget(mockCtx);
+      const renderFn = setWidgetMock.mock.calls[0][1];
+      const widget = renderFn(null, theme);
+      const output = widget.render(500);
+      // Should show AUTO OFF message even without candidates
+      expect(output[1]).toContain("[error]AUTO OFF[/error]");
+    });
+
+    it("should show candidates when auto-selection is enabled", () => {
+      const setWidgetMock = vi.fn();
+      const mockCtx = {
+        hasUI: true,
+        ui: { setWidget: setWidgetMock },
+      } as unknown as ExtensionContext;
+      const config = {
+        mappings: [],
+        widget: { enabled: true, showCount: 3, placement: "belowEditor" },
+      } as unknown as LoadedConfig;
+      const candidates = [
+        {
+          provider: "p1",
+          displayName: "D1",
+          windowLabel: "W1",
+          usedPercent: 0,
+          remainingPercent: 100,
+        },
+        {
+          provider: "p2",
+          displayName: "D2",
+          windowLabel: "W2",
+          usedPercent: 20,
+          remainingPercent: 80,
+        },
+        {
+          provider: "p3",
+          displayName: "D3",
+          windowLabel: "W3",
+          usedPercent: 40,
+          remainingPercent: 60,
+        },
+      ] as unknown as UsageCandidate[];
+      updateWidgetState({ candidates, config, autoSelectionDisabled: false });
+      renderUsageWidget(mockCtx);
+      const renderFn = setWidgetMock.mock.calls[0][1];
+      const widget = renderFn(null, theme);
+      const output = widget.render(500);
+      // Should show candidates when auto-selection is enabled
+      expect(output[1]).not.toContain("[error]AUTO OFF[/error]");
+      expect(output[1]).toContain("D1");
+      expect(output[1]).toContain("D2");
+      expect(output[1]).toContain("D3");
+    });
   });
 });

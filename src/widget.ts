@@ -89,6 +89,7 @@ function formatCandidate(
 export interface WidgetState {
   candidates: UsageCandidate[];
   config: LoadedConfig;
+  autoSelectionDisabled?: boolean;
 }
 
 let currentWidgetState: WidgetState | null = null;
@@ -120,10 +121,10 @@ export function renderUsageWidget(ctx: ExtensionContext): void {
     return;
   }
 
-  const { candidates, config } = state,
+  const { candidates, config, autoSelectionDisabled = false } = state,
     { showCount } = config.widget;
 
-  if (candidates.length === 0) {
+  if (candidates.length === 0 && !autoSelectionDisabled) {
     ui.setWidget("model-selector", undefined);
     return;
   }
@@ -133,20 +134,23 @@ export function renderUsageWidget(ctx: ExtensionContext): void {
     seenModels = new Set<string>(),
     seenBuckets = new Set<string>();
 
-  for (const candidate of candidates) {
-    if (topCandidates.length >= showCount) break;
+  // When auto-selection is disabled, don't show any candidates
+  if (!autoSelectionDisabled) {
+    for (const candidate of candidates) {
+      if (topCandidates.length >= showCount) break;
 
-    const mapping = findModelMapping(candidate, config.mappings);
-    if (mapping?.model) {
-      const modelKey = `${mapping.model.provider}/${mapping.model.id}`;
-      if (seenModels.has(modelKey)) continue;
-      seenModels.add(modelKey);
-    } else {
-      const bucketKey = `${candidate.provider}|${candidate.displayName}|${candidate.account || ""}`;
-      if (seenBuckets.has(bucketKey)) continue;
-      seenBuckets.add(bucketKey);
+      const mapping = findModelMapping(candidate, config.mappings);
+      if (mapping?.model) {
+        const modelKey = `${mapping.model.provider}/${mapping.model.id}`;
+        if (seenModels.has(modelKey)) continue;
+        seenModels.add(modelKey);
+      } else {
+        const bucketKey = `${candidate.provider}|${candidate.displayName}|${candidate.account || ""}`;
+        if (seenBuckets.has(bucketKey)) continue;
+        seenBuckets.add(bucketKey);
+      }
+      topCandidates.push(candidate);
     }
-    topCandidates.push(candidate);
   }
 
   ui.setWidget(
@@ -157,13 +161,23 @@ export function renderUsageWidget(ctx: ExtensionContext): void {
           paddingLeft = 1,
           // Compact horizontal format
           separator = theme.fg("dim", " │ "),
-          barWidth = 6,
-          formattedCandidates = topCandidates.map((c) =>
+          barWidth = 6;
+
+        const formattedCandidates = topCandidates.map((c) =>
             formatCandidate(c, config.mappings, theme, barWidth),
           ),
-          contentLine = formattedCandidates.join(separator),
           lines: string[] = [];
+
         lines.push(theme.fg("dim", "─".repeat(safeWidth)));
+
+        // Build the content line
+        let contentLine = "";
+        if (autoSelectionDisabled) {
+          contentLine = theme.fg("error", "AUTO OFF");
+        } else {
+          contentLine = formattedCandidates.join(separator);
+        }
+
         lines.push(
           truncateToWidth(" ".repeat(paddingLeft) + contentLine, safeWidth),
         );
