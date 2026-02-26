@@ -2207,10 +2207,10 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
   pi.registerCommand("model-auto-toggle", {
     description: "Toggle auto model selection on/off for this session",
     handler: async (_args, ctx) => {
-      autoSelectionDisabled = !autoSelectionDisabled;
-
       const config = await loadConfig(ctx, { requireMappings: false });
       if (!config) return;
+
+      autoSelectionDisabled = !autoSelectionDisabled;
 
       if (autoSelectionDisabled) {
         notify(
