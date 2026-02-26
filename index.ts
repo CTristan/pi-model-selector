@@ -2092,22 +2092,69 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
   };
 
   pi.on("session_start", async (_event, ctx) => {
-    await runSelector(ctx, "startup");
-  });
-
-  pi.on("session_switch", async (event, ctx) => {
-    if (event.reason === "new" || event.reason === "resume") {
-      await runSelector(ctx, "startup");
-    }
-  });
-
-  pi.on("before_agent_start", async (_event, ctx) => {
-    await releaseActiveModelLock();
     // Skip model selection if auto-selection is disabled for this session
     if (autoSelectionDisabled) {
       writeDebugLog("Skipping model selection: auto-selection is disabled");
       return;
     }
+    await runSelector(ctx, "startup");
+  });
+
+  pi.on("session_switch", async (event, ctx) => {
+    if (event.reason === "new" || event.reason === "resume") {
+      // Skip model selection if auto-selection is disabled for this session
+      if (autoSelectionDisabled) {
+        writeDebugLog("Skipping model selection: auto-selection is disabled");
+        return;
+      }
+      await runSelector(ctx, "startup");
+    }
+  });
+
+  pi.on("before_agent_start", async (_event, ctx) => {
+    // Skip model selection if auto-selection is disabled for this session.
+    // Maintain cross-instance coordination by acquiring a lock for the current
+    // model, keeping an existing lock if it already matches, or swapping to
+    // a new lock if the model has changed.
+    if (autoSelectionDisabled) {
+      writeDebugLog("Skipping model selection: auto-selection is disabled");
+      // If we have an active lock that matches the current model, keep it.
+      // Otherwise, acquire a lock for the current model to maintain coordination.
+      if (ctx.model) {
+        const currentModelKey = modelLockKey(ctx.model.provider, ctx.model.id);
+        if (activeModelLockKey !== currentModelKey) {
+          // Try to acquire the new lock first, then release the old lock.
+          // This ensures we never run without coordination if the lock is busy.
+          const oldLockKey = activeModelLockKey;
+          try {
+            await modelLockCoordinator.acquire(currentModelKey);
+            activeModelLockKey = currentModelKey;
+            startLockHeartbeat(currentModelKey);
+            if (oldLockKey) {
+              await modelLockCoordinator.release(oldLockKey);
+            }
+            writeDebugLog(
+              `Acquired lock for current model ${ctx.model.provider}/${ctx.model.id}`,
+            );
+          } catch (err) {
+            notify(
+              ctx,
+              "error",
+              `Failed to acquire lock for current model ${ctx.model.provider}/${ctx.model.id}: ${String(err)}. Cross-instance coordination may be impaired.`,
+            );
+            writeDebugLog(
+              `Failed to acquire lock for current model ${ctx.model.provider}/${ctx.model.id}: ${String(err)}`,
+            );
+          }
+        } else {
+          writeDebugLog(
+            `Keeping existing lock for current model ${ctx.model.provider}/${ctx.model.id}`,
+          );
+        }
+      }
+      return;
+    }
+    await releaseActiveModelLock();
     await runSelector(ctx, "request", {
       acquireModelLock: true,
       waitForModelLock: true,
