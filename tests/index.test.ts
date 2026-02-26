@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import modelSelectorExtension from "../index.js";
 import * as configMod from "../src/config.js";
 import * as usageFetchers from "../src/usage-fetchers.js";
+import * as widgetMod from "../src/widget.js";
 
 // Capture debug log writes for testing
 const capturedDebugLogs: string[] = [];
@@ -608,5 +609,177 @@ describe("Model Selector Extension", () => {
       expect.stringContaining("Model selection failed before request start"),
       "error",
     );
+  });
+
+  describe("model-auto-toggle command", () => {
+    let updateWidgetStateMock: ReturnType<typeof vi.fn>;
+    let renderUsageWidgetMock: ReturnType<typeof vi.fn>;
+    let getWidgetStateMock: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      // Get widget mocks
+      updateWidgetStateMock = vi.mocked(widgetMod.updateWidgetState);
+      renderUsageWidgetMock = vi.mocked(widgetMod.renderUsageWidget);
+      getWidgetStateMock = vi.mocked(widgetMod.getWidgetState);
+
+      // Set up widget state
+      getWidgetStateMock.mockReturnValue({
+        candidates: [],
+        config: {
+          mappings: [
+            {
+              usage: { provider: "p1", window: "w1" },
+              model: { provider: "p1", id: "m1" },
+            },
+          ],
+          priority: ["remainingPercent"],
+          widget: { enabled: true, placement: "belowEditor", showCount: 3 },
+          autoRun: false,
+          disabledProviders: [],
+          sources: { globalPath: "", projectPath: "" },
+          raw: { global: {}, project: {} },
+        },
+      });
+    });
+
+    it("toggles autoSelectionDisabled flag and updates widget when disabling", async () => {
+      modelSelectorExtension(pi);
+      const handler = commands["model-auto-toggle"];
+
+      await handler({}, ctx);
+
+      expect(ctx.ui.notify).toHaveBeenCalledWith(
+        expect.stringContaining("Auto model selection disabled"),
+        "info",
+      );
+      expect(updateWidgetStateMock).toHaveBeenCalledWith(
+        expect.objectContaining({ autoSelectionDisabled: true }),
+      );
+      expect(renderUsageWidgetMock).toHaveBeenCalledWith(ctx);
+    });
+
+    it("toggles autoSelectionDisabled flag and runs selector when enabling", async () => {
+      // First, disable auto-selection
+      modelSelectorExtension(pi);
+      const handler = commands["model-auto-toggle"];
+
+      await handler({}, ctx);
+
+      expect(ctx.ui.notify).toHaveBeenCalledWith(
+        expect.stringContaining("Auto model selection disabled"),
+        "info",
+      );
+
+      // Now enable it again - set ctx.model to something different so runSelector will change it
+      const originalModel = ctx.model;
+      ctx.model = { provider: "other", id: "other-model" };
+
+      vi.mocked(usageFetchers.fetchAllUsages).mockResolvedValue([
+        {
+          provider: "p1",
+          displayName: "Provider 1",
+          windows: [{ label: "w1", usedPercent: 10, resetsAt: new Date() }],
+        },
+      ]);
+
+      await handler({}, ctx);
+
+      expect(ctx.ui.notify).toHaveBeenCalledWith(
+        expect.stringContaining("Auto model selection enabled"),
+        "info",
+      );
+      expect(updateWidgetStateMock).toHaveBeenCalledWith(
+        expect.objectContaining({ autoSelectionDisabled: false }),
+      );
+      expect(renderUsageWidgetMock).toHaveBeenCalledWith(ctx);
+      // runSelector should have been called and set the model
+      expect(pi.setModel).toHaveBeenCalledWith(
+        expect.objectContaining({ provider: "p1", id: "m1" }),
+      );
+
+      // Restore original model
+      ctx.model = originalModel;
+    });
+
+    it("does nothing when config loading fails", async () => {
+      vi.mocked(configMod.loadConfig).mockResolvedValueOnce(null);
+
+      modelSelectorExtension(pi);
+      const handler = commands["model-auto-toggle"];
+
+      await handler({}, ctx);
+
+      // Should not notify or update widget if config fails to load
+      expect(ctx.ui.notify).not.toHaveBeenCalled();
+      expect(updateWidgetStateMock).not.toHaveBeenCalled();
+    });
+
+    it("resets autoSelectionDisabled flag on session_shutdown", async () => {
+      modelSelectorExtension(pi);
+      const handler = commands["model-auto-toggle"];
+
+      // Disable auto-selection (flag becomes true)
+      await handler({}, ctx);
+      expect(ctx.ui.notify).toHaveBeenCalledWith(
+        expect.stringContaining("Auto model selection disabled"),
+        "info",
+      );
+
+      // Trigger session_shutdown - this resets the flag to false (enabled)
+      const sessionShutdown = events.session_shutdown;
+      await sessionShutdown();
+
+      // Now toggle again - should disable (since flag was reset to false)
+      await handler({}, ctx);
+
+      // Should disable (flag was reset to false, toggle makes it true)
+      expect(ctx.ui.notify).toHaveBeenCalledWith(
+        expect.stringContaining("Auto model selection disabled"),
+        "info",
+      );
+
+      // Toggle once more to enable - set ctx.model to something different so runSelector will change it
+      const originalModel = ctx.model;
+      ctx.model = { provider: "other", id: "other-model" };
+
+      vi.mocked(usageFetchers.fetchAllUsages).mockResolvedValue([
+        {
+          provider: "p1",
+          displayName: "Provider 1",
+          windows: [{ label: "w1", usedPercent: 10, resetsAt: new Date() }],
+        },
+      ]);
+
+      await handler({}, ctx);
+
+      // Should enable and run selector
+      expect(ctx.ui.notify).toHaveBeenCalledWith(
+        expect.stringContaining("Auto model selection enabled"),
+        "info",
+      );
+      expect(pi.setModel).toHaveBeenCalledWith(
+        expect.objectContaining({ provider: "p1", id: "m1" }),
+      );
+
+      // Restore original model
+      ctx.model = originalModel;
+    });
+
+    it("handles missing widget state gracefully", async () => {
+      getWidgetStateMock.mockReturnValue(null);
+
+      modelSelectorExtension(pi);
+      const handler = commands["model-auto-toggle"];
+
+      await handler({}, ctx);
+
+      // Should still notify even without widget state
+      expect(ctx.ui.notify).toHaveBeenCalledWith(
+        expect.stringContaining("Auto model selection disabled"),
+        "info",
+      );
+      // But should not try to update widget state
+      expect(updateWidgetStateMock).not.toHaveBeenCalled();
+    });
   });
 });

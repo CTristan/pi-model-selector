@@ -1451,7 +1451,8 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
     lastSelectedCandidateKey: string | null = null,
     activeModelLockKey: string | null = null,
     lockHeartbeatTimer: NodeJS.Timeout | null = null,
-    heartbeatInProgress = false;
+    heartbeatInProgress = false,
+    autoSelectionDisabled = false; // Session-scoped flag to disable auto model selection
 
   // Load persisted cooldown state from file
   const loadPersistedCooldowns = async (): Promise<void> => {
@@ -1777,7 +1778,11 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
       );
 
       // Update widget with all non-ignored, non-cooldown candidates (including exhausted)
-      updateWidgetState({ candidates: rankedDisplayCandidates, config });
+      updateWidgetState({
+        candidates: rankedDisplayCandidates,
+        config,
+        autoSelectionDisabled,
+      });
       renderUsageWidget(ctx);
 
       if (eligibleCandidates.length === 0) {
@@ -2087,16 +2092,68 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
   };
 
   pi.on("session_start", async (_event, ctx) => {
+    // Skip model selection if auto-selection is disabled for this session
+    if (autoSelectionDisabled) {
+      writeDebugLog("Skipping model selection: auto-selection is disabled");
+      return;
+    }
     await runSelector(ctx, "startup");
   });
 
   pi.on("session_switch", async (event, ctx) => {
     if (event.reason === "new" || event.reason === "resume") {
+      // Skip model selection if auto-selection is disabled for this session
+      if (autoSelectionDisabled) {
+        writeDebugLog("Skipping model selection: auto-selection is disabled");
+        return;
+      }
       await runSelector(ctx, "startup");
     }
   });
 
   pi.on("before_agent_start", async (_event, ctx) => {
+    // Skip model selection if auto-selection is disabled for this session.
+    // Maintain cross-instance coordination by acquiring a lock for the current
+    // model, keeping an existing lock if it already matches, or swapping to
+    // a new lock if the model has changed.
+    if (autoSelectionDisabled) {
+      writeDebugLog("Skipping model selection: auto-selection is disabled");
+      // If we have an active lock that matches the current model, keep it.
+      // Otherwise, acquire a lock for the current model to maintain coordination.
+      if (ctx.model) {
+        const currentModelKey = modelLockKey(ctx.model.provider, ctx.model.id);
+        if (activeModelLockKey !== currentModelKey) {
+          // Try to acquire the new lock first, then release the old lock.
+          // This ensures we never run without coordination if the lock is busy.
+          const oldLockKey = activeModelLockKey;
+          try {
+            await modelLockCoordinator.acquire(currentModelKey);
+            activeModelLockKey = currentModelKey;
+            startLockHeartbeat(currentModelKey);
+            if (oldLockKey) {
+              await modelLockCoordinator.release(oldLockKey);
+            }
+            writeDebugLog(
+              `Acquired lock for current model ${ctx.model.provider}/${ctx.model.id}`,
+            );
+          } catch (err) {
+            notify(
+              ctx,
+              "error",
+              `Failed to acquire lock for current model ${ctx.model.provider}/${ctx.model.id}: ${String(err)}. Cross-instance coordination may be impaired.`,
+            );
+            writeDebugLog(
+              `Failed to acquire lock for current model ${ctx.model.provider}/${ctx.model.id}: ${String(err)}`,
+            );
+          }
+        } else {
+          writeDebugLog(
+            `Keeping existing lock for current model ${ctx.model.provider}/${ctx.model.id}`,
+          );
+        }
+      }
+      return;
+    }
     await releaseActiveModelLock();
     await runSelector(ctx, "request", {
       acquireModelLock: true,
@@ -2108,6 +2165,11 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
     await releaseActiveModelLock();
     const config = await loadConfig(ctx, { requireMappings: false });
     if (config?.autoRun) {
+      // Skip auto-run if auto-selection is disabled
+      if (autoSelectionDisabled) {
+        writeDebugLog("Skipping auto-run: auto-selection is disabled");
+        return;
+      }
       await runSelector(ctx, "auto", { preloadedConfig: config });
     }
   });
@@ -2115,6 +2177,7 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
   pi.on("session_shutdown", async () => {
     await releaseActiveModelLock();
     await modelLockCoordinator.releaseAll();
+    autoSelectionDisabled = false; // Reset session-scoped flag
   });
 
   pi.registerCommand("model-select", {
@@ -2184,6 +2247,43 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
         });
       } else {
         notify(ctx, "error", "Could not determine a candidate to skip.");
+      }
+    },
+  });
+
+  pi.registerCommand("model-auto-toggle", {
+    description: "Toggle auto model selection on/off for this session",
+    handler: async (_args, ctx) => {
+      const config = await loadConfig(ctx, { requireMappings: false });
+      if (!config) return;
+
+      autoSelectionDisabled = !autoSelectionDisabled;
+
+      if (autoSelectionDisabled) {
+        notify(
+          ctx,
+          "info",
+          "Auto model selection disabled for this session. Use Pi's built-in model selection to choose a model manually.",
+        );
+        // Refresh widget to show the disabled status
+        const state = getWidgetState();
+        if (state) {
+          updateWidgetState({ ...state, autoSelectionDisabled: true });
+          renderUsageWidget(ctx);
+        }
+      } else {
+        notify(
+          ctx,
+          "info",
+          "Auto model selection enabled for this session. The extension will now automatically select the best model.",
+        );
+        // Re-enable auto-selection and run it immediately
+        const state = getWidgetState();
+        if (state) {
+          updateWidgetState({ ...state, autoSelectionDisabled: false });
+          renderUsageWidget(ctx);
+        }
+        await runSelector(ctx, "command");
       }
     },
   });
