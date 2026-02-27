@@ -566,6 +566,14 @@ async function acquireModelLock(
   }
 
   if (lockableCandidates.length === 0) {
+    writeDebugLog(
+      "No mapped models available for lock acquisition. Skipping model lock acquisition step.",
+    );
+    notify(
+      ctx,
+      "error",
+      "No mapped models are available to lock for the current selection. Check your model mappings and configuration.",
+    );
     return { waitedForLockMs: 0 };
   }
 

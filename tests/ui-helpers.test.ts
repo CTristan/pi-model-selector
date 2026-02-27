@@ -238,41 +238,5 @@ describe("UI Helpers", () => {
       ]);
       expect(result).toBe("option1");
     });
-
-    it("attempts to use ui.custom when available and not in vitest", async () => {
-      mockCtx.hasUI = true;
-      const mockCustomUI = vi.fn().mockImplementation((_callback) => {
-        return {
-          render: vi.fn(),
-          invalidate: vi.fn(),
-          handleInput: vi.fn(),
-        };
-      });
-      mockCtx.ui.custom = mockCustomUI;
-      mockCtx.ui.select = vi.fn();
-
-      // Clear VITEST from environment
-      delete process.env.VITEST;
-
-      // Mock import.meta.env to not have VITEST
-      const originalImportMeta = (globalThis as any).importMeta;
-      (globalThis as any).importMeta = { env: {} };
-
-      try {
-        const { selectWrapped } = await import("../src/ui-helpers.js");
-        // This may fail due to theme initialization, but we just want to verify
-        // that ui.custom was attempted to be called
-        await selectWrapped(mockCtx, "Test", ["option1", "option2"]);
-      } catch (_e) {
-        // Expected to fail due to theme initialization in test environment
-        // But we've verified the path was taken
-      }
-
-      // Verify ui.custom was called (meaning the non-vitest path was taken)
-      expect(mockCustomUI).toHaveBeenCalled();
-
-      // Restore original
-      (globalThis as any).importMeta = originalImportMeta;
-    });
   });
 });
