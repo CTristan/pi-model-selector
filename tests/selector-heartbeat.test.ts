@@ -1,10 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as configMod from "../src/config.js";
 import type { CooldownManager } from "../src/cooldown.js";
-import {
-  type createModelLockCoordinator,
-  runSelector,
-} from "../src/selector.js";
+import { type ModelLockCoordinator, runSelector } from "../src/selector.js";
 import type { LoadedConfig } from "../src/types.js";
 import * as usageFetchers from "../src/usage-fetchers.js";
 
@@ -23,7 +20,7 @@ describe("Selector Heartbeat and Error Handling", () => {
   let ctx: any;
   let mockConfig: LoadedConfig;
   let mockCooldownManager: CooldownManager;
-  let mockModelLockCoordinator: ReturnType<typeof createModelLockCoordinator>;
+  let mockModelLockCoordinator: ModelLockCoordinator;
   let lockHeartbeatTimer: { current: NodeJS.Timeout | null };
   let activeModelLockKey: { current: string | null };
 

@@ -204,21 +204,29 @@ describe("UI Helpers", () => {
     it("uses ui.select in vitest environment", async () => {
       mockCtx.hasUI = true;
       mockCtx.ui.select = vi.fn().mockResolvedValue("option2");
+
+      const previousVitest = process.env.VITEST;
       process.env.VITEST = "true";
 
-      const { selectWrapped } = await import("../src/ui-helpers.js");
-      const result = await selectWrapped(mockCtx, "Test", [
-        "option1",
-        "option2",
-      ]);
+      try {
+        const { selectWrapped } = await import("../src/ui-helpers.js");
+        const result = await selectWrapped(mockCtx, "Test", [
+          "option1",
+          "option2",
+        ]);
 
-      expect(mockCtx.ui.select).toHaveBeenCalledWith("Test", [
-        "option1",
-        "option2",
-      ]);
-      expect(result).toBe("option2");
-
-      delete process.env.VITEST;
+        expect(mockCtx.ui.select).toHaveBeenCalledWith("Test", [
+          "option1",
+          "option2",
+        ]);
+        expect(result).toBe("option2");
+      } finally {
+        if (previousVitest === undefined) {
+          delete process.env.VITEST;
+        } else {
+          process.env.VITEST = previousVitest;
+        }
+      }
     });
 
     it("uses ui.select when ui.custom is not available", async () => {
