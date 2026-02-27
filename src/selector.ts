@@ -156,11 +156,10 @@ export async function runSelector(
           !isProviderIgnored(usage.provider, usage.account, config.mappings)
         ) {
           // Suppress warnings if provider is already on cooldown
-          const _wildcardKey = getWildcardKey(usage.provider, usage.account),
-            wildcardExpiry = cooldownManager.getWildcardExpiry(
-              usage.provider,
-              usage.account,
-            );
+          const wildcardExpiry = cooldownManager.getWildcardExpiry(
+            usage.provider,
+            usage.account,
+          );
 
           if (!wildcardExpiry || wildcardExpiry <= now) {
             notify(
