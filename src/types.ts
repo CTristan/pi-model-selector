@@ -46,11 +46,18 @@ export type PriorityRule =
   | "remainingPercent"
   | "earliestReset";
 
+export interface FallbackConfig {
+  provider: string;
+  id: string;
+  lock?: boolean; // default: true
+}
+
 export interface ModelSelectorConfig {
   mappings: MappingEntry[];
   priority?: PriorityRule[];
   widget?: WidgetConfig;
   autoRun?: boolean;
+  fallback?: FallbackConfig;
 }
 
 export interface WidgetConfig {
@@ -80,6 +87,7 @@ export interface LoadedConfig {
     enabled: boolean;
     path: string;
   };
+  fallback?: FallbackConfig;
   sources: { globalPath: string; projectPath: string };
   raw: { global: Record<string, unknown>; project: Record<string, unknown> };
 }

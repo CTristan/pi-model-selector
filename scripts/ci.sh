@@ -32,6 +32,20 @@ else
 fi
 
 echo "Running unit tests..."
-npm run test
+# Timeout protects against import hangs (vitest testTimeout only applies to test execution)
+# Tests normally complete in ~2-3 seconds; 60s allows generous headroom
+if command -v timeout >/dev/null 2>&1; then
+  TIMEOUT_CMD="timeout"
+elif command -v gtimeout >/dev/null 2>&1; then
+  TIMEOUT_CMD="gtimeout"
+else
+  TIMEOUT_CMD=""
+fi
+
+if [ -n "$TIMEOUT_CMD" ]; then
+  "$TIMEOUT_CMD" 60s npm run test
+else
+  npm run test
+fi
 
 echo "CI gate passed!"

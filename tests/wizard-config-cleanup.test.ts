@@ -253,4 +253,87 @@ describe("mapping wizard config cleanup", () => {
       "info",
     );
   });
+
+  it("notifies when no cleanup changes are needed", async () => {
+    const noChangeConfig: LoadedConfig = {
+      ...initialConfig,
+      mappings: [],
+      raw: {
+        global: { mappings: [] },
+        project: {},
+      },
+    };
+
+    vi.mocked(configMod.loadConfig).mockReset();
+    vi.mocked(configMod.loadConfig).mockResolvedValue(noChangeConfig);
+    vi.mocked(configMod.cleanupConfigRaw).mockReset();
+    vi.mocked(configMod.cleanupConfigRaw).mockImplementation(() => ({
+      changed: false,
+      summary: [],
+      removedExamples: false,
+      fixedDebugLogPath: false,
+      removedInvalidMappings: 0,
+      removedDuplicateMappings: 0,
+      removedUnavailableModelMappings: 0,
+    }));
+
+    let menuVisits = 0;
+    ctx.ui.select = vi.fn((message: string) => {
+      if (message === "Model selector configuration") {
+        menuVisits += 1;
+        return Promise.resolve(menuVisits === 1 ? "Clean up config" : "Done");
+      }
+      if (message === "Select config file to clean") {
+        return Promise.resolve("Global (global.json)");
+      }
+      return Promise.resolve(undefined);
+    });
+    ctx.ui.confirm = vi.fn(() => Promise.resolve(true));
+
+    const runWizard = commands["model-select-config"];
+    await runWizard({}, ctx as unknown as Record<string, unknown>);
+
+    expect(configMod.saveConfigFile).not.toHaveBeenCalled();
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("No cleanup changes needed"),
+      "info",
+    );
+  });
+
+  it("cancels cleanup when confirmation is declined", async () => {
+    vi.mocked(configMod.loadConfig).mockReset();
+    vi.mocked(configMod.loadConfig).mockResolvedValue(initialConfig);
+    vi.mocked(configMod.cleanupConfigRaw).mockReset();
+    vi.mocked(configMod.cleanupConfigRaw).mockImplementation(() => ({
+      changed: true,
+      summary: ["Removed unused block"],
+      removedExamples: true,
+      fixedDebugLogPath: false,
+      removedInvalidMappings: 0,
+      removedDuplicateMappings: 0,
+      removedUnavailableModelMappings: 0,
+    }));
+
+    let menuVisits = 0;
+    ctx.ui.select = vi.fn((message: string) => {
+      if (message === "Model selector configuration") {
+        menuVisits += 1;
+        return Promise.resolve(menuVisits === 1 ? "Clean up config" : "Done");
+      }
+      if (message === "Select config file to clean") {
+        return Promise.resolve("Global (global.json)");
+      }
+      return Promise.resolve(undefined);
+    });
+    ctx.ui.confirm = vi.fn(() => Promise.resolve(false));
+
+    const runWizard = commands["model-select-config"];
+    await runWizard({}, ctx as unknown as Record<string, unknown>);
+
+    expect(configMod.saveConfigFile).not.toHaveBeenCalled();
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("Config cleanup cancelled"),
+      "info",
+    );
+  });
 });
