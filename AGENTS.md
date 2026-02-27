@@ -10,7 +10,7 @@
 
 ### Entry Point
 
-- **`index.ts`**: Main extension entry point. Wires together all modules, registers commands (`/model-select`, `/model-select-config`, `/model-skip`), and handles session events. Implements cooldown persistence, cross-instance model lock acquisition/release, and the config wizard cleanup workflow.
+- **`index.ts`** (345 lines): Main extension entry point. Wires together all modules, registers commands (`/model-select`, `/model-select-config`, `/model-skip`, `/model-auto-toggle`), and handles session events. Delegates to specialized modules for cooldown management, model selection, and UI wizards.
 
 ### Source Modules (`src/`)
 
@@ -19,6 +19,11 @@
 - **`src/fetchers/*.ts`**: Provider-specific usage fetchers and shared fetch utilities (`anthropic.ts`, `copilot.ts`, `gemini.ts`, `antigravity.ts`, `codex.ts`, `kiro.ts`, `zai.ts`, `common.ts`).
 - **`src/config.ts`**: Configuration loading, parsing, validation, saving, and cleanup. Handles merging global and project configs. Cleanup also prunes mappings that reference unavailable Pi provider/model IDs when a model resolver is provided. Exports `loadConfig()`, `saveConfigFile()`, `cleanupConfigRaw()`, `upsertMapping()`, `updateWidgetConfig()`.
 - **`src/candidates.ts`**: Candidate building and ranking logic. Exports `buildCandidates()`, `combineCandidates()`, `sortCandidates()`, `findModelMapping()`, `findIgnoreMapping()`, `selectionReason()`.
+- **`src/cooldown.ts`**: Cooldown state management. Handles loading/saving cooldown state to disk, checking if candidates are on cooldown, and managing provider-wide cooldowns for rate limiting (429 errors).
+- **`src/selector.ts`**: Model selection logic. Contains the `runSelector` function that handles candidate evaluation, model lock acquisition, fallback model handling, and model selection notifications.
+- **`src/wizard.ts`**: Configuration wizard. Interactive UI for setting up mappings, providers, priority, fallback model, widget settings, auto-run, debug logging, and config cleanup.
+- **`src/credential-check.ts`**: Provider credential detection. Checks if credentials are available for each provider via environment variables, authStorage, or piAuth.
+- **`src/ui-helpers.ts`**: UI helper functions. Includes `selectWrapped` for custom select lists, helper functions for ignore mapping detection, and priority options.
 - **`src/model-locks.ts`**: Cross-instance model lock coordinator. Manages cooperative per-model mutexes in `~/.pi/model-selector-model-locks.json` with heartbeat refresh, stale lock cleanup, and atomic file-based updates.
 - **`src/widget.ts`**: Visual sub-bar widget rendering. Displays top N ranked candidates with progress bars. Exports `updateWidgetState()`, `renderUsageWidget()`, `clearWidget()`.
 
@@ -56,6 +61,7 @@
 5. **Widget Update**: Updates the visual widget with top N candidates.
 6. **Model Selection**: Selects best candidate, looks up mapping, calls `pi.setModel()`.
 7. **Lock Coordination**: For request preflight, acquires a per-model cross-instance lock (fall through ranked candidates; wait/poll only when all mapped models are busy).
+8. **Fallback Fallback**: If all quota-tracked models are exhausted or locked, attempts to use the configured fallback model (if any).
 
 ## Cooldown Mechanism
 
@@ -77,11 +83,28 @@ To ensure one Pi instance uses a given mapped model at a time:
 6. **Stale Recovery**: Locks from dead or stale owners are cleaned up automatically.
 7. **Busy Lock Logging**: When a model lock is already held by another instance, details are logged to the debug log (if enabled) to help diagnose lock contention. The log includes the model key, holding instance ID and PID, lock age, and heartbeat age.
 
+## Fallback Model Mechanism
+
+To prevent the extension from failing entirely when all quota-tracked models are depleted or busy:
+
+1. **Configuration**: The optional `fallback` configuration specifies a last-resort model (e.g., a pay-per-use API key or self-hosted model).
+2. **Exhausted Path**: When all non-ignored candidates have 0% remaining, the fallback is used instead of failing.
+3. **Lock Path**: When all mapped models are locked during lock acquisition, the fallback is tried as the lowest-priority candidate (if `fallback.lock` is `true`).
+4. **Lock Acquisition**: The fallback participates in lock coordination when `fallback.lock` is `true` (default). When `fallback.lock` is `false`, the fallback is used without acquiring a lock.
+5. **Cooldown Exemption**: The fallback is exempt from the cooldown mechanism; `/model-skip` does not affect it.
+6. **Widget Exclusion**: The fallback is not displayed in the usage widget since it has no quota data.
+7. **Notification**: When the fallback is selected, the notification clearly indicates it's a last-resort fallback.
+
 ## Configuration Schema
 
 ```json
 {
   "priority": ["fullAvailability", "remainingPercent", "earliestReset"],
+  "fallback": {
+    "provider": "anthropic",
+    "id": "claude-sonnet-4-5",
+    "lock": true
+  },
   "widget": {
     "enabled": true,
     "placement": "belowEditor",
@@ -111,6 +134,9 @@ To ensure one Pi instance uses a given mapped model at a time:
 ### Configuration Options
 
 - **`priority`**: Array of rules determining candidate ranking order.
+- **`fallback.provider`**: Pi provider ID for the fallback model (e.g., `"anthropic"`, `"openai"`).
+- **`fallback.id`**: Pi model ID for the fallback model (e.g., `"claude-sonnet-4-5"`, `"gpt-4o"`).
+- **`fallback.lock`**: Optional boolean (default: `true`). Whether to acquire a cross-instance model lock when using the fallback. Set to `false` for models that support unlimited concurrent connections.
 - **`widget.enabled`**: Boolean to enable/disable the usage widget.
 - **`widget.placement`**: `"aboveEditor"` or `"belowEditor"`.
 - **`widget.showCount`**: Number of top candidates to display (default: 3).
@@ -121,7 +147,24 @@ To ensure one Pi instance uses a given mapped model at a time:
 
 ### File Size Limit
 
-**Any file reaching 2000 lines or more must be refactored.** Split large files into focused modules with clear responsibilities. Aim to keep most files under roughly 500 lines where practical, and periodically refactor growing files.
+**Any file reaching 2000 lines or more MUST be refactored IMMEDIATELY, even in the middle of another task.**
+
+This is a critical requirement to maintain code quality and maintainability. When a file exceeds 2000 lines:
+
+1. **Stop the current task** (unless it's a critical hotfix that cannot be interrupted)
+2. **Refactor the file** into smaller, focused modules with clear responsibilities
+3. **Ensure all tests still pass** after the refactoring
+4. **Resume the original task**
+
+**Aim to keep most files under roughly 500 lines where practical**, and periodically refactor growing files before they reach the 2000-line threshold.
+
+**Example**: The original `index.ts` was 2580 lines and was refactored into:
+- `index.ts` (345 lines) - Main entry point and event registration
+- `src/cooldown.ts` (175 lines) - Cooldown state management
+- `src/credential-check.ts` (166 lines) - Provider credential checking
+- `src/selector.ts` (845 lines) - Model selection logic
+- `src/ui-helpers.ts` (141 lines) - UI helper functions
+- `src/wizard.ts` (1194 lines) - Configuration wizard
 
 ### Code Organization
 
@@ -137,6 +180,8 @@ To ensure one Pi instance uses a given mapped model at a time:
 
 - **Descriptive Names**: Ensure test files are named after the module or feature they test.
 - **No Reproduction Files**: Avoid committing files named `reproduce.test.ts`, `pr9-fixes.test.ts`, or similar. If a bug is reproduced via a test, integrate that test into the appropriate existing test suite or create a new descriptively named test file.
+- **Never Exclude Files from Coverage Thresholds**: Do not add source files to the coverage `exclude` list in `vitest.config.ts` to work around low coverage. If a file is hard to test, that is a signal it needs to be **refactored for testability**, not excluded. Extract pure logic (decision-making, data transformation, formatting) away from side effects (API calls, file I/O, interactive prompts) so the core behavior can be unit-tested directly.
+- **Design for Testability**: Prefer small, pure functions that take inputs and return outputs over large functions that mix logic with side effects. When a module orchestrates async operations, keep the orchestration thin and delegate decisions to testable helpers.
 
 ### Language & Environment
 

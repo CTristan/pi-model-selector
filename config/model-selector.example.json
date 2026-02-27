@@ -1,5 +1,10 @@
 {
   "priority": ["fullAvailability", "earliestReset", "remainingPercent"],
+  "fallback": {
+    "provider": "anthropic",
+    "id": "claude-sonnet-4-5",
+    "lock": true
+  },
   "widget": {
     "enabled": true,
     "placement": "belowEditor",

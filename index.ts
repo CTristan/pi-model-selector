@@ -1,1598 +1,52 @@
-import * as fs from "node:fs";
-import * as os from "node:os";
-import * as path from "node:path";
 import type {
   ExtensionAPI,
   ExtensionContext,
 } from "@mariozechner/pi-coding-agent";
-import {
-  DynamicBorder,
-  getSelectListTheme,
-  keyHint,
-  rawKeyHint,
-} from "@mariozechner/pi-coding-agent";
-
-import {
-  Container,
-  type SelectItem,
-  SelectList,
-  Spacer,
-  Text,
-} from "@mariozechner/pi-tui";
 
 import {
   buildCandidates,
-  candidateKey,
   combineCandidates,
-  dedupeCandidates,
-  findCombinationMapping,
   findIgnoreMapping,
-  findModelMapping,
-  selectionReason,
   sortCandidates,
 } from "./src/candidates.js";
-
-import {
-  cleanupConfigRaw,
-  clearBucketMappings,
-  getRawMappings,
-  loadConfig,
-  removeMapping,
-  saveConfigFile,
-  updateWidgetConfig,
-  upsertMapping,
-} from "./src/config.js";
-
-import { resolveZaiApiKey } from "./src/fetchers/zai.js";
-import { createModelLockCoordinator, modelLockKey } from "./src/model-locks.js";
-import type {
-  LoadedConfig,
-  MappingEntry,
-  PriorityRule,
-  ProviderName,
-  UsageCandidate,
-  UsageMappingKey,
-  UsageSnapshot,
-  WidgetConfig,
-} from "./src/types.js";
-import {
-  ALL_PROVIDERS,
-  notify,
-  setGlobalConfig,
-  writeDebugLog,
-} from "./src/types.js";
-import { fetchAllUsages, loadPiAuth } from "./src/usage-fetchers.js";
-
-import {
-  clearWidget,
-  getWidgetState,
-  renderUsageWidget,
-  updateWidgetState,
-} from "./src/widget.js";
-
-// ============================================================================
-// Helpers
-// ============================================================================
-
-const CATCH_ALL_PATTERNS = ["*", ".*", "^.*$", "^.*", ".*$", ".+", "^.+$"];
-
-function isCatchAllIgnoreMapping(m: MappingEntry): boolean {
-  const { usage } = m,
-    hasWindow =
-      usage.window !== undefined &&
-      usage.window !== null &&
-      usage.window !== "",
-    hasWindowPattern =
-      usage.windowPattern !== undefined &&
-      usage.windowPattern !== null &&
-      usage.windowPattern !== "";
-
-  if (!hasWindow && !hasWindowPattern) {
-    return true;
-  }
-
-  if (usage.windowPattern) {
-    if (CATCH_ALL_PATTERNS.includes(usage.windowPattern)) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
-function isProviderIgnored(
-  provider: string,
-  account: string | undefined,
-  mappings: MappingEntry[],
-): boolean {
-  return mappings.some(
-    (m) =>
-      m.usage.provider === provider &&
-      (m.usage.account === undefined || m.usage.account === account) &&
-      m.ignore === true &&
-      isCatchAllIgnoreMapping(m),
-  );
-}
-
-function getWildcardKey(provider: string, account?: string | null): string {
-  return `${provider}|${account ?? ""}|*`;
-}
-
-async function selectWrapped(
-  ctx: ExtensionContext,
-  title: string,
-  options: string[],
-): Promise<string | undefined> {
-  if (!ctx.hasUI) return options[0];
-
-  // In tests, fall back to standard select for easier mocking
-  const isVitest =
-    (import.meta as unknown as { env?: { VITEST?: boolean } }).env?.VITEST ||
-    (typeof process !== "undefined" && !!process.env.VITEST);
-
-  if (isVitest || !ctx.ui.custom) {
-    return ctx.ui.select(title, options);
-  }
-
-  return ctx.ui.custom<string | undefined>((tui, theme, _kb, done) => {
-    const container = new Container();
-    container.addChild(new DynamicBorder((s: string) => theme.fg("accent", s)));
-    container.addChild(new Spacer(1));
-    container.addChild(new Text(theme.fg("accent", theme.bold(title)), 1, 0));
-    container.addChild(new Spacer(1));
-
-    const items = options.map((o) => ({ value: o, label: o }));
-    const selectList = new SelectList(
-      items,
-      Math.min(items.length, 15),
-      getSelectListTheme(),
-    );
-    selectList.onSelect = (item: SelectItem) => done(item.value);
-    selectList.onCancel = () => done(undefined);
-    container.addChild(selectList);
-
-    container.addChild(new Spacer(1));
-    container.addChild(
-      new Text(
-        `${rawKeyHint("↑↓", "navigate")}  ${keyHint("selectConfirm", "select")}  ${keyHint("selectCancel", "cancel")}`,
-        1,
-        0,
-      ),
-    );
-    container.addChild(new Spacer(1));
-    container.addChild(new DynamicBorder((s: string) => theme.fg("accent", s)));
-
-    return {
-      render: (w) => container.render(w),
-      invalidate: () => container.invalidate(),
-      handleInput: (data) => {
-        selectList.handleInput(data);
-        tui.requestRender();
-      },
-    };
-  });
-}
-
-const priorityOptions: Array<{ label: string; value: PriorityRule[] }> = [
-  {
-    label: "fullAvailability → remainingPercent → earliestReset",
-    value: ["fullAvailability", "remainingPercent", "earliestReset"],
-  },
-  {
-    label: "fullAvailability → earliestReset → remainingPercent",
-    value: ["fullAvailability", "earliestReset", "remainingPercent"],
-  },
-  {
-    label: "remainingPercent → fullAvailability → earliestReset",
-    value: ["remainingPercent", "fullAvailability", "earliestReset"],
-  },
-  {
-    label: "remainingPercent → earliestReset → fullAvailability",
-    value: ["remainingPercent", "earliestReset", "fullAvailability"],
-  },
-  {
-    label: "earliestReset → fullAvailability → remainingPercent",
-    value: ["earliestReset", "fullAvailability", "remainingPercent"],
-  },
-  {
-    label: "earliestReset → remainingPercent → fullAvailability",
-    value: ["earliestReset", "remainingPercent", "fullAvailability"],
-  },
-];
-
-const PROVIDER_LABELS: Record<ProviderName, string> = {
-  anthropic: "Claude",
-  copilot: "Copilot",
-  gemini: "Gemini",
-  codex: "Codex",
-  antigravity: "Antigravity",
-  kiro: "Kiro",
-  zai: "z.ai",
-};
-
-function isProviderName(value: string): value is ProviderName {
-  return (ALL_PROVIDERS as readonly string[]).includes(value);
-}
-
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
-}
-
-function hasTokenPayload(value: unknown): boolean {
-  if (!value || typeof value !== "object") return false;
-  const record = value as Record<string, unknown>;
-  return [
-    record.access,
-    record.accessToken,
-    record.token,
-    record.refresh,
-    record.key,
-  ].some(isNonEmptyString);
-}
-
-async function hasProviderCredential(
-  provider: ProviderName,
-  piAuth: Record<string, unknown>,
-  modelRegistry?: {
-    authStorage?: {
-      getApiKey?: (
-        id: string,
-      ) => Promise<string | undefined> | string | undefined;
-      get?: (
-        id: string,
-      ) =>
-        | Promise<Record<string, unknown> | undefined>
-        | Record<string, unknown>
-        | undefined;
-    };
-  },
-): Promise<boolean> {
-  // Check environment variables
-  if (provider === "antigravity") {
-    if (isNonEmptyString(process.env.ANTIGRAVITY_API_KEY)) return true;
-  }
-
-  // Check authStorage for applicable providers
-  if (modelRegistry?.authStorage) {
-    try {
-      if (provider === "copilot") {
-        const [githubCopilotKey, githubKey, githubCopilotData, githubData] =
-          await Promise.all([
-            modelRegistry.authStorage.getApiKey?.("github-copilot"),
-            modelRegistry.authStorage.getApiKey?.("github"),
-            modelRegistry.authStorage.get?.("github-copilot"),
-            modelRegistry.authStorage.get?.("github"),
-          ]);
-
-        if (
-          isNonEmptyString(githubCopilotKey) ||
-          isNonEmptyString(githubKey) ||
-          hasTokenPayload(githubCopilotData) ||
-          hasTokenPayload(githubData)
-        ) {
-          return true;
-        }
-      }
-
-      if (provider === "gemini") {
-        const [geminiKey, geminiCliKey, geminiData, geminiCliData] =
-          await Promise.all([
-            modelRegistry.authStorage.getApiKey?.("google-gemini"),
-            modelRegistry.authStorage.getApiKey?.("google-gemini-cli"),
-            modelRegistry.authStorage.get?.("google-gemini"),
-            modelRegistry.authStorage.get?.("google-gemini-cli"),
-          ]);
-
-        if (
-          isNonEmptyString(geminiKey) ||
-          isNonEmptyString(geminiCliKey) ||
-          hasTokenPayload(geminiData) ||
-          hasTokenPayload(geminiCliData)
-        ) {
-          return true;
-        }
-      }
-
-      if (provider === "antigravity") {
-        const [antigravityKey, antigravityData] = await Promise.all([
-          modelRegistry.authStorage.getApiKey?.("google-antigravity"),
-          modelRegistry.authStorage.get?.("google-antigravity"),
-        ]);
-
-        if (
-          isNonEmptyString(antigravityKey) ||
-          hasTokenPayload(antigravityData)
-        ) {
-          return true;
-        }
-      }
-
-      if (provider === "anthropic") {
-        const anthropicKey =
-          await modelRegistry.authStorage.getApiKey?.("anthropic");
-        const anthropicData =
-          await modelRegistry.authStorage.get?.("anthropic");
-
-        if (isNonEmptyString(anthropicKey) || hasTokenPayload(anthropicData)) {
-          return true;
-        }
-      }
-    } catch {
-      // Ignore registry access errors
-    }
-  }
-
-  // Check piAuth for applicable providers
-  if (provider === "zai") {
-    if (resolveZaiApiKey(piAuth)) return true;
-  }
-
-  if (provider === "codex") {
-    return Object.entries(piAuth).some(([authProvider, payload]) => {
-      return (
-        authProvider.startsWith("openai-codex") && hasTokenPayload(payload)
-      );
-    });
-  }
-
-  if (provider === "antigravity") {
-    if (
-      hasTokenPayload(
-        piAuth["google-antigravity"] ??
-          piAuth.antigravity ??
-          piAuth["anti-gravity"],
-      )
-    )
-      return true;
-  }
-
-  // For remaining providers (anthropic, copilot, gemini, kiro), check piAuth aliases
-  const providerAliases: Record<string, string[]> = {
-    anthropic: ["anthropic"],
-    copilot: ["github-copilot", "copilot", "github"],
-    gemini: ["google-gemini", "google-gemini-cli", "gemini"],
-    kiro: ["kiro"],
-  };
-
-  const aliases = providerAliases[provider];
-  if (!aliases) return false;
-
-  return aliases.some((alias) => hasTokenPayload(piAuth[alias]));
-}
-
-// ============================================================================
-// Cooldown Persistence (for print-mode / automation support)
-// ============================================================================
-
-interface CooldownState {
-  cooldowns: Record<string, number>; // CandidateKey -> expiry timestamp
-  lastSelected: string | null;
-}
-
-const COOLDOWN_STATE_PATH = path.join(
-  os.homedir(),
-  ".pi",
-  "model-selector-cooldowns.json",
-);
-
-export async function loadCooldownState(): Promise<CooldownState> {
-  try {
-    await fs.promises.access(COOLDOWN_STATE_PATH);
-    const data = await fs.promises.readFile(COOLDOWN_STATE_PATH, "utf-8"),
-      parsed = JSON.parse(data) as Partial<CooldownState>,
-      cooldowns =
-        parsed.cooldowns && typeof parsed.cooldowns === "object"
-          ? parsed.cooldowns
-          : {},
-      lastSelected =
-        typeof parsed.lastSelected === "string" ? parsed.lastSelected : null;
-    return { cooldowns, lastSelected };
-  } catch {
-    // Ignore read errors or missing file, start fresh
-  }
-  return { cooldowns: {}, lastSelected: null };
-}
-
-export async function saveCooldownState(state: CooldownState): Promise<void> {
-  const dir = path.dirname(COOLDOWN_STATE_PATH);
-  try {
-    await fs.promises.mkdir(dir, { recursive: true });
-    const tempPath = `${COOLDOWN_STATE_PATH}.tmp.${Math.random().toString(36).slice(2)}`;
-    await fs.promises.writeFile(
-      tempPath,
-      JSON.stringify(state, null, 2),
-      "utf-8",
-    );
-    await fs.promises.rename(tempPath, COOLDOWN_STATE_PATH);
-  } catch (error: unknown) {
-    console.error(
-      `[model-selector] Failed to save cooldown state: ${String(error)}`,
-    );
-  }
-}
-
-// ============================================================================
-// Mapping Wizard
-// ============================================================================
-
-async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
-  if (!ctx.hasUI) {
-    notify(
-      ctx,
-      "error",
-      "Model selector configuration requires interactive mode.",
-    );
-    return;
-  }
-
-  const config = await loadConfig(ctx, { requireMappings: false });
-  if (!config) return;
-
-  const locationLabels = [
-    `Global (${config.sources.globalPath})`,
-    `Project (${config.sources.projectPath})`,
-  ];
-
-  let cachedUsages: UsageSnapshot[] | null = null,
-    cachedModels: Array<{ provider: string; id: string }> | null = null,
-    cachedPiAuth: Record<string, unknown> | null = null;
-
-  const loadAuth = async (): Promise<Record<string, unknown>> => {
-      if (cachedPiAuth !== null) return cachedPiAuth;
-      cachedPiAuth = (await loadPiAuth()) || {};
-      return cachedPiAuth;
-    },
-    loadCandidates = async (): Promise<UsageCandidate[] | null> => {
-      if (!cachedUsages) {
-        cachedUsages = await fetchAllUsages(
-          ctx.modelRegistry,
-          config.disabledProviders,
-        );
-      }
-      const rawCandidates = buildCandidates(cachedUsages);
-      const combined = combineCandidates(rawCandidates, config.mappings);
-      // For the wizard, we want to see everything, including members of combinations
-      // so users can remove their individual combination mappings.
-      const dedupedRaw = dedupeCandidates(rawCandidates);
-      const syntheticOnly = combined.filter(
-        (c: UsageCandidate) => c.isSynthetic,
-      );
-      // Avoid cross-deduping raw vs. synthetic candidates so both remain visible.
-      const candidates = [...dedupedRaw, ...syntheticOnly];
-      if (candidates.length === 0) {
-        let detail =
-          "No usage windows found. Check provider credentials and connectivity.";
-        if (config.disabledProviders.length > 0) {
-          const piAuth = await loadAuth();
-          const disabledWithCredentials: ProviderName[] = [];
-          for (const provider of config.disabledProviders) {
-            if (
-              await hasProviderCredential(provider, piAuth, ctx.modelRegistry)
-            ) {
-              disabledWithCredentials.push(provider);
-            }
-          }
-
-          if (disabledWithCredentials.length > 0) {
-            const labels = disabledWithCredentials.map(
-              (provider) => PROVIDER_LABELS[provider],
-            );
-            detail += ` Detected credentials for disabled provider(s): ${labels.join(", ")}. Enable them via "Configure providers".`;
-          }
-        }
-
-        notify(ctx, "error", detail);
-        return null;
-      }
-      return candidates;
-    },
-    loadModels = async (): Promise<Array<{
-      provider: string;
-      id: string;
-    }> | null> => {
-      if (cachedModels) return cachedModels;
-      try {
-        const availableModels = await Promise.resolve(
-          ctx.modelRegistry.getAvailable(),
-        );
-        if (availableModels.length === 0) {
-          notify(
-            ctx,
-            "error",
-            "No available models found. Ensure API keys are configured.",
-          );
-          return null;
-        }
-        cachedModels = availableModels;
-        return availableModels;
-      } catch (error: unknown) {
-        notify(
-          ctx,
-          "error",
-          `Failed to load available models: ${String(error)}`,
-        );
-        return null;
-      }
-    },
-    configurePriority = async (): Promise<void> => {
-      const currentPriority = config.priority.join(" → "),
-        priorityLabels = priorityOptions.map((option) => option.label),
-        priorityChoice = await selectWrapped(
-          ctx,
-          `Select priority order (current: ${currentPriority})`,
-          priorityLabels,
-        );
-      if (!priorityChoice) return;
-
-      const priorityIndex = priorityLabels.indexOf(priorityChoice);
-      if (priorityIndex < 0) return;
-      const selectedPriority = priorityOptions[priorityIndex].value,
-        priorityLocation = await selectWrapped(
-          ctx,
-          "Save priority to",
-          locationLabels,
-        );
-      if (!priorityLocation) return;
-
-      const saveToProject = priorityLocation === locationLabels[1],
-        targetRaw = saveToProject ? config.raw.project : config.raw.global,
-        targetPath = saveToProject
-          ? config.sources.projectPath
-          : config.sources.globalPath;
-
-      try {
-        targetRaw.priority = selectedPriority;
-        await saveConfigFile(targetPath, targetRaw);
-      } catch (error: unknown) {
-        notify(ctx, "error", `Failed to write ${targetPath}: ${String(error)}`);
-        return;
-      }
-
-      config.priority = selectedPriority;
-      notify(ctx, "info", `Priority updated: ${selectedPriority.join(" → ")}.`);
-    },
-    configureMappings = async (): Promise<void> => {
-      const availableModels = await loadModels();
-      if (!availableModels) return;
-
-      const modelLabels = availableModels.map(
-        (model) => `${model.provider}/${model.id}`,
-      );
-
-      let continueMapping = true;
-      while (continueMapping) {
-        const candidates = await loadCandidates();
-        if (!candidates) return;
-
-        const sortedCandidates = [...candidates].sort((a, b) => {
-          if (a.provider !== b.provider)
-            return a.provider.localeCompare(b.provider);
-          return a.windowLabel.localeCompare(b.windowLabel);
-        });
-
-        const optionLabels = sortedCandidates.map((candidate) => {
-          const ignored = findIgnoreMapping(candidate, config.mappings),
-            mapping = findModelMapping(candidate, config.mappings),
-            combination = findCombinationMapping(candidate, config.mappings),
-            mappingLabel = ignored
-              ? "ignored"
-              : mapping
-                ? `mapped: ${mapping.model?.provider}/${mapping.model?.id}`
-                : combination
-                  ? `combined: ${combination.combine}`
-                  : "unmapped";
-          const accountPart = candidate.account ? `${candidate.account}/` : "";
-          return `${candidate.provider}/${accountPart}${candidate.windowLabel} (${candidate.remainingPercent.toFixed(0)}% remaining, ${candidate.displayName}) [${mappingLabel}]`;
-        });
-
-        const selectedLabel = await selectWrapped(
-          ctx,
-          "Select a usage bucket to map",
-          optionLabels,
-        );
-        if (!selectedLabel) return;
-
-        const selectedIndex = optionLabels.indexOf(selectedLabel);
-        if (selectedIndex < 0) return;
-        const selectedCandidate = sortedCandidates[selectedIndex];
-
-        // Ask which config file (Global / Project) the user wants to modify first
-        const locationChoice = await selectWrapped(
-          ctx,
-          `Modify mapping in`,
-          locationLabels,
-        );
-        if (!locationChoice) return;
-
-        const saveToProject = locationChoice === locationLabels[1];
-        const targetRaw = saveToProject
-          ? config.raw.project
-          : config.raw.global;
-        const targetPath = saveToProject
-          ? config.sources.projectPath
-          : config.sources.globalPath;
-
-        // Determine which actions make sense for this target file
-        const targetMappings = getRawMappings(targetRaw),
-          matchedIgnoreInTarget = findIgnoreMapping(
-            selectedCandidate,
-            targetMappings,
-          ),
-          matchedModelInTarget = findModelMapping(
-            selectedCandidate,
-            targetMappings,
-          ),
-          matchedCombinationInTarget = findCombinationMapping(
-            selectedCandidate,
-            targetMappings,
-          ),
-          hasIgnoreInTarget = matchedIgnoreInTarget !== undefined,
-          hasModelInTarget = matchedModelInTarget !== undefined,
-          hasCombinationInTarget = matchedCombinationInTarget !== undefined,
-          isSynthetic = selectedCandidate.isSynthetic === true;
-
-        const actionOptions = [
-          "Map to model",
-          "Map by pattern",
-          "Ignore bucket",
-          "Ignore by pattern",
-        ];
-        if (!isSynthetic) {
-          actionOptions.push("Combine bucket", "Combine by pattern");
-        }
-        if (hasIgnoreInTarget) actionOptions.push("Stop ignoring");
-        if (hasCombinationInTarget) actionOptions.push("Stop combining");
-        if (isSynthetic) actionOptions.push("Dissolve combination");
-        if (hasIgnoreInTarget || hasModelInTarget || hasCombinationInTarget)
-          actionOptions.push("Remove mapping");
-
-        const actionChoice = await selectWrapped(
-          ctx,
-          `Select action for ${selectedCandidate.provider}/${selectedCandidate.windowLabel}`,
-          actionOptions,
-        );
-        if (!actionChoice) return;
-
-        if (actionChoice === "Dissolve combination") {
-          try {
-            const existing = Array.isArray(targetRaw.mappings)
-              ? targetRaw.mappings
-              : [];
-            const filtered = existing.filter((entry: unknown) => {
-              if (!entry || typeof entry !== "object") return true;
-              const e = entry as MappingEntry;
-              const combineRaw =
-                typeof e.combine === "string" ? e.combine.trim() : e.combine;
-              const targetLabel = selectedCandidate.windowLabel.trim();
-              if (combineRaw !== targetLabel) return true;
-
-              const providerMatch =
-                e.usage?.provider === selectedCandidate.provider;
-              const accountsMatch =
-                selectedCandidate.account === undefined
-                  ? e.usage?.account === undefined
-                  : e.usage?.account === selectedCandidate.account;
-              const isMatch = providerMatch && accountsMatch;
-
-              return !isMatch;
-            });
-
-            if (filtered.length === existing.length) {
-              notify(
-                ctx,
-                "warning",
-                `No combination group "${selectedCandidate.windowLabel}" found in ${targetPath}.`,
-              );
-            } else {
-              targetRaw.mappings = filtered;
-              await saveConfigFile(targetPath, targetRaw);
-
-              const reloaded = await loadConfig(ctx, {
-                requireMappings: false,
-              });
-              if (reloaded) {
-                config.mappings = reloaded.mappings;
-                cachedUsages = null;
-              }
-
-              notify(
-                ctx,
-                "info",
-                `Dissolved combination group "${selectedCandidate.windowLabel}" in ${targetPath}.`,
-              );
-            }
-          } catch (error: unknown) {
-            notify(
-              ctx,
-              "error",
-              `Failed to write ${targetPath}: ${String(error)}`,
-            );
-            return;
-          }
-
-          const addMoreAfterDissolve = await ctx.ui.confirm(
-            "Modify another mapping?",
-            "Do you want to modify another usage bucket?",
-          );
-          if (!addMoreAfterDissolve) continueMapping = false;
-          continue;
-        }
-
-        if (
-          actionChoice === "Stop ignoring" ||
-          actionChoice === "Stop combining" ||
-          actionChoice === "Remove mapping"
-        ) {
-          const mappingToRemove =
-            actionChoice === "Stop ignoring"
-              ? matchedIgnoreInTarget
-              : actionChoice === "Stop combining"
-                ? matchedCombinationInTarget
-                : (matchedModelInTarget ??
-                  matchedIgnoreInTarget ??
-                  matchedCombinationInTarget);
-
-          if (!mappingToRemove) {
-            notify(
-              ctx,
-              "warning",
-              `No matching ${
-                actionChoice === "Stop ignoring"
-                  ? "ignore"
-                  : actionChoice === "Stop combining"
-                    ? "combination"
-                    : "mapping"
-              } found in ${targetPath}.`,
-            );
-          } else {
-            try {
-              const res = removeMapping(targetRaw, mappingToRemove, {
-                onlyIgnore: actionChoice === "Stop ignoring",
-              });
-              if (!res.removed) {
-                notify(
-                  ctx,
-                  "warning",
-                  `No matching ${
-                    actionChoice === "Stop ignoring"
-                      ? "ignore"
-                      : actionChoice === "Stop combining"
-                        ? "combination"
-                        : "mapping"
-                  } found in ${targetPath}.`,
-                );
-              } else {
-                await saveConfigFile(targetPath, targetRaw);
-
-                const reloaded = await loadConfig(ctx, {
-                  requireMappings: false,
-                });
-                if (reloaded) {
-                  config.mappings = reloaded.mappings;
-                  cachedUsages = null;
-                }
-
-                notify(
-                  ctx,
-                  "info",
-                  `Removed ${
-                    actionChoice === "Stop ignoring"
-                      ? "ignore mapping"
-                      : actionChoice === "Stop combining"
-                        ? "combination mapping"
-                        : "mapping"
-                  } for ${selectedCandidate.provider}/${selectedCandidate.windowLabel}.`,
-                );
-              }
-            } catch (error: unknown) {
-              notify(
-                ctx,
-                "error",
-                `Failed to write ${targetPath}: ${String(error)}`,
-              );
-              return;
-            }
-          }
-
-          const addMoreAfterRemove = await ctx.ui.confirm(
-            "Modify another mapping?",
-            "Do you want to modify another usage bucket?",
-          );
-          if (!addMoreAfterRemove) continueMapping = false;
-          continue;
-        }
-
-        let pattern: string | undefined;
-        if (
-          actionChoice === "Map by pattern" ||
-          actionChoice === "Ignore by pattern" ||
-          actionChoice === "Combine by pattern"
-        ) {
-          pattern = await ctx.ui.input(
-            `Enter regex pattern (e.g. ^${selectedCandidate.windowLabel}$)`,
-          );
-          if (!pattern) return;
-          try {
-            new RegExp(pattern);
-          } catch (e: unknown) {
-            notify(ctx, "error", `Invalid regex: ${String(e)}`);
-            return;
-          }
-        }
-
-        let selectedModel: { provider: string; id: string } | undefined;
-        if (
-          actionChoice === "Map to model" ||
-          actionChoice === "Map by pattern"
-        ) {
-          const modelChoice = await selectWrapped(
-            ctx,
-            `Select model for ${selectedCandidate.provider}/${pattern || selectedCandidate.windowLabel}`,
-            modelLabels,
-          );
-          if (!modelChoice) return;
-
-          const modelIndex = modelLabels.indexOf(modelChoice);
-          if (modelIndex < 0) return;
-          selectedModel = availableModels[modelIndex];
-        }
-
-        let combineName: string | undefined;
-        if (
-          actionChoice === "Combine bucket" ||
-          actionChoice === "Combine by pattern"
-        ) {
-          const existingCombineNames = Array.from(
-            new Set<string>(
-              config.mappings
-                .map((m: MappingEntry) => m.combine)
-                .filter(
-                  (name: unknown): name is string => typeof name === "string",
-                ),
-            ),
-          ).sort();
-
-          if (existingCombineNames.length > 0) {
-            const options = [...existingCombineNames, "Enter new name..."];
-            const choice = await selectWrapped(
-              ctx,
-              "Select combination group",
-              options,
-            );
-            if (!choice) return;
-
-            if (choice === "Enter new name...") {
-              combineName = await ctx.ui.input(
-                "Enter new combination group name (e.g. 'Codex Combined')",
-              );
-            } else {
-              combineName = choice;
-            }
-          } else {
-            combineName = await ctx.ui.input(
-              "Enter combination group name (e.g. 'Codex Combined')",
-            );
-          }
-
-          if (combineName != null) {
-            combineName = combineName.trim();
-          }
-
-          if (!combineName) return;
-        }
-
-        // Build the usage descriptor for this candidate/pattern
-        const usageDesc = {
-          provider: selectedCandidate.provider,
-          account: selectedCandidate.account,
-          window: pattern ? undefined : selectedCandidate.windowLabel,
-          windowPattern: pattern,
-        } as MappingEntry["usage"];
-
-        let mappingEntry: MappingEntry;
-        if (
-          (actionChoice === "Map to model" ||
-            actionChoice === "Map by pattern") &&
-          selectedModel
-        ) {
-          mappingEntry = {
-            usage: usageDesc,
-            model: {
-              provider: selectedModel.provider,
-              id: selectedModel.id,
-            },
-          };
-        } else if (combineName) {
-          mappingEntry = {
-            usage: usageDesc,
-            combine: combineName,
-          };
-        } else {
-          mappingEntry = {
-            usage: usageDesc,
-            ignore: true,
-          };
-        }
-
-        try {
-          clearBucketMappings(targetRaw, {
-            provider: selectedCandidate.provider,
-            account: selectedCandidate.account,
-            window: selectedCandidate.windowLabel,
-          });
-
-          upsertMapping(targetRaw, mappingEntry);
-          await saveConfigFile(targetPath, targetRaw);
-        } catch (error: unknown) {
-          notify(
-            ctx,
-            "error",
-            `Failed to write ${targetPath}: ${String(error)}`,
-          );
-          return;
-        }
-
-        const reloaded = await loadConfig(ctx, { requireMappings: false });
-        if (reloaded) {
-          config.mappings = reloaded.mappings;
-          cachedUsages = null;
-        }
-
-        const actionSummary = mappingEntry.combine
-          ? `Combined ${selectedCandidate.provider}/${pattern || selectedCandidate.windowLabel} into "${mappingEntry.combine}".`
-          : mappingEntry.ignore
-            ? `Ignored ${selectedCandidate.provider}/${selectedCandidate.windowLabel}.`
-            : `Mapped ${selectedCandidate.provider}/${pattern || selectedCandidate.windowLabel} to ${mappingEntry.model?.provider}/${mappingEntry.model?.id}.`;
-        notify(ctx, "info", actionSummary);
-
-        const addMore = await ctx.ui.confirm(
-          "Add another mapping?",
-          "Do you want to map another usage bucket?",
-        );
-        if (!addMore) continueMapping = false;
-      }
-    },
-    configureWidget = async (): Promise<void> => {
-      const currentStatus = config.widget.enabled ? "enabled" : "disabled",
-        widgetChoice = await selectWrapped(
-          ctx,
-          `Usage widget (current: ${currentStatus})`,
-          [
-            "Enable widget",
-            "Disable widget",
-            "Configure placement",
-            "Configure count",
-          ],
-        );
-      if (!widgetChoice) return;
-
-      const widgetUpdate: Partial<WidgetConfig> = {};
-
-      if (widgetChoice === "Enable widget") {
-        widgetUpdate.enabled = true;
-      } else if (widgetChoice === "Disable widget") {
-        widgetUpdate.enabled = false;
-      } else if (widgetChoice === "Configure placement") {
-        const placementChoice = await selectWrapped(
-          ctx,
-          `Widget placement (current: ${config.widget.placement})`,
-          ["Above editor", "Below editor"],
-        );
-        if (!placementChoice) return;
-        widgetUpdate.placement =
-          placementChoice === "Above editor" ? "aboveEditor" : "belowEditor";
-      } else if (widgetChoice === "Configure count") {
-        const countChoice = await selectWrapped(
-          ctx,
-          `Number of candidates to show (current: ${config.widget.showCount})`,
-          ["1", "2", "3", "4", "5"],
-        );
-        if (!countChoice) return;
-        widgetUpdate.showCount = parseInt(countChoice, 10);
-      }
-
-      if (Object.keys(widgetUpdate).length === 0) return;
-
-      const locationChoice = await selectWrapped(
-        ctx,
-        "Save widget settings to",
-        locationLabels,
-      );
-      if (!locationChoice) return;
-
-      const saveToProject = locationChoice === locationLabels[1],
-        targetRaw = saveToProject ? config.raw.project : config.raw.global,
-        targetPath = saveToProject
-          ? config.sources.projectPath
-          : config.sources.globalPath;
-
-      try {
-        updateWidgetConfig(targetRaw, widgetUpdate);
-        await saveConfigFile(targetPath, targetRaw);
-      } catch (error: unknown) {
-        notify(ctx, "error", `Failed to write ${targetPath}: ${String(error)}`);
-        return;
-      }
-
-      // Update local config
-      config.widget = { ...config.widget, ...widgetUpdate };
-      notify(ctx, "info", `Widget settings updated.`);
-
-      // Update widget state with new config if it exists
-      const state = getWidgetState();
-      if (state) {
-        updateWidgetState({ ...state, config });
-      }
-
-      // Refresh widget display
-      renderUsageWidget(ctx);
-    },
-    configureDebugLog = async (): Promise<void> => {
-      const currentLog = config.debugLog?.path || "model-selector.log",
-        currentStatus = config.debugLog?.enabled ? "enabled" : "disabled",
-        choice = await selectWrapped(
-          ctx,
-          `Debug logging (current: ${currentStatus}, path: ${currentLog})`,
-          [
-            config.debugLog?.enabled ? "Disable logging" : "Enable logging",
-            "Change log file path",
-          ],
-        );
-      if (!choice) return;
-
-      const debugUpdate: { enabled?: boolean; path?: string } = {
-        ...config.debugLog,
-      };
-
-      if (choice === "Enable logging") {
-        debugUpdate.enabled = true;
-      } else if (choice === "Disable logging") {
-        debugUpdate.enabled = false;
-      } else if (choice === "Change log file path") {
-        const newPath = await ctx.ui.input(
-          "Enter log file path (relative to project or absolute)",
-        );
-        if (!newPath) return;
-        debugUpdate.path = newPath;
-      }
-
-      const locationChoice = await selectWrapped(
-        ctx,
-        "Save debug log setting to",
-        locationLabels,
-      );
-      if (!locationChoice) return;
-
-      const saveToProject = locationChoice === locationLabels[1],
-        targetRaw = saveToProject ? config.raw.project : config.raw.global,
-        targetPath = saveToProject
-          ? config.sources.projectPath
-          : config.sources.globalPath;
-
-      try {
-        targetRaw.debugLog = debugUpdate;
-        await saveConfigFile(targetPath, targetRaw);
-      } catch (error: unknown) {
-        notify(ctx, "error", `Failed to write ${targetPath}: ${String(error)}`);
-        return;
-      }
-
-      // Reload config to apply path resolution
-      const reloaded = await loadConfig(ctx, { requireMappings: false });
-      if (reloaded) {
-        config.debugLog = reloaded.debugLog;
-        setGlobalConfig(reloaded);
-      }
-
-      notify(
-        ctx,
-        "info",
-        `Debug logging ${config.debugLog?.enabled ? "enabled" : "disabled"}.`,
-      );
-    },
-    configureAutoRun = async (): Promise<void> => {
-      const currentStatus = config.autoRun ? "enabled" : "disabled",
-        choice = await selectWrapped(
-          ctx,
-          `Auto-run after every turn (current: ${currentStatus})`,
-          [config.autoRun ? "Disable auto-run" : "Enable auto-run"],
-        );
-      if (!choice) return;
-
-      const newValue = choice === "Enable auto-run",
-        locationChoice = await selectWrapped(
-          ctx,
-          "Save auto-run setting to",
-          locationLabels,
-        );
-      if (!locationChoice) return;
-
-      const saveToProject = locationChoice === locationLabels[1],
-        targetRaw = saveToProject ? config.raw.project : config.raw.global,
-        targetPath = saveToProject
-          ? config.sources.projectPath
-          : config.sources.globalPath;
-
-      try {
-        targetRaw.autoRun = newValue;
-        await saveConfigFile(targetPath, targetRaw);
-      } catch (error: unknown) {
-        notify(ctx, "error", `Failed to write ${targetPath}: ${String(error)}`);
-        return;
-      }
-
-      config.autoRun = newValue;
-      notify(ctx, "info", `Auto-run ${newValue ? "enabled" : "disabled"}.`);
-    },
-    configureProviders = async (): Promise<void> => {
-      const piAuth = await loadAuth();
-      const locationChoice = await selectWrapped(
-        ctx,
-        "Select configuration scope",
-        locationLabels,
-      );
-      if (!locationChoice) return;
-
-      const saveToProject = locationChoice === locationLabels[1],
-        targetRaw = saveToProject ? config.raw.project : config.raw.global,
-        targetPath = saveToProject
-          ? config.sources.projectPath
-          : config.sources.globalPath;
-
-      const currentRawDisabled = Array.isArray(targetRaw.disabledProviders)
-        ? (targetRaw.disabledProviders as unknown[]).filter(
-            (value: unknown): value is ProviderName =>
-              typeof value === "string" &&
-              (ALL_PROVIDERS as readonly string[]).includes(value),
-          )
-        : [];
-
-      const credentialChecks = await Promise.all(
-        ALL_PROVIDERS.map((provider: ProviderName) =>
-          hasProviderCredential(provider, piAuth, ctx.modelRegistry).then(
-            (hasCredentials) => ({ provider, hasCredentials }),
-          ),
-        ),
-      );
-
-      const providerOptions: string[] = [];
-      for (const { provider, hasCredentials } of credentialChecks) {
-        const disabledInTarget = currentRawDisabled.includes(
-          provider as ProviderName,
-        );
-        const providerLabel = PROVIDER_LABELS[provider as ProviderName];
-        const mergedDisabled = config.disabledProviders.includes(
-          provider as ProviderName,
-        );
-
-        let statusLabel = disabledInTarget ? "⏸ disabled" : "✅ enabled";
-        if (disabledInTarget !== mergedDisabled) {
-          statusLabel += ` (overall: ${mergedDisabled ? "disabled" : "enabled"})`;
-        }
-
-        providerOptions.push(
-          `${statusLabel} ${providerLabel} (${provider}) — credentials: ${hasCredentials ? "detected" : "missing"}`,
-        );
-      }
-
-      const selectedProviderLabel = await selectWrapped(
-        ctx,
-        `Configure providers in ${saveToProject ? "Project" : "Global"}`,
-        providerOptions,
-      );
-
-      if (!selectedProviderLabel) return;
-      const selectedIndex = providerOptions.indexOf(selectedProviderLabel);
-      if (selectedIndex < 0) return;
-
-      const selectedProvider = ALL_PROVIDERS[selectedIndex] as ProviderName,
-        currentlyDisabledInTarget =
-          currentRawDisabled.includes(selectedProvider),
-        nextDisabled = !currentlyDisabledInTarget,
-        disabledSet = new Set(currentRawDisabled);
-
-      if (nextDisabled) {
-        disabledSet.add(selectedProvider);
-      } else {
-        disabledSet.delete(selectedProvider);
-      }
-
-      try {
-        targetRaw.disabledProviders = [...disabledSet];
-        await saveConfigFile(targetPath, targetRaw);
-      } catch (error: unknown) {
-        notify(ctx, "error", `Failed to write ${targetPath}: ${String(error)}`);
-        return;
-      }
-
-      const reloaded = await loadConfig(ctx, { requireMappings: false });
-      if (reloaded) {
-        config.disabledProviders = reloaded.disabledProviders;
-        config.raw = reloaded.raw;
-      }
-
-      cachedUsages = null;
-
-      const selectedProviderLabelFriendly =
-        PROVIDER_LABELS[selectedProvider as ProviderName];
-      const isActuallyDisabled =
-        config.disabledProviders.includes(selectedProvider);
-      const scopeLabel = saveToProject ? "Project" : "Global";
-
-      notify(
-        ctx,
-        "info",
-        `${nextDisabled ? "Disabled" : "Enabled"} ${selectedProviderLabelFriendly} in ${scopeLabel} config. Overall status: ${isActuallyDisabled ? "Disabled" : "Enabled"}.`,
-      );
-    },
-    configureCleanup = async (): Promise<void> => {
-      const locationChoice = await selectWrapped(
-        ctx,
-        "Select config file to clean",
-        locationLabels,
-      );
-      if (!locationChoice) return;
-
-      const saveToProject = locationChoice === locationLabels[1],
-        targetRaw = saveToProject ? config.raw.project : config.raw.global,
-        targetPath = saveToProject
-          ? config.sources.projectPath
-          : config.sources.globalPath,
-        candidateRaw = JSON.parse(JSON.stringify(targetRaw)) as Record<
-          string,
-          unknown
-        >,
-        modelFinder =
-          typeof ctx.modelRegistry?.find === "function"
-            ? ctx.modelRegistry.find.bind(ctx.modelRegistry)
-            : undefined;
-
-      let availableModelKeys: Set<string> | null = null;
-      if (typeof ctx.modelRegistry?.getAvailable === "function") {
-        try {
-          const availableModels = await Promise.resolve(
-            ctx.modelRegistry.getAvailable(),
-          );
-          availableModelKeys = new Set(
-            availableModels.map(
-              (model) => `${model.provider}\u0000${model.id}`,
-            ),
-          );
-        } catch {
-          // If availability cannot be loaded, fall back to find() when possible.
-        }
-      }
-
-      const cleanupResult = cleanupConfigRaw(candidateRaw, {
-        scope: saveToProject ? "project" : "global",
-        modelExists:
-          availableModelKeys !== null
-            ? (provider, id) => availableModelKeys.has(`${provider}\u0000${id}`)
-            : modelFinder
-              ? (provider, id) => {
-                  try {
-                    return Boolean(modelFinder(provider, id));
-                  } catch (error) {
-                    writeDebugLog(
-                      `Error while checking model existence for ${provider}/${id}: ${String(
-                        error,
-                      )}`,
-                    );
-                    throw error;
-                  }
-                }
-              : undefined,
-      });
-
-      const cleanupSummary = [...cleanupResult.summary],
-        autoDisabledProviders: ProviderName[] = [];
-
-      const mappedUsageProviders = new Set(
-        (Array.isArray(candidateRaw.mappings) ? candidateRaw.mappings : [])
-          .map((entry) => {
-            if (!entry || typeof entry !== "object") return undefined;
-            const usage = (entry as { usage?: { provider?: unknown } }).usage;
-            return usage?.provider;
-          })
-          .filter(
-            (provider): provider is string => typeof provider === "string",
-          )
-          .filter(isProviderName),
-      );
-
-      if (mappedUsageProviders.size > 0) {
-        const piAuth = await loadAuth();
-        const existingDisabled = Array.isArray(candidateRaw.disabledProviders)
-          ? candidateRaw.disabledProviders
-              .filter((value): value is string => typeof value === "string")
-              .filter(isProviderName)
-          : [];
-        const disabledSet = new Set<ProviderName>(existingDisabled);
-
-        for (const provider of mappedUsageProviders) {
-          if (disabledSet.has(provider)) continue;
-          const hasCredential = await hasProviderCredential(
-            provider,
-            piAuth,
-            ctx.modelRegistry,
-          );
-          if (!hasCredential) {
-            disabledSet.add(provider);
-            autoDisabledProviders.push(provider);
-          }
-        }
-
-        if (autoDisabledProviders.length > 0) {
-          candidateRaw.disabledProviders = [...disabledSet];
-          const providerLabels = autoDisabledProviders.map(
-            (provider) => `${PROVIDER_LABELS[provider]} (${provider})`,
-          );
-          cleanupSummary.push(
-            `Disabled ${autoDisabledProviders.length} provider${autoDisabledProviders.length === 1 ? "" : "s"} with missing credentials: ${providerLabels.join(", ")}.`,
-          );
-        }
-      }
-
-      const changed = cleanupResult.changed || autoDisabledProviders.length > 0;
-      if (!changed) {
-        notify(ctx, "info", `No cleanup changes needed for ${targetPath}.`);
-        return;
-      }
-
-      const summaryLines = cleanupSummary.map((item) => `• ${item}`),
-        confirmed = await ctx.ui.confirm(
-          "Apply config cleanup?",
-          `This will update ${targetPath}:\n${summaryLines.join("\n")}`,
-        );
-      if (!confirmed) {
-        notify(ctx, "info", "Config cleanup cancelled.");
-        return;
-      }
-
-      try {
-        await saveConfigFile(targetPath, candidateRaw);
-      } catch (error: unknown) {
-        notify(ctx, "error", `Failed to write ${targetPath}: ${String(error)}`);
-        return;
-      }
-
-      const reloaded = await loadConfig(ctx, { requireMappings: false });
-      if (reloaded) {
-        config.mappings = reloaded.mappings;
-        config.priority = reloaded.priority;
-        config.widget = reloaded.widget;
-        config.autoRun = reloaded.autoRun;
-        config.disabledProviders = reloaded.disabledProviders;
-        config.debugLog = reloaded.debugLog;
-        config.raw = reloaded.raw;
-      }
-
-      cachedUsages = null;
-      notify(
-        ctx,
-        "info",
-        `Config cleanup applied to ${targetPath}: ${cleanupSummary.join(" ")}`,
-      );
-    },
-    menuOptions = [
-      "Edit mappings",
-      "Configure providers",
-      "Configure priority",
-      "Configure widget",
-      "Configure auto-run",
-      "Configure debug log",
-      "Clean up config",
-      "Done",
-    ];
-
-  while (true) {
-    const action = await selectWrapped(
-      ctx,
-      "Model selector configuration",
-      menuOptions,
-    );
-    if (!action || action === "Done") return;
-
-    if (action === "Configure priority") {
-      await configurePriority();
-      continue;
-    }
-
-    if (action === "Configure providers") {
-      await configureProviders();
-      continue;
-    }
-
-    if (action === "Edit mappings") {
-      await configureMappings();
-      continue;
-    }
-
-    if (action === "Configure widget") {
-      await configureWidget();
-      continue;
-    }
-
-    if (action === "Configure auto-run") {
-      await configureAutoRun();
-      continue;
-    }
-
-    if (action === "Configure debug log") {
-      await configureDebugLog();
-      continue;
-    }
-
-    if (action === "Clean up config") {
-      await configureCleanup();
-      // biome-ignore lint/complexity/noUselessContinue: consistency with other handlers
-      continue;
-    }
-  }
-}
+import { loadConfig } from "./src/config.js";
+import { CooldownManager } from "./src/cooldown.js";
+
+import { createModelLockCoordinator } from "./src/model-locks.js";
+import { runSelector, type SelectorReason } from "./src/selector.js";
+import type { LoadedConfig, UsageSnapshot } from "./src/types.js";
+import { notify, writeDebugLog } from "./src/types.js";
+import { fetchAllUsages } from "./src/usage-fetchers.js";
+import { renderUsageWidget, updateWidgetState } from "./src/widget.js";
+import { runMappingWizard } from "./src/wizard.js";
 
 // ============================================================================
 // Extension Hook
 // ============================================================================
 
 export default function modelSelectorExtension(pi: ExtensionAPI) {
-  // Cooldown State - backed by file for cross-invocation persistence
-  const modelCooldowns = new Map<string, number>(),
-    COOLDOWN_DURATION = 60 * 60 * 1000; // 1 hour
-
-  const MODEL_LOCK_WAIT_TIMEOUT_MS = 10 * 60 * 1000,
-    MODEL_LOCK_POLL_MS = 1250,
-    MODEL_LOCK_HEARTBEAT_MS = 5000,
-    modelLockStatusKey = "model-selector-lock";
-
+  const cooldownManager = new CooldownManager();
   const modelLockCoordinator = createModelLockCoordinator();
 
-  let cooldownsLoaded = false,
-    lastSelectedCandidateKey: string | null = null,
-    activeModelLockKey: string | null = null,
-    lockHeartbeatTimer: NodeJS.Timeout | null = null,
-    heartbeatInProgress = false,
-    autoSelectionDisabled = false; // Session-scoped flag to disable auto model selection
+  const modelLockStatusKey = "model-selector-lock";
 
-  // Load persisted cooldown state from file
-  const loadPersistedCooldowns = async (): Promise<void> => {
-      if (cooldownsLoaded) return;
-      const state = await loadCooldownState(),
-        now = Date.now();
-
-      // Load non-expired cooldowns into the Map
-      for (const [key, expiry] of Object.entries(state.cooldowns)) {
-        if (expiry > now) {
-          modelCooldowns.set(key, expiry);
-          // Migration for legacy keys (missing |raw/|synthetic suffix)
-          // Wildcard keys end with |*, leave them alone
-          if (
-            !key.endsWith("|raw") &&
-            !key.endsWith("|synthetic") &&
-            !key.endsWith("|*")
-          ) {
-            modelCooldowns.set(`${key}|raw`, expiry);
-          }
-        }
-      }
-
-      // Restore last selected (useful for /model-skip in print mode)
-      if (state.lastSelected) {
-        lastSelectedCandidateKey = state.lastSelected;
-        // Migrate legacy lastSelected key if needed
-        if (
-          !lastSelectedCandidateKey.endsWith("|raw") &&
-          !lastSelectedCandidateKey.endsWith("|synthetic") &&
-          !lastSelectedCandidateKey.endsWith("|*")
-        ) {
-          lastSelectedCandidateKey = `${lastSelectedCandidateKey}|raw`;
-        }
-      }
-      cooldownsLoaded = true;
-    },
-    // Save current cooldown state to file
-    persistCooldowns = async (): Promise<void> => {
-      const cooldowns: Record<string, number> = {},
-        now = Date.now();
-
-      for (const [key, expiry] of modelCooldowns) {
-        if (expiry > now) {
-          cooldowns[key] = expiry;
-        }
-      }
-
-      await saveCooldownState({
-        cooldowns,
-        lastSelected: lastSelectedCandidateKey,
-      });
-    },
-    pruneExpiredCooldowns = (now = Date.now()): boolean => {
-      let removed = false;
-      for (const [key, expiry] of modelCooldowns) {
-        if (expiry <= now) {
-          modelCooldowns.delete(key);
-          removed = true;
-        }
-      }
-      return removed;
-    },
-    setOrExtendProviderCooldown = (
-      provider: string,
-      account: string | undefined,
-      now: number,
-    ): boolean => {
-      const wildcardKey = getWildcardKey(provider, account),
-        existingExpiry = modelCooldowns.get(wildcardKey) ?? 0,
-        newExpiry = now + COOLDOWN_DURATION;
-      if (newExpiry <= existingExpiry) {
-        return false;
-      }
-      modelCooldowns.set(wildcardKey, newExpiry);
-      return true;
-    },
-    // Check if a candidate is on cooldown (handles exact and wildcard keys)
-    isOnCooldown = (c: UsageCandidate, now = Date.now()): boolean => {
-      const key = candidateKey(c),
-        wildcardKey = getWildcardKey(c.provider, c.account);
-
-      const expiry = modelCooldowns.get(key),
-        wildcardExpiry = modelCooldowns.get(wildcardKey);
-
-      return (
-        (expiry !== undefined && expiry > now) ||
-        (wildcardExpiry !== undefined && wildcardExpiry > now)
-      );
-    };
+  const lockHeartbeatTimer = { current: null as NodeJS.Timeout | null };
+  let autoSelectionDisabled = false; // Session-scoped flag to disable auto model selection
 
   const setLockStatus = (ctx: ExtensionContext, message?: string): void => {
       if (!ctx.hasUI || typeof ctx.ui.setStatus !== "function") return;
       ctx.ui.setStatus(modelLockStatusKey, message);
     },
     stopLockHeartbeat = (): void => {
-      if (lockHeartbeatTimer) {
-        clearInterval(lockHeartbeatTimer);
-        lockHeartbeatTimer = null;
+      if (lockHeartbeatTimer.current) {
+        clearInterval(lockHeartbeatTimer.current);
+        lockHeartbeatTimer.current = null;
       }
-      heartbeatInProgress = false;
-    },
-    startLockHeartbeat = (lockKey: string): void => {
-      stopLockHeartbeat();
-      lockHeartbeatTimer = setInterval(() => {
-        void (async () => {
-          if (heartbeatInProgress) {
-            return;
-          }
-
-          try {
-            heartbeatInProgress = true;
-            const stillHeld = await modelLockCoordinator.refresh(lockKey);
-            if (!stillHeld) {
-              if (activeModelLockKey === lockKey) {
-                activeModelLockKey = null;
-              }
-              stopLockHeartbeat();
-              writeDebugLog(
-                `Model lock heartbeat lost lock for key "${lockKey}", stopping heartbeat.`,
-              );
-            }
-          } catch (err) {
-            stopLockHeartbeat();
-            writeDebugLog(
-              `Error while refreshing model lock heartbeat for key "${lockKey}": ${String(
-                err,
-              )}`,
-            );
-          } finally {
-            heartbeatInProgress = false;
-          }
-        })();
-      }, MODEL_LOCK_HEARTBEAT_MS);
-      lockHeartbeatTimer.unref?.();
     },
     releaseActiveModelLock = async (): Promise<void> => {
-      if (!activeModelLockKey) return;
-      const lockKey = activeModelLockKey;
-      activeModelLockKey = null;
+      const lockKey = activeModelLockKey.current;
+      if (!lockKey) return;
+      activeModelLockKey.current = null;
       stopLockHeartbeat();
       try {
         await modelLockCoordinator.release(lockKey);
@@ -1601,13 +55,14 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
           `Error while releasing model lock for key "${lockKey}": ${String(err)}`,
         );
       }
-    };
+    },
+    activeModelLockKey = { current: null as string | null };
 
   let running = false;
 
-  const runSelector = async (
+  const runSelectorWrapper = async (
     ctx: ExtensionContext,
-    reason: "startup" | "command" | "auto" | "request",
+    reason: SelectorReason,
     options: {
       preloadedConfig?: LoadedConfig;
       preloadedUsages?: UsageSnapshot[];
@@ -1623,466 +78,19 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
     }
     running = true;
 
-    let lockKeyForErrorCleanup: string | undefined;
-
     try {
-      // Load persisted cooldowns on startup (for print-mode support)
-      await loadPersistedCooldowns();
-
-      const config = options.preloadedConfig || (await loadConfig(ctx));
-      if (!config) return false;
-      setGlobalConfig(config);
-      writeDebugLog(`Running selector (reason: ${reason})`);
-
-      const mappedUsageProviders = new Set(
-          config.mappings.map((mapping) => mapping.usage.provider),
-        ),
-        implicitDisabledProviders = ALL_PROVIDERS.filter(
-          (provider) => !mappedUsageProviders.has(provider),
-        ),
-        effectiveDisabledProviders = [
-          ...new Set([
-            ...config.disabledProviders,
-            ...implicitDisabledProviders,
-          ]),
-        ],
-        usages =
-          options.preloadedUsages ||
-          (await fetchAllUsages(ctx.modelRegistry, effectiveDisabledProviders));
-
-      // Clean up stale cooldowns first so fresh 429s can always re-arm cooldowns.
-      pruneExpiredCooldowns();
-
-      // Apply 429 cooldowns for all usages (including preloaded)
-      // This ensures rate-limit detection works even when /model-skip provides preloaded usages
-      let saveNeeded = false;
-      const now = Date.now();
-
-      for (const usage of usages) {
-        // Detect 429 errors and apply provider-wide cooldown
-        // Skip ignored providers to avoid noisy UX for intentionally-ignored providers
-        if (usage.error?.includes("429")) {
-          if (
-            !isProviderIgnored(usage.provider, usage.account, config.mappings)
-          ) {
-            const updated = setOrExtendProviderCooldown(
-              usage.provider,
-              usage.account,
-              now,
-            );
-            if (updated) {
-              saveNeeded = true;
-              notify(
-                ctx,
-                "warning",
-                `Rate limit (429) detected for ${usage.displayName}. Pausing this provider for 1 hour.`,
-              );
-            }
-          }
-        }
-      }
-
-      if (saveNeeded) {
-        await persistCooldowns();
-      }
-
-      // Show error notifications only for non-preloaded usages
-      if (!options.preloadedUsages) {
-        for (const usage of usages) {
-          if (
-            usage.error &&
-            !usage.error.includes("429") &&
-            !isProviderIgnored(usage.provider, usage.account, config.mappings)
-          ) {
-            // Suppress warnings if provider is already on cooldown
-            const wildcardKey = getWildcardKey(usage.provider, usage.account),
-              wildcardExpiry = modelCooldowns.get(wildcardKey);
-
-            if (!wildcardExpiry || wildcardExpiry <= now) {
-              notify(
-                ctx,
-                "warning",
-                `Usage check failed for ${usage.displayName}: ${usage.error}`,
-              );
-            }
-          }
-        }
-      }
-
-      // Clean up any cooldowns that may have just expired.
-      pruneExpiredCooldowns();
-
-      const candidates = combineCandidates(
-        buildCandidates(usages),
-        config.mappings,
-      );
-      let eligibleCandidates = candidates.filter(
-        (candidate: UsageCandidate) =>
-          !findIgnoreMapping(candidate, config.mappings),
-      );
-
-      // Filter out cooldowns - reuse the now captured earlier for consistency
-      const cooldownCount = eligibleCandidates.filter((c: UsageCandidate) =>
-        isOnCooldown(c, now),
-      ).length;
-      if (cooldownCount > 0) {
-        eligibleCandidates = eligibleCandidates.filter(
-          (c: UsageCandidate) => !isOnCooldown(c, now),
-        );
-        if (reason === "command") {
-          notify(
-            ctx,
-            "info",
-            `${cooldownCount} usage bucket(s) skipped due to temporary cooldown.`,
-          );
-        }
-      }
-
-      if (eligibleCandidates.length === 0) {
-        if (cooldownCount > 0) {
-          notify(
-            ctx,
-            "warning",
-            "All eligible candidates are on cooldown. Resetting cooldowns.",
-          );
-          modelCooldowns.clear();
-          await persistCooldowns();
-          eligibleCandidates = candidates.filter(
-            (candidate: UsageCandidate) =>
-              !findIgnoreMapping(candidate, config.mappings),
-          );
-        } else {
-          const detail =
-            candidates.length === 0
-              ? "No usage windows found. Check provider credentials and connectivity."
-              : "All usage buckets are ignored. Remove an ignore mapping or add a model mapping.";
-          notify(ctx, "error", detail);
-          clearWidget(ctx);
-          return false;
-        }
-      }
-
-      // Save candidates for widget display (includes exhausted buckets)
-      const displayCandidates = eligibleCandidates.slice();
-
-      // Hard filter: never pick fully exhausted buckets for model selection.
-      eligibleCandidates = eligibleCandidates.filter(
-        (candidate: UsageCandidate) => candidate.remainingPercent > 0,
-      );
-
-      // Sort display candidates for the widget (includes exhausted buckets)
-      const rankedDisplayCandidates = sortCandidates(
-        displayCandidates,
-        config.priority,
-        config.mappings,
-      );
-
-      // Update widget with all non-ignored, non-cooldown candidates (including exhausted)
-      updateWidgetState({
-        candidates: rankedDisplayCandidates,
-        config,
-        autoSelectionDisabled,
-      });
-      renderUsageWidget(ctx);
-
-      if (eligibleCandidates.length === 0) {
-        notify(
-          ctx,
-          "error",
-          "All non-ignored usage buckets are exhausted (0% remaining).",
-        );
-        return false;
-      }
-
-      // Rank eligible candidates (excluded exhausted) for model selection
-      const rankedCandidates = sortCandidates(
-        eligibleCandidates,
-        config.priority,
-        config.mappings,
-      );
-
-      const initialBest = rankedCandidates[0];
-      if (!initialBest) {
-        notify(ctx, "error", "Unable to determine a best usage window.");
-        return false;
-      }
-
-      let best = initialBest,
-        bestIndex = 0,
-        mapping = findModelMapping(best, config.mappings),
-        model =
-          mapping?.model &&
-          ctx.modelRegistry.find(mapping.model.provider, mapping.model.id),
-        lockKey: string | undefined,
-        waitedForLockMs = 0;
-
-      if (options.acquireModelLock) {
-        type LockableCandidate = {
-          candidate: UsageCandidate;
-          mapping: NonNullable<typeof mapping>;
-          model: NonNullable<typeof model>;
-          lockKey: string;
-          index: number;
-        };
-
-        const lockableCandidates: LockableCandidate[] = [],
-          seenModelLocks = new Set<string>();
-
-        for (const [index, candidate] of rankedCandidates.entries()) {
-          const candidateMapping = findModelMapping(candidate, config.mappings);
-          if (!candidateMapping?.model) continue;
-
-          const candidateModel = ctx.modelRegistry.find(
-            candidateMapping.model.provider,
-            candidateMapping.model.id,
-          );
-          if (!candidateModel) continue;
-
-          const candidateLockKey = modelLockKey(
-            candidateMapping.model.provider,
-            candidateMapping.model.id,
-          );
-          if (seenModelLocks.has(candidateLockKey)) continue;
-          seenModelLocks.add(candidateLockKey);
-
-          lockableCandidates.push({
-            candidate,
-            mapping: candidateMapping,
-            model: candidateModel,
-            lockKey: candidateLockKey,
-            index,
-          });
-        }
-
-        if (lockableCandidates.length > 0) {
-          // Track which busy locks have been logged to avoid duplicate log entries.
-          // This is useful for debugging lock contention, especially when multiple
-          // Pi instances are competing for the same models. The log includes:
-          // - The model lock key (provider/model)
-          // - The holding instance ID and PID
-          // - Lock age (time since acquisition)
-          // - Heartbeat age (time since last heartbeat refresh)
-          const loggedBusyLocks = new Set<string>();
-
-          // Try to acquire a lock for each candidate in ranked order.
-          // Logs details about busy locks to help debug lock contention.
-          const tryAcquireLock = async (): Promise<
-            LockableCandidate | undefined
-          > => {
-            for (const candidate of lockableCandidates) {
-              const result = await modelLockCoordinator.acquire(
-                candidate.lockKey,
-                { timeoutMs: 0 },
-              );
-              if (result.acquired) {
-                return candidate;
-              }
-
-              const heldBy = result.heldBy;
-              if (!heldBy) {
-                continue;
-              }
-
-              const signature = `${candidate.lockKey}|${heldBy.instanceId}|${heldBy.pid}`;
-              if (loggedBusyLocks.has(signature)) {
-                continue;
-              }
-              loggedBusyLocks.add(signature);
-
-              const nowMs = Date.now();
-              const heartbeatAgeSeconds = Math.max(
-                0,
-                Math.floor((nowMs - heldBy.heartbeatAt) / 1000),
-              );
-              const lockAgeSeconds = Math.max(
-                0,
-                Math.floor((nowMs - heldBy.acquiredAt) / 1000),
-              );
-
-              writeDebugLog(
-                `Model lock busy for key "${candidate.lockKey}" (rank #${candidate.index + 1}); held by instance "${heldBy.instanceId}" (pid ${heldBy.pid}), lock age ${lockAgeSeconds}s, heartbeat age ${heartbeatAgeSeconds}s.`,
-              );
-            }
-            return undefined;
-          };
-
-          let selectedWithLock = await tryAcquireLock();
-          if (!selectedWithLock && options.waitForModelLock) {
-            const waitStart = Date.now();
-            notify(
-              ctx,
-              "info",
-              "All mapped models are busy. Waiting for an available model lock...",
-            );
-
-            while (Date.now() - waitStart < MODEL_LOCK_WAIT_TIMEOUT_MS) {
-              const elapsedMs = Date.now() - waitStart;
-              setLockStatus(
-                ctx,
-                `Waiting for available model lock (${Math.floor(elapsedMs / 1000)}s)...`,
-              );
-              await new Promise((resolve) => {
-                setTimeout(resolve, MODEL_LOCK_POLL_MS);
-              });
-
-              selectedWithLock = await tryAcquireLock();
-              if (selectedWithLock) {
-                waitedForLockMs = Date.now() - waitStart;
-                break;
-              }
-            }
-          }
-
-          if (!selectedWithLock) {
-            notify(
-              ctx,
-              "error",
-              "All mapped models are busy and no lock became available in time.",
-            );
-            return false;
-          }
-
-          best = selectedWithLock.candidate;
-          bestIndex = selectedWithLock.index;
-          mapping = selectedWithLock.mapping;
-          model = selectedWithLock.model;
-          lockKey = selectedWithLock.lockKey;
-          lockKeyForErrorCleanup = lockKey;
-        }
-      }
-
-      lastSelectedCandidateKey = candidateKey(best);
-      await persistCooldowns(); // Save state for print-mode support
-
-      if (!mapping || !mapping.model) {
-        const usage: UsageMappingKey = { provider: best.provider };
-        if (best.account && best.account !== "none") {
-          usage.account = best.account;
-        }
-        usage.window = best.windowLabel;
-
-        const suggestedMapping = JSON.stringify(
-            {
-              usage,
-              model: { provider: "<provider>", id: "<model-id>" },
-            },
-            null,
-            2,
-          ),
-          suggestedIgnore = JSON.stringify(
-            {
-              usage,
-              ignore: true,
-            },
-            null,
-            2,
-          );
-        notify(
-          ctx,
-          "error",
-          `No model mapping for best usage bucket ${best.provider}/${best.windowLabel} (${best.remainingPercent.toFixed(0)}% remaining, ${best.displayName}).\nAdd a mapping to ${config.sources.projectPath} or ${config.sources.globalPath}:\n${suggestedMapping}\n\nOr ignore this bucket:\n${suggestedIgnore}`,
-        );
-        if (lockKey) {
-          await modelLockCoordinator.release(lockKey);
-        }
-        return false;
-      }
-
-      if (!model) {
-        notify(
-          ctx,
-          "error",
-          `Mapped model not found: ${mapping.model.provider}/${mapping.model.id}.`,
-        );
-        if (lockKey) {
-          await modelLockCoordinator.release(lockKey);
-        }
-        return false;
-      }
-
-      const current = ctx.model,
-        isAlreadySelected =
-          current &&
-          current.provider === mapping.model.provider &&
-          current.id === mapping.model.id;
-
-      if (!isAlreadySelected) {
-        const success = await pi.setModel(model);
-        if (!success) {
-          notify(
-            ctx,
-            "error",
-            `Failed to set model to ${mapping.model.provider}/${mapping.model.id}. Check provider status or credentials.`,
-          );
-          if (lockKey) {
-            await modelLockCoordinator.release(lockKey);
-          }
-          return false;
-        }
-      }
-
-      if (lockKey) {
-        if (activeModelLockKey && activeModelLockKey !== lockKey) {
-          await releaseActiveModelLock();
-        }
-        activeModelLockKey = lockKey;
-        lockKeyForErrorCleanup = undefined;
-        startLockHeartbeat(lockKey);
-      }
-
-      const runnerUp = rankedCandidates[bestIndex + 1],
-        baseReason = runnerUp
-          ? selectionReason(best, runnerUp, config.priority, config.mappings)
-          : "Only one candidate available",
-        lockReason =
-          bestIndex > 0
-            ? `first unlocked model (rank #${bestIndex + 1})`
-            : undefined,
-        waitReason =
-          waitedForLockMs > 0
-            ? `waited ${(waitedForLockMs / 1000).toFixed(1)}s for lock`
-            : undefined,
-        reasonDetail = [lockReason, waitReason, baseReason]
-          .filter(Boolean)
-          .join("; "),
-        selectionMsg = isAlreadySelected
-          ? `Already using ${mapping.model.provider}/${mapping.model.id}`
-          : `Set model to ${mapping.model.provider}/${mapping.model.id}`,
-        bucketMsg = `${best.displayName}/${best.windowLabel} (${best.remainingPercent.toFixed(0)}% left)`;
-
-      const shouldNotifySelection =
-        reason !== "request" ||
-        !isAlreadySelected ||
-        bestIndex > 0 ||
-        waitedForLockMs > 0;
-      if (shouldNotifySelection) {
-        notify(
-          ctx,
-          "info",
-          `${selectionMsg} via ${bucketMsg}. Reason: ${reasonDetail}.`,
-        );
-      }
-
-      return true;
-    } catch (error: unknown) {
-      if (lockKeyForErrorCleanup) {
-        try {
-          await modelLockCoordinator.release(lockKeyForErrorCleanup);
-        } catch {
-          // Best-effort cleanup of partially acquired lock.
-        }
-      }
-
-      const errorMessage = String(error);
-      writeDebugLog(`runSelector failed (reason: ${reason}): ${errorMessage}`);
-      notify(
+      const result = await runSelector(
         ctx,
-        "error",
-        reason === "request"
-          ? `Model selection failed before request start: ${errorMessage}`
-          : `Model selection failed: ${errorMessage}`,
+        cooldownManager,
+        modelLockCoordinator,
+        lockHeartbeatTimer,
+        activeModelLockKey,
+        autoSelectionDisabled,
+        reason,
+        options,
+        pi,
       );
-      return false;
+      return result;
     } finally {
       if (options.acquireModelLock) {
         setLockStatus(ctx);
@@ -2097,7 +105,7 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
       writeDebugLog("Skipping model selection: auto-selection is disabled");
       return;
     }
-    await runSelector(ctx, "startup");
+    await runSelectorWrapper(ctx, "startup");
   });
 
   pi.on("session_switch", async (event, ctx) => {
@@ -2107,7 +115,7 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
         writeDebugLog("Skipping model selection: auto-selection is disabled");
         return;
       }
-      await runSelector(ctx, "startup");
+      await runSelectorWrapper(ctx, "startup");
     }
   });
 
@@ -2121,14 +129,31 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
       // If we have an active lock that matches the current model, keep it.
       // Otherwise, acquire a lock for the current model to maintain coordination.
       if (ctx.model) {
+        const { modelLockKey } = await import("./src/model-locks.js");
         const currentModelKey = modelLockKey(ctx.model.provider, ctx.model.id);
-        if (activeModelLockKey !== currentModelKey) {
+        if (activeModelLockKey.current !== currentModelKey) {
           // Try to acquire the new lock first, then release the old lock.
           // This ensures we never run without coordination if the lock is busy.
-          const oldLockKey = activeModelLockKey;
+          const oldLockKey = activeModelLockKey.current;
           try {
-            await modelLockCoordinator.acquire(currentModelKey);
-            activeModelLockKey = currentModelKey;
+            const acquireResult =
+              await modelLockCoordinator.acquire(currentModelKey);
+            if (!acquireResult.acquired) {
+              const heldByMsg = acquireResult.heldBy
+                ? ` (held by ${acquireResult.heldBy.instanceId}, pid ${acquireResult.heldBy.pid})`
+                : "";
+              notify(
+                ctx,
+                "warning",
+                `Model lock for current model ${ctx.model.provider}/${ctx.model.id} is busy${heldByMsg}. Cross-instance coordination may be impaired.`,
+              );
+              writeDebugLog(
+                `Lock for current model ${ctx.model.provider}/${ctx.model.id} is busy${heldByMsg}; releasing existing lock "${oldLockKey ?? "none"}" to avoid stale lock.`,
+              );
+              await releaseActiveModelLock();
+              return;
+            }
+            activeModelLockKey.current = currentModelKey;
             startLockHeartbeat(currentModelKey);
             if (oldLockKey) {
               await modelLockCoordinator.release(oldLockKey);
@@ -2155,7 +180,7 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
       return;
     }
     await releaseActiveModelLock();
-    await runSelector(ctx, "request", {
+    await runSelectorWrapper(ctx, "request", {
       acquireModelLock: true,
       waitForModelLock: true,
     });
@@ -2170,7 +195,7 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
         writeDebugLog("Skipping auto-run: auto-selection is disabled");
         return;
       }
-      await runSelector(ctx, "auto", { preloadedConfig: config });
+      await runSelectorWrapper(ctx, "auto", { preloadedConfig: config });
     }
   });
 
@@ -2183,7 +208,7 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
   pi.registerCommand("model-select", {
     description: "Select the best starting model based on quota usage",
     handler: async (_args, ctx) => {
-      await runSelector(ctx, "command");
+      await runSelectorWrapper(ctx, "command");
     },
   });
 
@@ -2199,7 +224,7 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
       "Skip the current best model for 1 hour and select the next best",
     handler: async (_args, ctx) => {
       // Load persisted state first (for print-mode support)
-      await loadPersistedCooldowns();
+      await cooldownManager.loadPersistedCooldowns();
 
       const config = await loadConfig(ctx);
       if (!config) return;
@@ -2209,13 +234,17 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
         config.disabledProviders,
       );
 
+      const { candidateKey } = await import("./src/candidates.js");
+
+      let lastSelectedCandidateKey = cooldownManager.getLastSelectedKey();
+
       if (!lastSelectedCandidateKey) {
         const candidates = combineCandidates(
           buildCandidates(usages),
           config.mappings,
         );
         const eligible = candidates.filter(
-          (c: UsageCandidate) =>
+          (c) =>
             !findIgnoreMapping(c, config.mappings) && c.remainingPercent > 0,
         );
         const ranked = sortCandidates(
@@ -2229,19 +258,27 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
       }
 
       if (lastSelectedCandidateKey) {
-        modelCooldowns.set(
-          lastSelectedCandidateKey,
-          Date.now() + COOLDOWN_DURATION,
-        );
-        await persistCooldowns(); // Save to file immediately
+        // Check if the last selected model is the fallback
+        if (lastSelectedCandidateKey.startsWith("fallback:")) {
+          notify(
+            ctx,
+            "warning",
+            "Cannot skip the fallback model. The fallback is exempt from cooldowns.",
+          );
+          return;
+        }
+
+        cooldownManager.addCooldown(lastSelectedCandidateKey);
+        await cooldownManager.persistCooldowns(); // Save to file immediately
         notify(
           ctx,
           "info",
           `Added temporary cooldown (1h) for usage bucket: ${lastSelectedCandidateKey}`,
         );
         lastSelectedCandidateKey = null;
+        cooldownManager.setLastSelectedKey(null);
         // Run selector with pre-fetched usages to avoid second network roundtrip
-        await runSelector(ctx, "command", {
+        await runSelectorWrapper(ctx, "command", {
           preloadedConfig: config,
           preloadedUsages: usages,
         });
@@ -2266,6 +303,7 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
           "Auto model selection disabled for this session. Use Pi's built-in model selection to choose a model manually.",
         );
         // Refresh widget to show the disabled status
+        const { getWidgetState } = await import("./src/widget.js");
         const state = getWidgetState();
         if (state) {
           updateWidgetState({ ...state, autoSelectionDisabled: true });
@@ -2278,13 +316,54 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
           "Auto model selection enabled for this session. The extension will now automatically select the best model.",
         );
         // Re-enable auto-selection and run it immediately
+        const { getWidgetState } = await import("./src/widget.js");
         const state = getWidgetState();
         if (state) {
           updateWidgetState({ ...state, autoSelectionDisabled: false });
           renderUsageWidget(ctx);
         }
-        await runSelector(ctx, "command");
+        await runSelectorWrapper(ctx, "command");
       }
     },
   });
+
+  function startLockHeartbeat(lockKey: string): void {
+    stopLockHeartbeat();
+
+    const MODEL_LOCK_HEARTBEAT_MS = 5000;
+    let heartbeatInProgress = false;
+
+    lockHeartbeatTimer.current = setInterval(() => {
+      void (async () => {
+        if (heartbeatInProgress) {
+          return;
+        }
+
+        try {
+          heartbeatInProgress = true;
+          const stillHeld = await modelLockCoordinator.refresh(lockKey);
+          if (!stillHeld) {
+            if (activeModelLockKey.current === lockKey) {
+              activeModelLockKey.current = null;
+            }
+            stopLockHeartbeat();
+            writeDebugLog(
+              `Model lock heartbeat lost lock for key "${lockKey}", stopping heartbeat.`,
+            );
+          }
+        } catch (err) {
+          stopLockHeartbeat();
+          writeDebugLog(
+            `Error while refreshing model lock heartbeat for key "${lockKey}": ${String(err)}`,
+          );
+        } finally {
+          heartbeatInProgress = false;
+        }
+      })();
+    }, MODEL_LOCK_HEARTBEAT_MS);
+    lockHeartbeatTimer.current.unref?.();
+  }
 }
+
+// Re-export cooldown functions for backward compatibility with tests
+export { loadCooldownState, saveCooldownState } from "./src/cooldown.js";

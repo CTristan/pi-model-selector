@@ -4,6 +4,7 @@ import * as path from "node:path";
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 
 import type {
+  FallbackConfig,
   LoadedConfig,
   MappingEntry,
   PriorityRule,
@@ -107,6 +108,7 @@ function asConfigShape(raw: Record<string, unknown>): {
   priority?: unknown;
   widget?: unknown;
   autoRun?: unknown;
+  fallback?: unknown;
   debugLog?: unknown;
   disabledProviders?: unknown;
 } {
@@ -118,6 +120,7 @@ function asConfigShape(raw: Record<string, unknown>): {
     widget:
       raw.widget && typeof raw.widget === "object" ? raw.widget : undefined,
     autoRun: raw.autoRun,
+    fallback: raw.fallback,
     debugLog: raw.debugLog,
     disabledProviders: Array.isArray(raw.disabledProviders)
       ? raw.disabledProviders
@@ -220,6 +223,46 @@ function normalizeAutoRun(
     return raw.autoRun;
   }
   return undefined;
+}
+
+function normalizeFallback(
+  raw: ReturnType<typeof asConfigShape>,
+  sourceLabel: string,
+  errors: string[],
+): FallbackConfig | undefined {
+  if (!raw.fallback || typeof raw.fallback !== "object") {
+    return undefined;
+  }
+
+  const fallback = raw.fallback as Record<string, unknown>;
+
+  // Validate required fields
+  if (
+    typeof fallback.provider !== "string" ||
+    fallback.provider.trim() === ""
+  ) {
+    errors.push(
+      `[${sourceLabel}] fallback.provider must be a non-empty string`,
+    );
+    return undefined;
+  }
+
+  if (typeof fallback.id !== "string" || fallback.id.trim() === "") {
+    errors.push(`[${sourceLabel}] fallback.id must be a non-empty string`);
+    return undefined;
+  }
+
+  // Validate lock field if present
+  if (fallback.lock !== undefined && typeof fallback.lock !== "boolean") {
+    errors.push(`[${sourceLabel}] fallback.lock must be a boolean if present`);
+    return undefined;
+  }
+
+  return {
+    provider: fallback.provider.trim(),
+    id: fallback.id.trim(),
+    lock: fallback.lock === undefined ? true : fallback.lock,
+  };
 }
 
 interface RawMappingItem {
@@ -405,6 +448,8 @@ export async function loadConfig(
     projectWidget = normalizeWidget(projectConfig),
     globalAutoRun = normalizeAutoRun(globalConfig),
     projectAutoRun = normalizeAutoRun(projectConfig),
+    globalFallback = normalizeFallback(globalConfig, globalConfigPath, errors),
+    projectFallback = normalizeFallback(projectConfig, projectPath, errors),
     globalDebugLog = normalizeDebugLog(
       globalConfig,
       path.dirname(globalConfigPath),
@@ -450,6 +495,7 @@ export async function loadConfig(
     widget: mergeWidgetConfig(globalWidget, projectWidget),
     autoRun: projectAutoRun ?? globalAutoRun ?? false,
     disabledProviders: [...new Set([...globalDisabled, ...projectDisabled])],
+    fallback: projectFallback ?? globalFallback,
     debugLog: projectConfig.debugLog ? projectDebugLog : globalDebugLog,
     sources: { globalPath: globalConfigPath, projectPath },
     raw: { global: globalRaw ?? {}, project: projectRaw },
@@ -505,6 +551,29 @@ export function cleanupConfigRaw(
         changed = true;
         summary.push(
           `Fixed global debug log path from "${originalPath}" to "${correctedPath}".`,
+        );
+      }
+    }
+  }
+
+  // Validate fallback model against registry if modelExists is provided
+  if (raw.fallback && typeof raw.fallback === "object" && options.modelExists) {
+    const fallback = raw.fallback as Record<string, unknown>;
+    const provider = fallback.provider;
+    const id = fallback.id;
+
+    if (typeof provider === "string" && typeof id === "string") {
+      try {
+        if (!options.modelExists(provider, id)) {
+          delete raw.fallback;
+          changed = true;
+          summary.push(
+            `Removed fallback model "${provider}/${id}" because the Pi model provider/id combination is unavailable.`,
+          );
+        }
+      } catch (err) {
+        summary.push(
+          `Could not verify availability of fallback model "${provider}/${id}" due to an error; keeping the fallback. Error: ${String(err)}`,
         );
       }
     }

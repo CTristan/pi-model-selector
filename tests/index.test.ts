@@ -5,14 +5,26 @@ import * as configMod from "../src/config.js";
 import * as usageFetchers from "../src/usage-fetchers.js";
 import * as widgetMod from "../src/widget.js";
 
+// Mock candidates.js to avoid import issues with types.js mock
+vi.mock("../src/candidates.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/candidates.js")>();
+  return {
+    ...actual,
+  };
+});
+
 // Capture debug log writes for testing
 const capturedDebugLogs: string[] = [];
 
 // Mock writeDebugLog directly for reliable log capture
+// Also import candidateKey from candidates.js to avoid mock resolution issues
 vi.mock("../src/types.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/types.js")>();
+  const candidatesMod =
+    await importOriginal<typeof import("../src/candidates.js")>();
   return {
     ...actual,
+    ...(candidatesMod as any), // Include candidates exports to avoid mock resolution issues
     writeDebugLog: vi.fn((message: string) => {
       capturedDebugLogs.push(message);
     }),
@@ -609,6 +621,403 @@ describe("Model Selector Extension", () => {
       expect.stringContaining("Model selection failed before request start"),
       "error",
     );
+  });
+
+  describe("before_agent_start with autoSelectionDisabled", () => {
+    let getWidgetStateMock: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+      getWidgetStateMock = vi.mocked(widgetMod.getWidgetState);
+
+      getWidgetStateMock.mockReturnValue({
+        candidates: [],
+        config: {
+          mappings: [
+            {
+              usage: { provider: "p1", window: "w1" },
+              model: { provider: "p1", id: "m1" },
+            },
+          ],
+          priority: ["remainingPercent"],
+          widget: { enabled: true, placement: "belowEditor", showCount: 3 },
+          autoRun: false,
+          disabledProviders: [],
+          sources: { globalPath: "", projectPath: "" },
+          raw: { global: {}, project: {} },
+        },
+      });
+    });
+
+    it("keeps existing lock when current model matches active lock", async () => {
+      // Pre-populate lock file with existing lock for p1/m1
+      const lockFileState = {
+        version: 1,
+        locks: {},
+      };
+
+      vi.mocked(fs.promises.readFile).mockImplementation(async (filePath) => {
+        const file = String(filePath);
+        if (file.includes("model-selector-cooldowns.json")) {
+          return JSON.stringify({ cooldowns: {}, lastSelected: null });
+        }
+        if (file.includes("model-selector-model-locks.json")) {
+          return JSON.stringify(lockFileState);
+        }
+        return "{}";
+      });
+
+      modelSelectorExtension(pi);
+      const beforeAgentStart = events.before_agent_start;
+
+      // Toggle auto-selection disabled first
+      const toggleHandler = commands["model-auto-toggle"];
+      await toggleHandler({}, ctx);
+
+      // Set ctx.model to p1/m1
+      ctx.model = { provider: "p1", id: "m1" };
+
+      // Clear debug logs
+      capturedDebugLogs.length = 0;
+
+      // First call to before_agent_start with autoSelectionDisabled=true
+      // It will acquire the lock since activeModelLockKey.current is null
+      await beforeAgentStart({}, ctx);
+
+      // Should log about acquiring lock (first time)
+      const firstAcquireLogIndex = capturedDebugLogs.findIndex((log) =>
+        log.includes("Acquired lock for current model p1/m1"),
+      );
+      expect(firstAcquireLogIndex).toBeGreaterThanOrEqual(0);
+
+      // Clear logs for second call
+      capturedDebugLogs.length = 0;
+
+      // Second call - should keep existing lock since model hasn't changed
+      await beforeAgentStart({}, ctx);
+
+      // Should log about keeping existing lock
+      expect(
+        capturedDebugLogs.some((log) =>
+          log.includes("Keeping existing lock for current model p1/m1"),
+        ),
+      ).toBe(true);
+
+      // Should not show error notification
+      expect(ctx.ui.notify).not.toHaveBeenCalledWith(
+        expect.stringContaining("Failed to acquire lock"),
+        "error",
+      );
+    });
+
+    it("acquires new lock when current model differs from active lock", async () => {
+      // Pre-populate lock file with existing lock for p2/m2 (different model)
+      const lockFileState = {
+        version: 1,
+        locks: {
+          "p2/m2": {
+            instanceId: "test-instance",
+            pid: process.pid,
+            acquiredAt: Date.now() - 10_000,
+            heartbeatAt: Date.now() - 5_000,
+          },
+        },
+      };
+
+      vi.mocked(fs.promises.readFile).mockImplementation(async (filePath) => {
+        const file = String(filePath);
+        if (file.includes("model-selector-cooldowns.json")) {
+          return JSON.stringify({ cooldowns: {}, lastSelected: null });
+        }
+        if (file.includes("model-selector-model-locks.json")) {
+          return JSON.stringify(lockFileState);
+        }
+        return "{}";
+      });
+
+      modelSelectorExtension(pi);
+      const beforeAgentStart = events.before_agent_start;
+
+      // Toggle auto-selection disabled
+      const toggleHandler = commands["model-auto-toggle"];
+      await toggleHandler({}, ctx);
+
+      // Set ctx.model to different model than active lock
+      ctx.model = { provider: "p1", id: "m1" };
+
+      // Call before_agent_start
+      await beforeAgentStart({}, ctx);
+
+      // Should log about acquiring new lock
+      expect(
+        capturedDebugLogs.some((log) =>
+          log.includes("Acquired lock for current model p1/m1"),
+        ),
+      ).toBe(true);
+
+      // Should not show error notification
+      expect(ctx.ui.notify).not.toHaveBeenCalledWith(
+        expect.stringContaining("Failed to acquire lock"),
+        "error",
+      );
+    });
+
+    it("releases stale lock when current model lock is busy and differs", async () => {
+      modelSelectorExtension(pi);
+      const beforeAgentStart = events.before_agent_start;
+
+      // Toggle auto-selection disabled
+      const toggleHandler = commands["model-auto-toggle"];
+      await toggleHandler({}, ctx);
+
+      // Acquire initial lock for p2/m2
+      ctx.model = { provider: "p2", id: "m2" };
+      await beforeAgentStart({}, ctx);
+
+      const lockTempPath = [...persistedFiles.keys()].find((path) =>
+        path.includes("model-selector-model-locks.json.tmp."),
+      );
+      expect(lockTempPath).toBeDefined();
+
+      const lockState = JSON.parse(
+        persistedFiles.get(lockTempPath as string) as string,
+      ) as {
+        version: number;
+        locks: Record<string, any>;
+      };
+
+      expect(lockState.locks["p2/m2"]).toBeDefined();
+
+      const now = Date.now();
+      lockState.locks["p1/m1"] = {
+        instanceId: "other-instance",
+        pid: process.pid,
+        acquiredAt: now - 10_000,
+        heartbeatAt: now - 5_000,
+      };
+
+      persistedFiles.set(
+        lockTempPath as string,
+        JSON.stringify(lockState, null, 2),
+      );
+
+      const writeFileMock = vi.mocked(fs.promises.writeFile);
+      const writesBefore = writeFileMock.mock.calls.length;
+
+      // Switch to a model with a busy lock
+      ctx.model = { provider: "p1", id: "m1" };
+      await beforeAgentStart({}, ctx);
+
+      expect(
+        capturedDebugLogs.some((log) =>
+          log.includes('releasing existing lock "p2/m2" to avoid stale lock'),
+        ),
+      ).toBe(true);
+
+      expect(writeFileMock.mock.calls.length).toBeGreaterThan(writesBefore);
+      const lastWriteCall =
+        writeFileMock.mock.calls[writeFileMock.mock.calls.length - 1];
+
+      const updatedState = JSON.parse(lastWriteCall?.[1] as string) as {
+        version: number;
+        locks: Record<string, { instanceId: string }>;
+      };
+
+      expect(updatedState.locks["p2/m2"]).toBeUndefined();
+      expect(updatedState.locks["p1/m1"]).toBeDefined();
+    });
+
+    it("warns when current model lock is busy", async () => {
+      const lockFileState = {
+        version: 1,
+        locks: {
+          "p1/m1": {
+            instanceId: "other-instance",
+            pid: process.pid,
+            acquiredAt: Date.now() - 10_000,
+            heartbeatAt: Date.now() - 5_000,
+          },
+        },
+      };
+
+      vi.mocked(fs.promises.readFile).mockImplementation(async (filePath) => {
+        const file = String(filePath);
+        if (file.includes("model-selector-cooldowns.json")) {
+          return JSON.stringify({ cooldowns: {}, lastSelected: null });
+        }
+        if (file.includes("model-selector-model-locks.json")) {
+          return JSON.stringify(lockFileState);
+        }
+        return "{}";
+      });
+
+      modelSelectorExtension(pi);
+      const beforeAgentStart = events.before_agent_start;
+
+      // Toggle auto-selection disabled
+      const toggleHandler = commands["model-auto-toggle"];
+      await toggleHandler({}, ctx);
+
+      // Set ctx.model to current model with busy lock
+      ctx.model = { provider: "p1", id: "m1" };
+
+      // Call before_agent_start
+      await beforeAgentStart({}, ctx);
+
+      expect(ctx.ui.notify).toHaveBeenCalledWith(
+        expect.stringContaining("Model lock for current model p1/m1 is busy"),
+        "warning",
+      );
+      expect(
+        capturedDebugLogs.some((log) =>
+          log.includes("Lock for current model p1/m1 is busy"),
+        ),
+      ).toBe(true);
+      expect(
+        capturedDebugLogs.some((log) =>
+          log.includes("Acquired lock for current model p1/m1"),
+        ),
+      ).toBe(false);
+    });
+
+    it("shows error notification when lock acquisition fails", async () => {
+      // Mock lock acquisition to fail
+      vi.mocked(fs.promises.open).mockRejectedValueOnce(
+        new Error("Lock acquisition failed: resource busy"),
+      );
+
+      // Pre-populate lock file with existing lock for p2/m2 (different model)
+      const lockFileState = {
+        version: 1,
+        locks: {
+          "p2/m2": {
+            instanceId: "test-instance",
+            pid: process.pid,
+            acquiredAt: Date.now() - 10_000,
+            heartbeatAt: Date.now() - 5_000,
+          },
+        },
+      };
+
+      vi.mocked(fs.promises.readFile).mockImplementation(async (filePath) => {
+        const file = String(filePath);
+        if (file.includes("model-selector-cooldowns.json")) {
+          return JSON.stringify({ cooldowns: {}, lastSelected: null });
+        }
+        if (file.includes("model-selector-model-locks.json")) {
+          return JSON.stringify(lockFileState);
+        }
+        return "{}";
+      });
+
+      modelSelectorExtension(pi);
+      const beforeAgentStart = events.before_agent_start;
+
+      // Toggle auto-selection disabled
+      const toggleHandler = commands["model-auto-toggle"];
+      await toggleHandler({}, ctx);
+
+      // Set ctx.model to different model than active lock
+      ctx.model = { provider: "p1", id: "m1" };
+
+      // Call before_agent_start - should not throw
+      await expect(beforeAgentStart({}, ctx)).resolves.toBeUndefined();
+
+      // Should show error notification about failed lock acquisition
+      expect(ctx.ui.notify).toHaveBeenCalledWith(
+        expect.stringContaining(
+          "Failed to acquire lock for current model p1/m1",
+        ),
+        "error",
+      );
+
+      // Should log to debug log
+      expect(
+        capturedDebugLogs.some((log) =>
+          log.includes("Failed to acquire lock for current model p1/m1"),
+        ),
+      ).toBe(true);
+    });
+
+    it("does nothing when ctx.model is null", async () => {
+      modelSelectorExtension(pi);
+      const beforeAgentStart = events.before_agent_start;
+
+      // Toggle auto-selection disabled
+      const toggleHandler = commands["model-auto-toggle"];
+      await toggleHandler({}, ctx);
+
+      // Set ctx.model to null
+      ctx.model = null;
+
+      // Call before_agent_start - should not throw
+      await expect(beforeAgentStart({}, ctx)).resolves.toBeUndefined();
+
+      // Should not attempt any lock operations
+      expect(
+        capturedDebugLogs.some(
+          (log) =>
+            log.includes("Keeping existing lock") ||
+            log.includes("Acquired lock"),
+        ),
+      ).toBe(false);
+    });
+
+    it("releases old lock when acquiring new lock", async () => {
+      // Pre-populate lock file with existing lock for p2/m2
+      const lockFileState = {
+        version: 1,
+        locks: {
+          "p2/m2": {
+            instanceId: "test-instance",
+            pid: process.pid,
+            acquiredAt: Date.now() - 10_000,
+            heartbeatAt: Date.now() - 5_000,
+          },
+        },
+      };
+
+      vi.mocked(fs.promises.readFile).mockImplementation(async (filePath) => {
+        const file = String(filePath);
+        if (file.includes("model-selector-cooldowns.json")) {
+          return JSON.stringify({ cooldowns: {}, lastSelected: null });
+        }
+        if (file.includes("model-selector-model-locks.json")) {
+          return JSON.stringify(lockFileState);
+        }
+        return "{}";
+      });
+
+      modelSelectorExtension(pi);
+      const beforeAgentStart = events.before_agent_start;
+
+      // Toggle auto-selection disabled
+      const toggleHandler = commands["model-auto-toggle"];
+      await toggleHandler({}, ctx);
+
+      // Set ctx.model to different model
+      ctx.model = { provider: "p1", id: "m1" };
+
+      // Call before_agent_start
+      await beforeAgentStart({}, ctx);
+
+      // Should log about acquiring new lock
+      expect(
+        capturedDebugLogs.some((log) =>
+          log.includes("Acquired lock for current model p1/m1"),
+        ),
+      ).toBe(true);
+
+      // The old lock for p2/m2 should have been released
+      // Check lock file writes to verify
+      const lockWrites = vi
+        .mocked(fs.promises.writeFile)
+        .mock.calls.filter(
+          ([filePath]) =>
+            typeof filePath === "string" &&
+            filePath.includes("model-selector-model-locks.json.tmp."),
+        );
+      expect(lockWrites.length).toBeGreaterThan(0);
+    });
   });
 
   describe("model-auto-toggle command", () => {
