@@ -830,7 +830,12 @@ async function finalizeSelection(
     );
   }
 
-  const runnerUp = rankedCandidates[bestIndex + 1],
+  const runnerUp =
+      rankedCandidates.length > 1
+        ? candidateKey(rankedCandidates[0]) === candidateKey(best)
+          ? rankedCandidates[1]
+          : rankedCandidates[0]
+        : undefined,
     baseReason = runnerUp
       ? selectionReason(best, runnerUp, config.priority, config.mappings)
       : "Only one candidate available",
