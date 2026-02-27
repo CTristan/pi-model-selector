@@ -835,9 +835,11 @@ async function finalizeSelection(
       ? selectionReason(best, runnerUp, config.priority, config.mappings)
       : "Only one candidate available",
     lockReason =
-      bestIndex > 0
-        ? `first unlocked model (rank #${bestIndex + 1})`
-        : undefined,
+      best.windowLabel === "fallback"
+        ? undefined
+        : bestIndex > 0
+          ? `first unlocked model (rank #${bestIndex + 1})`
+          : undefined,
     waitReason =
       waitedForLockMs > 0
         ? `waited ${(waitedForLockMs / 1000).toFixed(1)}s for lock`

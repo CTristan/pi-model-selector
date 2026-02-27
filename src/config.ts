@@ -563,17 +563,19 @@ export function cleanupConfigRaw(
     const id = fallback.id;
 
     if (typeof provider === "string" && typeof id === "string") {
+      const providerTrimmed = provider.trim();
+      const idTrimmed = id.trim();
       try {
-        if (!options.modelExists(provider, id)) {
+        if (!options.modelExists(providerTrimmed, idTrimmed)) {
           delete raw.fallback;
           changed = true;
           summary.push(
-            `Removed fallback model "${provider}/${id}" because the Pi model provider/id combination is unavailable.`,
+            `Removed fallback model "${providerTrimmed}/${idTrimmed}" because the Pi model provider/id combination is unavailable.`,
           );
         }
       } catch (err) {
         summary.push(
-          `Could not verify availability of fallback model "${provider}/${id}" due to an error; keeping the fallback. Error: ${String(err)}`,
+          `Could not verify availability of fallback model "${providerTrimmed}/${idTrimmed}" due to an error; keeping the fallback. Error: ${String(err)}`,
         );
       }
     }

@@ -90,8 +90,9 @@ export class CooldownManager {
     // Restore last selected (useful for /model-skip in print mode)
     if (state.lastSelected) {
       this.lastSelectedCandidateKey = state.lastSelected;
-      // Migrate legacy lastSelected key if needed
+      // Migrate legacy lastSelected key if needed (skip fallback marker keys)
       if (
+        !this.lastSelectedCandidateKey.startsWith("fallback:") &&
         !this.lastSelectedCandidateKey.endsWith("|raw") &&
         !this.lastSelectedCandidateKey.endsWith("|synthetic") &&
         !this.lastSelectedCandidateKey.endsWith("|*")
