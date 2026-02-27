@@ -51,6 +51,7 @@ export interface ModelSelectorConfig {
   priority?: PriorityRule[];
   widget?: WidgetConfig;
   autoRun?: boolean;
+  lastResort?: ModelMappingTarget;
 }
 
 export interface WidgetConfig {
@@ -76,6 +77,7 @@ export interface LoadedConfig {
   widget: Required<WidgetConfig>;
   autoRun: boolean;
   disabledProviders: ProviderName[];
+  lastResort?: ModelMappingTarget;
   debugLog?: {
     enabled: boolean;
     path: string;

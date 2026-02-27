@@ -48,6 +48,7 @@ import { createModelLockCoordinator, modelLockKey } from "./src/model-locks.js";
 import type {
   LoadedConfig,
   MappingEntry,
+  ModelMappingTarget,
   PriorityRule,
   ProviderName,
   UsageCandidate,
@@ -1605,6 +1606,47 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
 
   let running = false;
 
+  const selectLastResortModel = async (
+    ctx: ExtensionContext,
+    lastResort: ModelMappingTarget,
+    triggerReason: string,
+  ): Promise<boolean> => {
+    const model = ctx.modelRegistry.find(lastResort.provider, lastResort.id);
+    if (!model) {
+      notify(
+        ctx,
+        "error",
+        `Last-resort model not found: ${lastResort.provider}/${lastResort.id}.`,
+      );
+      return false;
+    }
+
+    const current = ctx.model,
+      isAlreadySelected =
+        current &&
+        current.provider === lastResort.provider &&
+        current.id === lastResort.id;
+
+    if (!isAlreadySelected) {
+      const success = await pi.setModel(model);
+      if (!success) {
+        notify(
+          ctx,
+          "error",
+          `Failed to set last-resort model ${lastResort.provider}/${lastResort.id}.`,
+        );
+        return false;
+      }
+    }
+
+    notify(
+      ctx,
+      "warning",
+      `${triggerReason}. ${isAlreadySelected ? "Already using" : "Switched to"} last-resort model: ${lastResort.provider}/${lastResort.id}.`,
+    );
+    return true;
+  };
+
   const runSelector = async (
     ctx: ExtensionContext,
     reason: "startup" | "command" | "auto" | "request",
@@ -1786,6 +1828,13 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
       renderUsageWidget(ctx);
 
       if (eligibleCandidates.length === 0) {
+        if (config.lastResort) {
+          return await selectLastResortModel(
+            ctx,
+            config.lastResort,
+            "All usage buckets are exhausted",
+          );
+        }
         notify(
           ctx,
           "error",
@@ -1934,6 +1983,13 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
           }
 
           if (!selectedWithLock) {
+            if (config.lastResort) {
+              return await selectLastResortModel(
+                ctx,
+                config.lastResort,
+                "All mapped models are busy",
+              );
+            }
             notify(
               ctx,
               "error",

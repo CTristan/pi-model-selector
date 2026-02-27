@@ -551,3 +551,111 @@ describe("Config Mutation", () => {
     expect(remaining[0].ignore).not.toBe(true);
   });
 });
+
+describe("lastResort Config Parsing", () => {
+  beforeEach(() => {
+    vi.mocked(fs.promises.access).mockResolvedValue(undefined);
+    vi.mocked(fs.promises.readFile).mockReset();
+    vi.mocked(mockCtx.ui.notify).mockReset();
+  });
+
+  it("parses lastResort from global config", async () => {
+    const globalConfig = JSON.stringify({
+      mappings: [
+        {
+          usage: { provider: "anthropic", window: "Sonnet" },
+          model: { provider: "anthropic", id: "claude-3-5-sonnet-latest" },
+        },
+      ],
+      lastResort: { provider: "openai", id: "gpt-4o-mini" },
+    });
+
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce(globalConfig);
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce("{}");
+
+    const config = await loadConfig(mockCtx);
+    expect(config?.lastResort).toEqual({ provider: "openai", id: "gpt-4o-mini" });
+  });
+
+  it("project lastResort overrides global lastResort", async () => {
+    const globalConfig = JSON.stringify({
+      mappings: [
+        {
+          usage: { provider: "anthropic", window: "Sonnet" },
+          model: { provider: "anthropic", id: "claude-3-5-sonnet-latest" },
+        },
+      ],
+      lastResort: { provider: "openai", id: "gpt-4o-mini" },
+    });
+    const projectConfig = JSON.stringify({
+      lastResort: { provider: "anthropic", id: "claude-haiku" },
+    });
+
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce(globalConfig);
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce(projectConfig);
+
+    const config = await loadConfig(mockCtx);
+    expect(config?.lastResort).toEqual({ provider: "anthropic", id: "claude-haiku" });
+  });
+
+  it("returns undefined lastResort when not configured", async () => {
+    const globalConfig = JSON.stringify({
+      mappings: [
+        {
+          usage: { provider: "anthropic", window: "Sonnet" },
+          model: { provider: "anthropic", id: "claude-3-5-sonnet-latest" },
+        },
+      ],
+    });
+
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce(globalConfig);
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce("{}");
+
+    const config = await loadConfig(mockCtx);
+    expect(config?.lastResort).toBeUndefined();
+  });
+
+  it("reports error for invalid lastResort (not an object)", async () => {
+    const globalConfig = JSON.stringify({
+      mappings: [
+        {
+          usage: { provider: "anthropic", window: "Sonnet" },
+          model: { provider: "anthropic", id: "claude-3-5-sonnet-latest" },
+        },
+      ],
+      lastResort: "invalid",
+    });
+
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce(globalConfig);
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce("{}");
+
+    const config = await loadConfig(mockCtx);
+    expect(config).toBeNull();
+    expect(vi.mocked(mockCtx.ui.notify)).toHaveBeenCalledWith(
+      expect.stringContaining("lastResort must be an object"),
+      "error",
+    );
+  });
+
+  it("reports error for lastResort missing provider or id", async () => {
+    const globalConfig = JSON.stringify({
+      mappings: [
+        {
+          usage: { provider: "anthropic", window: "Sonnet" },
+          model: { provider: "anthropic", id: "claude-3-5-sonnet-latest" },
+        },
+      ],
+      lastResort: { provider: "openai" },
+    });
+
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce(globalConfig);
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce("{}");
+
+    const config = await loadConfig(mockCtx);
+    expect(config).toBeNull();
+    expect(vi.mocked(mockCtx.ui.notify)).toHaveBeenCalledWith(
+      expect.stringContaining("lastResort must have provider and id strings"),
+      "error",
+    );
+  });
+});

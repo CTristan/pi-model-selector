@@ -6,6 +6,7 @@ import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 import type {
   LoadedConfig,
   MappingEntry,
+  ModelMappingTarget,
   PriorityRule,
   WidgetConfig,
 } from "./types.js";
@@ -109,6 +110,7 @@ function asConfigShape(raw: Record<string, unknown>): {
   autoRun?: unknown;
   debugLog?: unknown;
   disabledProviders?: unknown;
+  lastResort?: unknown;
 } {
   return {
     mappings: Array.isArray(raw.mappings) ? raw.mappings : undefined,
@@ -122,6 +124,7 @@ function asConfigShape(raw: Record<string, unknown>): {
     disabledProviders: Array.isArray(raw.disabledProviders)
       ? raw.disabledProviders
       : undefined,
+    lastResort: raw.lastResort,
   };
 }
 
@@ -220,6 +223,26 @@ function normalizeAutoRun(
     return raw.autoRun;
   }
   return undefined;
+}
+
+function normalizeLastResort(
+  raw: ReturnType<typeof asConfigShape>,
+  sourceLabel: string,
+  errors: string[],
+): ModelMappingTarget | undefined {
+  if (raw.lastResort === undefined) return undefined;
+  if (typeof raw.lastResort !== "object" || Array.isArray(raw.lastResort)) {
+    errors.push(`[${sourceLabel}] lastResort must be an object`);
+    return undefined;
+  }
+  const lr = raw.lastResort as Record<string, unknown>;
+  if (typeof lr.provider !== "string" || typeof lr.id !== "string") {
+    errors.push(
+      `[${sourceLabel}] lastResort must have provider and id strings`,
+    );
+    return undefined;
+  }
+  return { provider: lr.provider, id: lr.id };
 }
 
 interface RawMappingItem {
@@ -411,7 +434,13 @@ export async function loadConfig(
     ),
     projectDebugLog = normalizeDebugLog(projectConfig, ctx.cwd),
     globalDisabled = normalizeDisabledProviders(globalConfig),
-    projectDisabled = normalizeDisabledProviders(projectConfig);
+    projectDisabled = normalizeDisabledProviders(projectConfig),
+    globalLastResort = normalizeLastResort(
+      globalConfig,
+      globalConfigPath,
+      errors,
+    ),
+    projectLastResort = normalizeLastResort(projectConfig, projectPath, errors);
 
   if (errors.length > 0) {
     notify(ctx, "error", errors.join("\n"));
@@ -450,6 +479,7 @@ export async function loadConfig(
     widget: mergeWidgetConfig(globalWidget, projectWidget),
     autoRun: projectAutoRun ?? globalAutoRun ?? false,
     disabledProviders: [...new Set([...globalDisabled, ...projectDisabled])],
+    lastResort: projectLastResort ?? globalLastResort,
     debugLog: projectConfig.debugLog ? projectDebugLog : globalDebugLog,
     sources: { globalPath: globalConfigPath, projectPath },
     raw: { global: globalRaw ?? {}, project: projectRaw },

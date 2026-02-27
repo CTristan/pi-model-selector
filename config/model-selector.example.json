@@ -11,6 +11,10 @@
     "path": ".pi/model-selector.log"
   },
   "disabledProviders": ["kiro", "zai"],
+  "lastResort": {
+    "provider": "openai",
+    "id": "gpt-4o-mini"
+  },
   "mappings": [
     {
       "usage": {
