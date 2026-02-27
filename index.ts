@@ -121,6 +121,7 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
   });
 
   pi.on("before_agent_start", async (_event, ctx) => {
+    void _event;
     // Skip model selection if auto-selection is disabled for this session.
     // Maintain cross-instance coordination by acquiring a lock for the current
     // model, keeping an existing lock if it already matches, or swapping to
