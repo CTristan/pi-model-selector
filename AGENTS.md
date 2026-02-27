@@ -10,7 +10,7 @@
 
 ### Entry Point
 
-- **`index.ts`** (345 lines): Main extension entry point. Wires together all modules, registers commands (`/model-select`, `/model-select-config`, `/model-skip`, `/model-auto-toggle`), and handles session events. Delegates to specialized modules for cooldown management, model selection, and UI wizards.
+- **`index.ts`**: Main extension entry point. Wires together all modules, registers commands (`/model-select`, `/model-select-config`, `/model-skip`, `/model-auto-toggle`), and handles session events. Delegates to specialized modules for cooldown management, model selection, and UI wizards.
 
 ### Source Modules (`src/`)
 
@@ -61,7 +61,7 @@
 5. **Widget Update**: Updates the visual widget with top N candidates.
 6. **Model Selection**: Selects best candidate, looks up mapping, calls `pi.setModel()`.
 7. **Lock Coordination**: For request preflight, acquires a per-model cross-instance lock (fall through ranked candidates; wait/poll only when all mapped models are busy).
-8. **Fallback Fallback**: If all quota-tracked models are exhausted or locked, attempts to use the configured fallback model (if any).
+8. **Fallback**: If all quota-tracked models are exhausted or locked, attempts to use the configured fallback model (if any).
 
 ## Cooldown Mechanism
 
@@ -159,12 +159,12 @@ This is a critical requirement to maintain code quality and maintainability. Whe
 **Aim to keep most files under roughly 500 lines where practical**, and periodically refactor growing files before they reach the 2000-line threshold.
 
 **Example**: The original `index.ts` was 2580 lines and was refactored into:
-- `index.ts` (345 lines) - Main entry point and event registration
-- `src/cooldown.ts` (175 lines) - Cooldown state management
-- `src/credential-check.ts` (166 lines) - Provider credential checking
-- `src/selector.ts` (845 lines) - Model selection logic
-- `src/ui-helpers.ts` (141 lines) - UI helper functions
-- `src/wizard.ts` (1194 lines) - Configuration wizard
+- `index.ts` - Main entry point and event registration
+- `src/cooldown.ts` - Cooldown state management
+- `src/credential-check.ts` - Provider credential checking
+- `src/selector.ts` - Model selection logic
+- `src/ui-helpers.ts` - UI helper functions
+- `src/wizard.ts` - Configuration wizard
 
 ### Code Organization
 

@@ -38,12 +38,14 @@ describe("fetchAllUsages fallback branches", () => {
       .spyOn(global, "setTimeout")
       .mockImplementation(() => undefined as unknown as NodeJS.Timeout);
 
-    const results = await fetchAllUsages({}, disabledProviders);
+    try {
+      const results = await fetchAllUsages({}, disabledProviders);
 
-    expect(results).toHaveLength(1);
-    expect(results[0].displayName).toBe("zai");
-
-    PROVIDER_DISPLAY_NAMES.zai = originalName;
-    setTimeoutSpy.mockRestore();
+      expect(results).toHaveLength(1);
+      expect(results[0].displayName).toBe("zai");
+    } finally {
+      PROVIDER_DISPLAY_NAMES.zai = originalName;
+      setTimeoutSpy.mockRestore();
+    }
   });
 });

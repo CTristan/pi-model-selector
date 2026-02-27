@@ -398,7 +398,7 @@ describe("Cooldown Manager - Extension Branches", () => {
       expect((cooldownManager as any).modelCooldowns.size).toBe(0);
     });
 
-    it("clears last selected key", () => {
+    it("does not clear last selected key", () => {
       cooldownManager.setLastSelectedKey("some-key");
       expect(cooldownManager.getLastSelectedKey()).toBe("some-key");
 

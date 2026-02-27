@@ -17,14 +17,10 @@ vi.mock("../src/candidates.js", async (importOriginal) => {
 const capturedDebugLogs: string[] = [];
 
 // Mock writeDebugLog directly for reliable log capture
-// Also import candidateKey from candidates.js to avoid mock resolution issues
 vi.mock("../src/types.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../src/types.js")>();
-  const candidatesMod =
-    await importOriginal<typeof import("../src/candidates.js")>();
   return {
     ...actual,
-    ...(candidatesMod as any), // Include candidates exports to avoid mock resolution issues
     writeDebugLog: vi.fn((message: string) => {
       capturedDebugLogs.push(message);
     }),
