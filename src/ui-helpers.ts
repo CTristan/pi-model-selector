@@ -2,8 +2,6 @@ import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 import {
   DynamicBorder,
   getSelectListTheme,
-  keyHint,
-  rawKeyHint,
 } from "@mariozechner/pi-coding-agent";
 
 import {
@@ -80,7 +78,7 @@ export async function selectWrapped(
     return ctx.ui.select(title, options);
   }
 
-  return ctx.ui.custom<string | undefined>((tui, theme, _kb, done) => {
+  return ctx.ui.custom<string | undefined>((tui, theme, _keybindings, done) => {
     const container = new Container();
     container.addChild(new DynamicBorder((s: string) => theme.fg("accent", s)));
     container.addChild(new Spacer(1));
@@ -99,11 +97,7 @@ export async function selectWrapped(
 
     container.addChild(new Spacer(1));
     container.addChild(
-      new Text(
-        `${rawKeyHint("↑↓", "navigate")}  ${keyHint("selectConfirm", "select")}  ${keyHint("selectCancel", "cancel")}`,
-        1,
-        0,
-      ),
+      new Text("↑↓ to navigate  Enter to select  Esc to cancel", 1, 0),
     );
     container.addChild(new Spacer(1));
     container.addChild(new DynamicBorder((s: string) => theme.fg("accent", s)));

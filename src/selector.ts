@@ -372,6 +372,9 @@ async function handleExhaustedCandidates(
   cooldownManager: CooldownManager,
   _autoSelectionDisabled: boolean,
 ): Promise<boolean> {
+  void _lockKeyForErrorCleanup;
+  void _autoSelectionDisabled;
+
   if (!config.fallback) {
     notify(
       ctx,
@@ -489,6 +492,7 @@ async function acquireModelLock(
   };
   waitedForLockMs: number;
 }> {
+  void _activeModelLockKey;
   type LockableCandidate = {
     candidate: UsageCandidate;
     mapping: NonNullable<ReturnType<typeof findModelMapping>>;

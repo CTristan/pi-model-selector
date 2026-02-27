@@ -14,6 +14,9 @@ describe("Model selector heartbeat reference", () => {
 
     runSelectorMock.mockImplementation(
       async (_ctx, _cooldown, _coordinator, lockHeartbeatTimer) => {
+        void _ctx;
+        void _cooldown;
+        void _coordinator;
         if (!lockHeartbeatTimer.current) {
           lockHeartbeatTimer.current = heartbeat;
         }

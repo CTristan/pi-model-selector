@@ -100,6 +100,7 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
   };
 
   pi.on("session_start", async (_event, ctx) => {
+    void _event;
     // Skip model selection if auto-selection is disabled for this session
     if (autoSelectionDisabled) {
       writeDebugLog("Skipping model selection: auto-selection is disabled");
@@ -208,6 +209,7 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
   pi.registerCommand("model-select", {
     description: "Select the best starting model based on quota usage",
     handler: async (_args, ctx) => {
+      void _args;
       await runSelectorWrapper(ctx, "command");
     },
   });
@@ -215,6 +217,7 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
   pi.registerCommand("model-select-config", {
     description: "Configure mappings, providers, and widget settings",
     handler: async (_args, ctx) => {
+      void _args;
       await runMappingWizard(ctx);
     },
   });
@@ -223,6 +226,7 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
     description:
       "Skip the current best model for 1 hour and select the next best",
     handler: async (_args, ctx) => {
+      void _args;
       // Load persisted state first (for print-mode support)
       await cooldownManager.loadPersistedCooldowns();
 
@@ -291,6 +295,7 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
   pi.registerCommand("model-auto-toggle", {
     description: "Toggle auto model selection on/off for this session",
     handler: async (_args, ctx) => {
+      void _args;
       const config = await loadConfig(ctx, { requireMappings: false });
       if (!config) return;
 
