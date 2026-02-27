@@ -14,7 +14,7 @@ import {
 } from "./candidates.js";
 
 import { loadConfig } from "./config.js";
-import { type CooldownManager, getWildcardKey } from "./cooldown.js";
+import type { CooldownManager } from "./cooldown.js";
 
 import {
   createModelLockCoordinator as createModelLockCoordinatorImpl,

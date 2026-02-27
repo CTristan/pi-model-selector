@@ -272,7 +272,6 @@ describe("Cooldown Manager - Extension Branches", () => {
 
     it("returns false when specific cooldown has expired (not yet pruned)", () => {
       vi.setSystemTime(new Date("2024-01-01T00:00:00.000Z"));
-      const _past = Date.now();
 
       // Set a specific cooldown
       const candidate = {
@@ -325,7 +324,6 @@ describe("Cooldown Manager - Extension Branches", () => {
   describe("pruneExpiredCooldowns", () => {
     it("returns true when it removes expired cooldowns", () => {
       vi.setSystemTime(new Date("2024-01-01T00:00:00.000Z"));
-      const _now = Date.now();
 
       // Set some cooldowns
       cooldownManager.addCooldown("key1");
@@ -360,7 +358,6 @@ describe("Cooldown Manager - Extension Branches", () => {
 
     it("removes only expired cooldowns, keeping active ones", () => {
       vi.setSystemTime(new Date("2024-01-01T00:00:00.000Z"));
-      const _past = Date.now();
 
       // Set some cooldowns
       cooldownManager.addCooldown("key1");
