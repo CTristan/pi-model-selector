@@ -383,8 +383,8 @@ function normalizeMappings(
         account: typeof usage.account === "string" ? usage.account : undefined,
         window: typeof usage.window === "string" ? usage.window : undefined,
         windowPattern:
-          typeof item.usage.windowPattern === "string"
-            ? item.usage.windowPattern
+          typeof usage.windowPattern === "string"
+            ? usage.windowPattern
             : undefined,
       },
       model: model

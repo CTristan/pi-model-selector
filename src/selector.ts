@@ -253,7 +253,7 @@ export async function runSelector(
     renderUsageWidget(ctx);
 
     if (eligibleCandidates.length === 0) {
-      // All candidates are exhausted - check for fallback model
+      // All candidates are exhausted or below reserve - check for fallback model
       return await handleExhaustedCandidates(
         ctx,
         config,
@@ -411,7 +411,13 @@ async function handleExhaustedCandidates(
   // Distinguish between exhausted (0%) and below reserve (>0% but below threshold)
   const allExhausted = candidates.every((c) => c.remainingPercent === 0);
 
-  writeDebugLog("All candidates exhausted, attempting fallback model");
+  if (allExhausted) {
+    writeDebugLog("All candidates exhausted, attempting fallback model");
+  } else {
+    writeDebugLog(
+      "All candidates at or below their reserve thresholds, attempting fallback model",
+    );
+  }
   const fallbackModel = ctx.modelRegistry.find(
     config.fallback.provider,
     config.fallback.id,
