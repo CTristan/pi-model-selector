@@ -33,14 +33,16 @@ function extractClaudeCredential(
 
   if (!token) return undefined;
 
-  return {
-    token,
-    source,
-    expiresAt:
-      parseEpochMillis(record.expires) ??
-      parseEpochMillis(record.expiresAt) ??
-      parseEpochMillis(record.expiry_date),
-  };
+  const expiresAt =
+    parseEpochMillis(record.expires) ??
+    parseEpochMillis(record.expiresAt) ??
+    parseEpochMillis(record.expiry_date);
+
+  const result: ClaudeCredential = { token, source };
+  if (expiresAt !== undefined) {
+    result.expiresAt = expiresAt;
+  }
+  return result;
 }
 
 function buildClaudeWindows(data: unknown): RateWindow[] {
@@ -85,14 +87,15 @@ function buildClaudeWindows(data: unknown): RateWindow[] {
             : windowResetsAt
           : (globalResetsAt ?? windowResetsAt);
 
-      windows.push({
+      const window: RateWindow = {
         label,
         usedPercent: finalUtilization * 100,
-        resetDescription: finalResetsAt
-          ? formatReset(finalResetsAt)
-          : undefined,
-        resetsAt: finalResetsAt,
-      });
+      };
+      if (finalResetsAt) {
+        window.resetDescription = formatReset(finalResetsAt);
+        window.resetsAt = finalResetsAt;
+      }
+      windows.push(window);
     };
 
   if (dataTyped.seven_day_sonnet?.utilization !== undefined) {
@@ -115,35 +118,42 @@ function buildClaudeWindows(data: unknown): RateWindow[] {
   // to avoid misleading users about the status of these specific windows.
   if (dataTyped.five_hour) {
     const resetsAt = safeDate(dataTyped.five_hour.resets_at);
-    windows.push({
+    const window: RateWindow = {
       label: "5h",
       usedPercent: (dataTyped.five_hour.utilization ?? 0) * 100,
-      resetDescription: resetsAt ? formatReset(resetsAt) : undefined,
-      resetsAt,
-    });
+    };
+    if (resetsAt) {
+      window.resetDescription = formatReset(resetsAt);
+      window.resetsAt = resetsAt;
+    }
+    windows.push(window);
   }
 
   if (dataTyped.seven_day) {
     const resetsAt = safeDate(dataTyped.seven_day.resets_at);
-    windows.push({
+    const window: RateWindow = {
       label: "Week",
       usedPercent: (dataTyped.seven_day.utilization ?? 0) * 100,
-      resetDescription: resetsAt ? formatReset(resetsAt) : undefined,
-      resetsAt,
-    });
+    };
+    if (resetsAt) {
+      window.resetDescription = formatReset(resetsAt);
+      window.resetsAt = resetsAt;
+    }
+    windows.push(window);
   }
 
   // If no model-specific windows were found, add a pessimistic "Shared" window
   // that the selector can use as a reliable bottleneck.
   if (!windows.some((w) => w.label === "Sonnet" || w.label === "Opus")) {
-    windows.push({
+    const window: RateWindow = {
       label: "Shared",
       usedPercent: globalUtilization * 100,
-      resetDescription: globalResetsAt
-        ? formatReset(globalResetsAt)
-        : undefined,
-      resetsAt: globalResetsAt,
-    });
+    };
+    if (globalResetsAt) {
+      window.resetDescription = formatReset(globalResetsAt);
+      window.resetsAt = globalResetsAt;
+    }
+    windows.push(window);
   }
 
   return windows;
@@ -348,24 +358,30 @@ export async function fetchClaudeUsage(
     }
 
     if (lastError) {
-      return {
+      const snapshot: UsageSnapshot = {
         provider: "anthropic",
         displayName: "Claude",
         windows: [],
         error: lastError.message,
-        account: lastError.source,
       };
+      if (lastError.source !== undefined) {
+        snapshot.account = lastError.source;
+      }
+      return snapshot;
     }
 
-    return {
+    const snapshot: UsageSnapshot = {
       provider: "anthropic",
       displayName: "Claude",
       windows: [],
       error: lastAuthFailure
         ? `HTTP ${lastAuthFailure.status}`
         : "No credentials",
-      account: lastAuthFailure?.source,
     };
+    if (lastAuthFailure?.source !== undefined) {
+      snapshot.account = lastAuthFailure.source;
+    }
+    return snapshot;
   } catch (error: unknown) {
     return {
       provider: "anthropic",

@@ -172,9 +172,9 @@ describe("Provider auth fallback behavior", () => {
       },
     );
 
-    expect(result[0].error).toBeUndefined();
-    expect(result[0].account).toBe("pid");
-    expect(result[0].windows[0]?.label).toBe("Flash");
+    expect(result[0]!.error).toBeUndefined();
+    expect(result[0]!.account).toBe("pid");
+    expect(result[0]!.windows[0]?.label).toBe("Flash");
   });
 
   it("fetchGeminiUsage should return Missing projectId when none is discovered", async () => {
@@ -193,7 +193,7 @@ describe("Provider auth fallback behavior", () => {
       {},
     );
 
-    expect(result[0].error).toBe("Missing projectId");
+    expect(result[0]!.error).toBe("Missing projectId");
   });
 
   it("fetchGeminiUsage should proactively refresh expired tokens", async () => {
@@ -248,8 +248,8 @@ describe("Provider auth fallback behavior", () => {
       },
     );
 
-    expect(result[0].error).toBeUndefined();
-    expect(result[0].account).toBe("pid");
+    expect(result[0]!.error).toBeUndefined();
+    expect(result[0]!.account).toBe("pid");
     expect(fetchMock.mock.calls[0]?.[0]).toContain(
       "oauth2.googleapis.com/token",
     );

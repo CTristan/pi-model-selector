@@ -105,6 +105,7 @@ describe("Wizard Settings", () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(configMod.loadConfig).not.toHaveBeenCalled();
@@ -129,6 +130,7 @@ describe("Wizard Settings", () => {
     });
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(configMod.updateWidgetConfig).toHaveBeenCalledWith(
@@ -152,6 +154,7 @@ describe("Wizard Settings", () => {
       .mockResolvedValueOnce("Done");
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(configMod.updateWidgetConfig).toHaveBeenCalledWith(
@@ -172,6 +175,7 @@ describe("Wizard Settings", () => {
       .mockResolvedValueOnce("Done");
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(configMod.updateWidgetConfig).toHaveBeenCalledWith(
@@ -192,6 +196,7 @@ describe("Wizard Settings", () => {
       .mockResolvedValueOnce("Done");
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(configMod.updateWidgetConfig).toHaveBeenCalledWith(
@@ -214,6 +219,7 @@ describe("Wizard Settings", () => {
       .mockResolvedValueOnce("Done");
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(configMod.saveConfigFile).toHaveBeenCalledWith(
@@ -236,6 +242,7 @@ describe("Wizard Settings", () => {
       .mockResolvedValueOnce("Done");
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(configMod.saveConfigFile).toHaveBeenCalledWith(
@@ -270,6 +277,7 @@ describe("Wizard Settings", () => {
     ctx.ui.input.mockResolvedValueOnce("logs/selector.log");
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(configMod.saveConfigFile).toHaveBeenCalledWith(
@@ -305,6 +313,7 @@ describe("Wizard Settings", () => {
       .mockResolvedValueOnce("Done");
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(configMod.saveConfigFile).toHaveBeenCalledWith(
@@ -330,9 +339,9 @@ describe("Wizard Settings", () => {
     };
     const reloadedConfig: LoadedConfig = {
       ...configWithFallback,
-      fallback: undefined,
       raw: { global: {}, project: {} },
     };
+    delete reloadedConfig.fallback;
 
     vi.mocked(configMod.loadConfig)
       .mockResolvedValueOnce(configWithFallback)
@@ -345,6 +354,184 @@ describe("Wizard Settings", () => {
       .mockResolvedValueOnce("Done");
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
+    await runWizard({}, ctx as unknown as Record<string, unknown>);
+
+    expect(configMod.saveConfigFile).toHaveBeenCalledWith(
+      "project.json",
+      expect.not.objectContaining({ fallback: expect.anything() }),
+    );
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("Fallback model cleared"),
+      "info",
+    );
+  });
+
+  it("sets the fallback model", async () => {
+    const configWithoutFallback: LoadedConfig = {
+      ...baseConfig,
+      raw: { global: {}, project: {} },
+    };
+    const configWithFallback: LoadedConfig = {
+      ...configWithoutFallback,
+      fallback: { provider: "p1", id: "m1", lock: true },
+      raw: {
+        global: { fallback: { provider: "p1", id: "m1", lock: true } },
+        project: {},
+      },
+    };
+
+    vi.mocked(configMod.loadConfig)
+      .mockResolvedValueOnce(configWithoutFallback)
+      .mockResolvedValueOnce(configWithFallback);
+
+    ctx.modelRegistry.getAvailable.mockResolvedValue([
+      { provider: "p1", id: "m1" },
+      { provider: "p2", id: "m2" },
+    ]);
+
+    ctx.ui.select
+      .mockResolvedValueOnce("Configure fallback")
+      .mockResolvedValueOnce("Set fallback model")
+      .mockResolvedValueOnce("p1/m1")
+      .mockResolvedValueOnce("Yes — acquire lock (default)")
+      .mockResolvedValueOnce("Global (global.json)")
+      .mockResolvedValueOnce("Done");
+
+    const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
+    await runWizard({}, ctx as unknown as Record<string, unknown>);
+
+    expect(configMod.saveConfigFile).toHaveBeenCalledWith(
+      "global.json",
+      expect.objectContaining({
+        fallback: expect.objectContaining({
+          provider: "p1",
+          id: "m1",
+          lock: true,
+        }),
+      }),
+    );
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("Fallback model set to p1/m1 (lock: true)"),
+      "info",
+    );
+  });
+
+  it("sets the fallback model when config reload returns null", async () => {
+    const configWithoutFallback: LoadedConfig = {
+      ...baseConfig,
+      raw: { global: {}, project: {} },
+    };
+
+    // First loadConfig returns config without fallback
+    // Second loadConfig returns null (simulating a read error)
+    vi.mocked(configMod.loadConfig)
+      .mockResolvedValueOnce(configWithoutFallback)
+      .mockResolvedValueOnce(null);
+
+    ctx.modelRegistry.getAvailable.mockResolvedValue([
+      { provider: "p1", id: "m1" },
+      { provider: "p2", id: "m2" },
+    ]);
+
+    ctx.ui.select
+      .mockResolvedValueOnce("Configure fallback")
+      .mockResolvedValueOnce("Set fallback model")
+      .mockResolvedValueOnce("p1/m1")
+      .mockResolvedValueOnce("Yes — acquire lock (default)")
+      .mockResolvedValueOnce("Global (global.json)")
+      .mockResolvedValueOnce("Done");
+
+    const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
+    await runWizard({}, ctx as unknown as Record<string, unknown>);
+
+    expect(configMod.saveConfigFile).toHaveBeenCalledWith(
+      "global.json",
+      expect.objectContaining({
+        fallback: expect.objectContaining({
+          provider: "p1",
+          id: "m1",
+          lock: true,
+        }),
+      }),
+    );
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("Fallback model set to p1/m1 (lock: true)"),
+      "info",
+    );
+  });
+
+  it("sets the fallback model when reloaded config has no fallback", async () => {
+    const configWithoutFallback: LoadedConfig = {
+      ...baseConfig,
+      raw: { global: {}, project: {} },
+    };
+
+    // First loadConfig returns config without fallback
+    // Second loadConfig also returns config without fallback (simulating a partial reload)
+    vi.mocked(configMod.loadConfig)
+      .mockResolvedValueOnce(configWithoutFallback)
+      .mockResolvedValueOnce(configWithoutFallback);
+
+    ctx.modelRegistry.getAvailable.mockResolvedValue([
+      { provider: "p1", id: "m1" },
+      { provider: "p2", id: "m2" },
+    ]);
+
+    ctx.ui.select
+      .mockResolvedValueOnce("Configure fallback")
+      .mockResolvedValueOnce("Set fallback model")
+      .mockResolvedValueOnce("p1/m1")
+      .mockResolvedValueOnce("Yes — acquire lock (default)")
+      .mockResolvedValueOnce("Global (global.json)")
+      .mockResolvedValueOnce("Done");
+
+    const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
+    await runWizard({}, ctx as unknown as Record<string, unknown>);
+
+    expect(configMod.saveConfigFile).toHaveBeenCalledWith(
+      "global.json",
+      expect.objectContaining({
+        fallback: expect.objectContaining({
+          provider: "p1",
+          id: "m1",
+          lock: true,
+        }),
+      }),
+    );
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("Fallback model set to p1/m1 (lock: true)"),
+      "info",
+    );
+  });
+
+  it("clears the fallback model when config reload returns null", async () => {
+    const configWithFallback: LoadedConfig = {
+      ...baseConfig,
+      fallback: { provider: "p1", id: "m1", lock: true },
+      raw: {
+        global: {},
+        project: { fallback: { provider: "p1", id: "m1", lock: true } },
+      },
+    };
+
+    // First loadConfig returns config with fallback
+    // Second loadConfig returns null (simulating a read error after clearing)
+    vi.mocked(configMod.loadConfig)
+      .mockResolvedValueOnce(configWithFallback)
+      .mockResolvedValueOnce(null);
+
+    ctx.ui.select
+      .mockResolvedValueOnce("Configure fallback")
+      .mockResolvedValueOnce("Clear fallback model")
+      .mockResolvedValueOnce("Project (project.json)")
+      .mockResolvedValueOnce("Done");
+
+    const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(configMod.saveConfigFile).toHaveBeenCalledWith(

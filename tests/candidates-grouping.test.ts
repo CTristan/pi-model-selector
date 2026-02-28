@@ -43,7 +43,7 @@ describe("Candidate Grouping", () => {
 
       // Should have 1 synthetic candidate
       expect(result).toHaveLength(1);
-      const synthetic = result[0];
+      const synthetic = result[0]!;
 
       expect(synthetic.isSynthetic).toBe(true);
       expect(synthetic.provider).toBe("provider|with|pipes");

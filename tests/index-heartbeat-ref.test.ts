@@ -42,8 +42,16 @@ describe("Model selector heartbeat reference", () => {
 
     modelSelectorExtension(pi as any);
 
-    await commands["model-select"]({}, ctx);
-    await commands["model-select"]({}, ctx);
+    const _cmd0 = commands["model-select"];
+
+    if (!_cmd0) throw new Error("Command not found: model-select");
+
+    await _cmd0({}, ctx);
+    const _cmd1 = commands["model-select"];
+
+    if (!_cmd1) throw new Error("Command not found: model-select");
+
+    await _cmd1({}, ctx);
 
     expect(runSelectorMock).toHaveBeenCalledTimes(2);
     const firstRef = runSelectorMock.mock.calls[0]?.[3];

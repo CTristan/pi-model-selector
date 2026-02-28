@@ -146,6 +146,7 @@ describe("Z.ai Credential Whitespace Handling", () => {
       ctx.ui.confirm = vi.fn(() => Promise.resolve(true));
 
       const runWizard = commands["model-select-config"];
+      if (!runWizard) throw new Error("Command not found: model-select-config");
       await runWizard({}, ctx);
 
       const selectCalls = vi.mocked(ctx.ui.select).mock.calls;
@@ -188,6 +189,7 @@ describe("Z.ai Credential Whitespace Handling", () => {
       ctx.ui.confirm = vi.fn(() => Promise.resolve(true));
 
       const runWizard = commands["model-select-config"];
+      if (!runWizard) throw new Error("Command not found: model-select-config");
       await runWizard({}, ctx);
 
       const selectCalls = vi.mocked(ctx.ui.select).mock.calls;
@@ -232,6 +234,7 @@ describe("Z.ai Credential Whitespace Handling", () => {
       ctx.ui.confirm = vi.fn(() => Promise.resolve(true));
 
       const runWizard = commands["model-select-config"];
+      if (!runWizard) throw new Error("Command not found: model-select-config");
       await runWizard({}, ctx);
 
       const selectCalls = vi.mocked(ctx.ui.select).mock.calls;
@@ -274,6 +277,7 @@ describe("Z.ai Credential Whitespace Handling", () => {
       ctx.ui.confirm = vi.fn(() => Promise.resolve(true));
 
       const runWizard = commands["model-select-config"];
+      if (!runWizard) throw new Error("Command not found: model-select-config");
       await runWizard({}, ctx);
 
       const selectCalls = vi.mocked(ctx.ui.select).mock.calls;
@@ -318,6 +322,7 @@ describe("Z.ai Credential Whitespace Handling", () => {
       ctx.ui.confirm = vi.fn(() => Promise.resolve(true));
 
       const runWizard = commands["model-select-config"];
+      if (!runWizard) throw new Error("Command not found: model-select-config");
       await runWizard({}, ctx);
 
       const selectCalls = vi.mocked(ctx.ui.select).mock.calls;
@@ -360,6 +365,7 @@ describe("Z.ai Credential Whitespace Handling", () => {
       ctx.ui.confirm = vi.fn(() => Promise.resolve(true));
 
       const runWizard = commands["model-select-config"];
+      if (!runWizard) throw new Error("Command not found: model-select-config");
       await runWizard({}, ctx);
 
       const selectCalls = vi.mocked(ctx.ui.select).mock.calls;

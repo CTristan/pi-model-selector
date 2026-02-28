@@ -24,15 +24,20 @@ export function buildCandidates(usages: UsageSnapshot[]): UsageCandidate[] {
       const usedPercent = clampPercent(window.usedPercent);
       if (!Number.isFinite(usedPercent)) continue;
       const remainingPercent = 100 - usedPercent;
-      candidates.push({
+      const candidate: UsageCandidate = {
         provider: usage.provider,
         displayName: usage.displayName,
         windowLabel: window.label,
         usedPercent,
         remainingPercent,
-        resetsAt: window.resetsAt,
-        account: usage.account,
-      });
+      };
+      if (window.resetsAt !== undefined) {
+        candidate.resetsAt = window.resetsAt;
+      }
+      if (usage.account !== undefined) {
+        candidate.account = usage.account;
+      }
+      candidates.push(candidate);
     }
   }
 
@@ -352,23 +357,31 @@ export function combineCandidates(
     if (members.length === 0) continue;
 
     // Whichever one has the least remaining availability
-    let bottleneck = members[0];
+    const firstMember = members[0];
+    if (!firstMember) continue;
+
+    let bottleneck = firstMember;
     for (const m of members) {
       if (m.remainingPercent < bottleneck.remainingPercent) {
         bottleneck = m;
       }
     }
 
-    result.push({
+    const candidate: UsageCandidate = {
       provider,
       displayName: bottleneck.displayName,
       windowLabel: groupName,
       usedPercent: bottleneck.usedPercent,
       remainingPercent: bottleneck.remainingPercent,
-      resetsAt: bottleneck.resetsAt,
-      account: account || undefined,
       isSynthetic: true,
-    });
+    };
+    if (bottleneck.resetsAt !== undefined) {
+      candidate.resetsAt = bottleneck.resetsAt;
+    }
+    if (account) {
+      candidate.account = account;
+    }
+    result.push(candidate);
   }
 
   return result;

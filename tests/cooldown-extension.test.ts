@@ -183,7 +183,6 @@ describe("Cooldown Manager - Extension Branches", () => {
         windowLabel: "Sonnet",
         usedPercent: 50,
         remainingPercent: 50,
-        account: undefined,
       };
 
       const result = cooldownManager.isOnCooldown(candidate);
@@ -199,7 +198,6 @@ describe("Cooldown Manager - Extension Branches", () => {
         windowLabel: "Sonnet",
         usedPercent: 50,
         remainingPercent: 50,
-        account: undefined,
         isSynthetic: false,
       };
 
@@ -225,7 +223,6 @@ describe("Cooldown Manager - Extension Branches", () => {
         windowLabel: "Sonnet",
         usedPercent: 50,
         remainingPercent: 50,
-        account: undefined,
       };
 
       const result = cooldownManager.isOnCooldown(candidate, now);
@@ -280,7 +277,6 @@ describe("Cooldown Manager - Extension Branches", () => {
         windowLabel: "Sonnet",
         usedPercent: 50,
         remainingPercent: 50,
-        account: undefined,
         isSynthetic: false,
       };
       const key = candidateKey(candidate);
@@ -312,7 +308,6 @@ describe("Cooldown Manager - Extension Branches", () => {
         windowLabel: "Sonnet",
         usedPercent: 50,
         remainingPercent: 50,
-        account: undefined,
       };
 
       // Should return false even though the key exists in the map (expiry <= now)

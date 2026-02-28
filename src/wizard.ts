@@ -31,6 +31,7 @@ import type {
 } from "./types.js";
 import {
   ALL_PROVIDERS,
+  mappingKey,
   notify,
   setGlobalConfig,
   writeDebugLog,
@@ -42,6 +43,26 @@ import {
   renderUsageWidget,
   updateWidgetState,
 } from "./widget.js";
+
+const RESERVE_INPUT_ERROR =
+  "Invalid reserve value. Must be an integer between 0 and 99.";
+
+function parseReserveInput(input: string): number | undefined {
+  const trimmedInput = input.trim();
+  if (trimmedInput.length === 0) return undefined;
+
+  const reserveValue = Number(trimmedInput);
+  if (
+    Number.isNaN(reserveValue) ||
+    !Number.isInteger(reserveValue) ||
+    reserveValue < 0 ||
+    reserveValue >= 100
+  ) {
+    return undefined;
+  }
+
+  return reserveValue;
+}
 
 async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
   if (!ctx.hasUI) {
@@ -154,7 +175,9 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 
       const priorityIndex = priorityLabels.indexOf(priorityChoice);
       if (priorityIndex < 0) return;
-      const selectedPriority = priorityOptions[priorityIndex].value,
+      const priorityOption = priorityOptions[priorityIndex];
+      if (!priorityOption) return;
+      const selectedPriority = priorityOption.value,
         priorityLocation = await selectWrapped(
           ctx,
           "Save priority to",
@@ -230,6 +253,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         const selectedIndex = optionLabels.indexOf(selectedLabel);
         if (selectedIndex < 0) return;
         const selectedCandidate = sortedCandidates[selectedIndex];
+        if (!selectedCandidate) return;
 
         // Ask which config file (Global / Project) the user wants to modify first
         const locationChoice = await selectWrapped(
@@ -278,6 +302,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         if (hasIgnoreInTarget) actionOptions.push("Stop ignoring");
         if (hasCombinationInTarget) actionOptions.push("Stop combining");
         if (isSynthetic) actionOptions.push("Dissolve combination");
+        if (hasModelInTarget) actionOptions.push("Change reserve");
         if (hasIgnoreInTarget || hasModelInTarget || hasCombinationInTarget)
           actionOptions.push("Remove mapping");
 
@@ -350,6 +375,122 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
             "Do you want to modify another usage bucket?",
           );
           if (!addMoreAfterDissolve) continueMapping = false;
+          continue;
+        }
+
+        if (actionChoice === "Change reserve") {
+          const currentReserve = matchedModelInTarget?.reserve ?? 0;
+          const currentReserveText =
+            currentReserve > 0 ? `${currentReserve}%` : "none (0)";
+
+          const reserveChoice = await selectWrapped(
+            ctx,
+            `Set reserve for ${matchedModelInTarget?.model?.provider}/${matchedModelInTarget?.model?.id} (current: ${currentReserveText})`,
+            ["No reserve (0)", "Set reserve"],
+          );
+          if (!reserveChoice) return;
+
+          let newReserve: number | undefined;
+          if (reserveChoice === "Set reserve") {
+            const reserveInput = await ctx.ui.input(
+              "Enter reserve percentage (0-99, e.g., 20 means always keep at least 20% available)",
+            );
+            if (!reserveInput) return;
+
+            const parsedReserve = parseReserveInput(reserveInput);
+            if (parsedReserve === undefined) {
+              notify(ctx, "error", RESERVE_INPUT_ERROR);
+              return;
+            }
+            newReserve = parsedReserve;
+          }
+
+          try {
+            const existing = Array.isArray(targetRaw.mappings)
+              ? targetRaw.mappings
+              : [];
+            const normalizedEntries = getRawMappings(targetRaw).filter(
+              (entry) => entry.model && !entry.ignore,
+            );
+            const normalizedMatch = findModelMapping(
+              selectedCandidate,
+              normalizedEntries,
+            );
+
+            let rawMappingToUpdate: Record<string, unknown> | undefined;
+
+            if (normalizedMatch) {
+              const targetKey = mappingKey(normalizedMatch);
+              for (const entry of existing) {
+                if (!entry || typeof entry !== "object") continue;
+                const normalizedEntry = getRawMappings({
+                  mappings: [entry],
+                })[0];
+                if (
+                  !normalizedEntry ||
+                  !normalizedEntry.model ||
+                  normalizedEntry.ignore
+                ) {
+                  continue;
+                }
+                if (mappingKey(normalizedEntry) === targetKey) {
+                  rawMappingToUpdate = entry as Record<string, unknown>;
+                  break;
+                }
+              }
+            }
+
+            if (
+              !normalizedMatch ||
+              !normalizedMatch.model ||
+              !rawMappingToUpdate
+            ) {
+              notify(
+                ctx,
+                "warning",
+                `No matching model mapping found in ${targetPath}. Reserve was not changed.`,
+              );
+            } else {
+              if (newReserve !== undefined && newReserve > 0) {
+                rawMappingToUpdate.reserve = newReserve;
+              } else {
+                delete rawMappingToUpdate.reserve;
+              }
+
+              await saveConfigFile(targetPath, targetRaw);
+
+              const reloaded = await loadConfig(ctx, {
+                requireMappings: false,
+              });
+              if (reloaded) {
+                config.mappings = reloaded.mappings;
+                cachedUsages = null;
+              }
+
+              const newReserveText =
+                newReserve !== undefined && newReserve > 0
+                  ? `${newReserve}%`
+                  : "none (0)";
+              notify(
+                ctx,
+                "info",
+                `Reserve updated to ${newReserveText} for ${normalizedMatch.model.provider}/${normalizedMatch.model.id}.`,
+              );
+            }
+          } catch (error: unknown) {
+            notify(
+              ctx,
+              "error",
+              `Failed to write ${targetPath}: ${String(error)}`,
+            );
+            return;
+          }
+
+          const addMoreAfterReserve = await ctx.ui.confirm(
+            "Modify another mapping?",
+            "Do you want to modify another usage bucket?",
+          );
+          if (!addMoreAfterReserve) continueMapping = false;
           continue;
         }
 
@@ -470,7 +611,9 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 
           const modelIndex = modelLabels.indexOf(modelChoice);
           if (modelIndex < 0) return;
-          selectedModel = availableModels[modelIndex];
+          const model = availableModels[modelIndex];
+          if (!model) return;
+          selectedModel = model;
 
           // Ask for reserve threshold
           const reserveChoice = await selectWrapped(
@@ -486,21 +629,12 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
             );
             if (!reserveInput) return;
 
-            const reserveValue = Number(reserveInput.trim());
-            if (
-              isNaN(reserveValue) ||
-              !Number.isInteger(reserveValue) ||
-              reserveValue < 0 ||
-              reserveValue >= 100
-            ) {
-              notify(
-                ctx,
-                "error",
-                "Invalid reserve value. Must be an integer between 0 and 99.",
-              );
+            const parsedReserve = parseReserveInput(reserveInput);
+            if (parsedReserve === undefined) {
+              notify(ctx, "error", RESERVE_INPUT_ERROR);
               return;
             }
-            selectedReserve = reserveValue;
+            selectedReserve = parsedReserve === 0 ? undefined : parsedReserve;
           }
         }
 
@@ -549,12 +683,18 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         }
 
         // Build the usage descriptor for this candidate/pattern
-        const usageDesc = {
+        const usageDesc: MappingEntry["usage"] = {
           provider: selectedCandidate.provider,
-          account: selectedCandidate.account,
-          window: pattern ? undefined : selectedCandidate.windowLabel,
-          windowPattern: pattern,
-        } as MappingEntry["usage"];
+        };
+
+        if (selectedCandidate.account !== undefined) {
+          usageDesc.account = selectedCandidate.account;
+        }
+        if (pattern) {
+          usageDesc.windowPattern = pattern;
+        } else {
+          usageDesc.window = selectedCandidate.windowLabel;
+        }
 
         let mappingEntry: MappingEntry;
         if (
@@ -587,7 +727,9 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         try {
           clearBucketMappings(targetRaw, {
             provider: selectedCandidate.provider,
-            account: selectedCandidate.account,
+            ...(selectedCandidate.account !== undefined
+              ? { account: selectedCandidate.account }
+              : {}),
             window: selectedCandidate.windowLabel,
           });
 
@@ -750,7 +892,11 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
       // Reload config to apply path resolution
       const reloaded = await loadConfig(ctx, { requireMappings: false });
       if (reloaded) {
-        config.debugLog = reloaded.debugLog;
+        if (reloaded.debugLog) {
+          config.debugLog = reloaded.debugLog;
+        } else {
+          delete config.debugLog;
+        }
         setGlobalConfig(reloaded);
       }
 
@@ -933,25 +1079,28 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         }
       }
 
+      const modelExists =
+        availableModelKeys !== null
+          ? (provider: string, id: string) =>
+              availableModelKeys.has(`${provider}\u0000${id}`)
+          : modelFinder
+            ? (provider: string, id: string) => {
+                try {
+                  return Boolean(modelFinder(provider, id));
+                } catch (error) {
+                  writeDebugLog(
+                    `Error while checking model existence for ${provider}/${id}: ${String(
+                      error,
+                    )}`,
+                  );
+                  throw error;
+                }
+              }
+            : undefined;
+
       const cleanupResult = cleanupConfigRaw(candidateRaw, {
         scope: saveToProject ? "project" : "global",
-        modelExists:
-          availableModelKeys !== null
-            ? (provider, id) => availableModelKeys.has(`${provider}\u0000${id}`)
-            : modelFinder
-              ? (provider, id) => {
-                  try {
-                    return Boolean(modelFinder(provider, id));
-                  } catch (error) {
-                    writeDebugLog(
-                      `Error while checking model existence for ${provider}/${id}: ${String(
-                        error,
-                      )}`,
-                    );
-                    throw error;
-                  }
-                }
-              : undefined,
+        ...(modelExists ? { modelExists } : {}),
       });
 
       const cleanupSummary = [...cleanupResult.summary],
@@ -1037,7 +1186,11 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         config.widget = reloaded.widget;
         config.autoRun = reloaded.autoRun;
         config.disabledProviders = reloaded.disabledProviders;
-        config.debugLog = reloaded.debugLog;
+        if (reloaded.debugLog) {
+          config.debugLog = reloaded.debugLog;
+        } else {
+          delete config.debugLog;
+        }
         config.raw = reloaded.raw;
       }
 
@@ -1095,7 +1248,11 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 
         const reloaded = await loadConfig(ctx, { requireMappings: false });
         if (reloaded) {
-          config.fallback = reloaded.fallback;
+          if (reloaded.fallback) {
+            config.fallback = reloaded.fallback;
+          } else {
+            delete config.fallback;
+          }
         }
 
         notify(ctx, "info", "Fallback model cleared.");
@@ -1116,6 +1273,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
       const modelIndex = modelLabels.indexOf(modelChoice);
       if (modelIndex < 0) return;
       const selectedModel = availableModels[modelIndex];
+      if (!selectedModel) return;
 
       const lockChoice = await selectWrapped(
         ctx,
@@ -1153,7 +1311,11 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 
       const reloaded = await loadConfig(ctx, { requireMappings: false });
       if (reloaded) {
-        config.fallback = reloaded.fallback;
+        if (reloaded.fallback) {
+          config.fallback = reloaded.fallback;
+        } else {
+          delete config.fallback;
+        }
       }
 
       notify(

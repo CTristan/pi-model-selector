@@ -245,6 +245,7 @@ describe("Model Selector Extension", () => {
 
     modelSelectorExtension(pi);
     const handler = commands["model-select"];
+    if (!handler) throw new Error("Command not found: model-select");
 
     await handler({}, ctx);
 
@@ -258,6 +259,7 @@ describe("Model Selector Extension", () => {
   it("should select best model on command", async () => {
     modelSelectorExtension(pi);
     const handler = commands["model-select"];
+    if (!handler) throw new Error("Command not found: model-select");
 
     await handler({}, ctx);
 
@@ -285,6 +287,7 @@ describe("Model Selector Extension", () => {
 
     modelSelectorExtension(pi);
     const handler = commands["model-select"];
+    if (!handler) throw new Error("Command not found: model-select");
 
     await handler({}, ctx);
 
@@ -330,6 +333,8 @@ describe("Model Selector Extension", () => {
     modelSelectorExtension(pi);
 
     const beforeAgentStart = events.before_agent_start;
+    if (!beforeAgentStart)
+      throw new Error("Hook not found: before_agent_start");
     expect(beforeAgentStart).toBeTypeOf("function");
 
     await beforeAgentStart({}, ctx);
@@ -371,6 +376,8 @@ describe("Model Selector Extension", () => {
     modelSelectorExtension(pi);
 
     const beforeAgentStart = events.before_agent_start;
+    if (!beforeAgentStart)
+      throw new Error("Hook not found: before_agent_start");
     expect(beforeAgentStart).toBeTypeOf("function");
 
     await beforeAgentStart({}, ctx);
@@ -433,6 +440,8 @@ describe("Model Selector Extension", () => {
     modelSelectorExtension(pi);
 
     const beforeAgentStart = events.before_agent_start;
+    if (!beforeAgentStart)
+      throw new Error("Hook not found: before_agent_start");
     expect(beforeAgentStart).toBeTypeOf("function");
 
     await beforeAgentStart({}, ctx);
@@ -448,7 +457,9 @@ describe("Model Selector Extension", () => {
   it("should skip model on /model-skip", async () => {
     modelSelectorExtension(pi);
     const selectHandler = commands["model-select"];
+    if (!selectHandler) throw new Error("Command not found: model-select");
     const skipHandler = commands["model-skip"];
+    if (!skipHandler) throw new Error("Command not found: model-skip");
 
     // 1. Run select to establish "last selected"
     await selectHandler({}, ctx);
@@ -480,6 +491,7 @@ describe("Model Selector Extension", () => {
   it("should handle skipping when no prior selection exists", async () => {
     modelSelectorExtension(pi);
     const skipHandler = commands["model-skip"];
+    if (!skipHandler) throw new Error("Command not found: model-skip");
 
     // Run skip without prior select
     // It should run selection first (p1), set it to cooldown, then run again (p2)
@@ -523,6 +535,7 @@ describe("Model Selector Extension", () => {
 
     modelSelectorExtension(pi);
     const selectHandler = commands["model-select"];
+    if (!selectHandler) throw new Error("Command not found: model-select");
     await selectHandler({}, ctx);
 
     const persisted = getLastPersistedCooldownState();
@@ -554,16 +567,17 @@ describe("Model Selector Extension", () => {
 
     modelSelectorExtension(pi);
     const selectHandler = commands["model-select"];
+    if (!selectHandler) throw new Error("Command not found: model-select");
 
     await selectHandler({}, ctx);
     const firstState = getLastPersistedCooldownState(),
-      firstExpiry = firstState.cooldowns["p1|acc1|*"];
+      firstExpiry = firstState.cooldowns["p1|acc1|*"]!;
 
     vi.setSystemTime(new Date("2026-02-11T17:10:00.000Z"));
     await selectHandler({}, ctx);
 
     const secondState = getLastPersistedCooldownState(),
-      secondExpiry = secondState.cooldowns["p1|acc1|*"];
+      secondExpiry = secondState.cooldowns["p1|acc1|*"]!;
 
     expect(secondExpiry).toBeGreaterThan(firstExpiry);
   });
@@ -574,6 +588,9 @@ describe("Model Selector Extension", () => {
     modelSelectorExtension(pi);
     const beforeAgentStart = events.before_agent_start,
       agentEnd = events.agent_end;
+    if (!beforeAgentStart)
+      throw new Error("Hook not found: before_agent_start");
+    if (!agentEnd) throw new Error("Hook not found: agent_end");
 
     expect(beforeAgentStart).toBeTypeOf("function");
     expect(agentEnd).toBeTypeOf("function");
@@ -609,6 +626,8 @@ describe("Model Selector Extension", () => {
 
     modelSelectorExtension(pi);
     const beforeAgentStart = events.before_agent_start;
+    if (!beforeAgentStart)
+      throw new Error("Hook not found: before_agent_start");
 
     expect(beforeAgentStart).toBeTypeOf("function");
     await expect(beforeAgentStart({}, ctx)).resolves.toBeUndefined();
@@ -664,9 +683,13 @@ describe("Model Selector Extension", () => {
 
       modelSelectorExtension(pi);
       const beforeAgentStart = events.before_agent_start;
+      if (!beforeAgentStart)
+        throw new Error("Hook not found: before_agent_start");
 
       // Toggle auto-selection disabled first
       const toggleHandler = commands["model-auto-toggle"];
+      if (!toggleHandler)
+        throw new Error("Command not found: model-auto-toggle");
       await toggleHandler({}, ctx);
 
       // Set ctx.model to p1/m1
@@ -732,9 +755,13 @@ describe("Model Selector Extension", () => {
 
       modelSelectorExtension(pi);
       const beforeAgentStart = events.before_agent_start;
+      if (!beforeAgentStart)
+        throw new Error("Hook not found: before_agent_start");
 
       // Toggle auto-selection disabled
       const toggleHandler = commands["model-auto-toggle"];
+      if (!toggleHandler)
+        throw new Error("Command not found: model-auto-toggle");
       await toggleHandler({}, ctx);
 
       // Set ctx.model to different model than active lock
@@ -760,9 +787,13 @@ describe("Model Selector Extension", () => {
     it("releases stale lock when current model lock is busy and differs", async () => {
       modelSelectorExtension(pi);
       const beforeAgentStart = events.before_agent_start;
+      if (!beforeAgentStart)
+        throw new Error("Hook not found: before_agent_start");
 
       // Toggle auto-selection disabled
       const toggleHandler = commands["model-auto-toggle"];
+      if (!toggleHandler)
+        throw new Error("Command not found: model-auto-toggle");
       await toggleHandler({}, ctx);
 
       // Acquire initial lock for p2/m2
@@ -848,9 +879,13 @@ describe("Model Selector Extension", () => {
 
       modelSelectorExtension(pi);
       const beforeAgentStart = events.before_agent_start;
+      if (!beforeAgentStart)
+        throw new Error("Hook not found: before_agent_start");
 
       // Toggle auto-selection disabled
       const toggleHandler = commands["model-auto-toggle"];
+      if (!toggleHandler)
+        throw new Error("Command not found: model-auto-toggle");
       await toggleHandler({}, ctx);
 
       // Set ctx.model to current model with busy lock
@@ -907,9 +942,13 @@ describe("Model Selector Extension", () => {
 
       modelSelectorExtension(pi);
       const beforeAgentStart = events.before_agent_start;
+      if (!beforeAgentStart)
+        throw new Error("Hook not found: before_agent_start");
 
       // Toggle auto-selection disabled
       const toggleHandler = commands["model-auto-toggle"];
+      if (!toggleHandler)
+        throw new Error("Command not found: model-auto-toggle");
       await toggleHandler({}, ctx);
 
       // Set ctx.model to different model than active lock
@@ -937,9 +976,13 @@ describe("Model Selector Extension", () => {
     it("does nothing when ctx.model is null", async () => {
       modelSelectorExtension(pi);
       const beforeAgentStart = events.before_agent_start;
+      if (!beforeAgentStart)
+        throw new Error("Hook not found: before_agent_start");
 
       // Toggle auto-selection disabled
       const toggleHandler = commands["model-auto-toggle"];
+      if (!toggleHandler)
+        throw new Error("Command not found: model-auto-toggle");
       await toggleHandler({}, ctx);
 
       // Set ctx.model to null
@@ -985,9 +1028,13 @@ describe("Model Selector Extension", () => {
 
       modelSelectorExtension(pi);
       const beforeAgentStart = events.before_agent_start;
+      if (!beforeAgentStart)
+        throw new Error("Hook not found: before_agent_start");
 
       // Toggle auto-selection disabled
       const toggleHandler = commands["model-auto-toggle"];
+      if (!toggleHandler)
+        throw new Error("Command not found: model-auto-toggle");
       await toggleHandler({}, ctx);
 
       // Set ctx.model to different model
@@ -1050,6 +1097,7 @@ describe("Model Selector Extension", () => {
     it("toggles autoSelectionDisabled flag and updates widget when disabling", async () => {
       modelSelectorExtension(pi);
       const handler = commands["model-auto-toggle"];
+      if (!handler) throw new Error("Command not found: model-auto-toggle");
 
       await handler({}, ctx);
 
@@ -1067,6 +1115,7 @@ describe("Model Selector Extension", () => {
       // First, disable auto-selection
       modelSelectorExtension(pi);
       const handler = commands["model-auto-toggle"];
+      if (!handler) throw new Error("Command not found: model-auto-toggle");
 
       await handler({}, ctx);
 
@@ -1111,6 +1160,7 @@ describe("Model Selector Extension", () => {
 
       modelSelectorExtension(pi);
       const handler = commands["model-auto-toggle"];
+      if (!handler) throw new Error("Command not found: model-auto-toggle");
 
       await handler({}, ctx);
 
@@ -1122,6 +1172,7 @@ describe("Model Selector Extension", () => {
     it("resets autoSelectionDisabled flag on session_shutdown", async () => {
       modelSelectorExtension(pi);
       const handler = commands["model-auto-toggle"];
+      if (!handler) throw new Error("Command not found: model-auto-toggle");
 
       // Disable auto-selection (flag becomes true)
       await handler({}, ctx);
@@ -1132,6 +1183,7 @@ describe("Model Selector Extension", () => {
 
       // Trigger session_shutdown - this resets the flag to false (enabled)
       const sessionShutdown = events.session_shutdown;
+      if (!sessionShutdown) throw new Error("Hook not found: session_shutdown");
       await sessionShutdown();
 
       // Now toggle again - should disable (since flag was reset to false)
@@ -1175,6 +1227,7 @@ describe("Model Selector Extension", () => {
 
       modelSelectorExtension(pi);
       const handler = commands["model-auto-toggle"];
+      if (!handler) throw new Error("Command not found: model-auto-toggle");
 
       await handler({}, ctx);
 

@@ -56,8 +56,8 @@ describe("Copilot Deduplication", () => {
       const urlStr = url as string;
       if (urlStr.includes("/user")) {
         const lastCall =
-          vi.mocked(fetch).mock.calls[vi.mocked(fetch).mock.calls.length - 1];
-        const init = lastCall[1] as RequestInit;
+          vi.mocked(fetch).mock.calls[vi.mocked(fetch).mock.calls.length - 1]!;
+        const init = lastCall[1]! as RequestInit;
         const headers = (init.headers || {}) as Record<string, string>;
         const auth = headers.Authorization;
 
@@ -111,8 +111,8 @@ describe("Copilot Deduplication", () => {
       const urlStr = url as string;
       if (urlStr.includes("/user")) {
         const lastCall =
-          vi.mocked(fetch).mock.calls[vi.mocked(fetch).mock.calls.length - 1];
-        const init = lastCall[1] as RequestInit;
+          vi.mocked(fetch).mock.calls[vi.mocked(fetch).mock.calls.length - 1]!;
+        const init = lastCall[1]! as RequestInit;
         const headers = (init.headers || {}) as Record<string, string>;
         const auth = headers.Authorization;
 

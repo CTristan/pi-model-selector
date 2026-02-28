@@ -630,7 +630,6 @@ describe("Selector Branch Coverage", () => {
   it("returns error when exhausted and no fallback is configured", async () => {
     vi.mocked(configMod.loadConfig).mockResolvedValue({
       ...baseConfig,
-      fallback: undefined,
     });
     vi.mocked(usageFetchers.fetchAllUsages).mockResolvedValue([
       {
@@ -780,7 +779,6 @@ describe("Selector Branch Coverage", () => {
   it("returns error when all locks are busy without fallback", async () => {
     vi.mocked(configMod.loadConfig).mockResolvedValue({
       ...baseConfig,
-      fallback: undefined,
     });
     const cooldownManager = createCooldownManager();
     const ctx = createContext();

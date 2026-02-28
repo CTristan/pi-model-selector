@@ -305,5 +305,49 @@ describe("Selector Heartbeat and Error Handling", () => {
       // Now we should have a second call
       expect(mockModelLockCoordinator.refresh).toHaveBeenCalledTimes(2);
     });
+
+    it("should clear existing heartbeat timer when starting new heartbeat", async () => {
+      vi.mocked(mockModelLockCoordinator.acquire).mockResolvedValue({
+        acquired: true,
+      });
+      vi.mocked(mockModelLockCoordinator.refresh).mockResolvedValue(true);
+
+      // First selector call
+      await runSelector(
+        ctx,
+        mockCooldownManager,
+        mockModelLockCoordinator,
+        lockHeartbeatTimer,
+        activeModelLockKey,
+        false,
+        "command",
+        { acquireModelLock: true, waitForModelLock: false },
+        pi,
+      );
+
+      const firstTimer = lockHeartbeatTimer.current;
+      expect(firstTimer).toBeTruthy();
+
+      // Second selector call before first heartbeat completes
+      await runSelector(
+        ctx,
+        mockCooldownManager,
+        mockModelLockCoordinator,
+        lockHeartbeatTimer,
+        activeModelLockKey,
+        false,
+        "command",
+        { acquireModelLock: true, waitForModelLock: false },
+        pi,
+      );
+
+      const secondTimer = lockHeartbeatTimer.current;
+      expect(secondTimer).toBeTruthy();
+      expect(secondTimer).not.toBe(firstTimer); // Timer should have been replaced
+
+      // Cleanup
+      if (firstTimer) clearInterval(firstTimer);
+      if (secondTimer) clearInterval(secondTimer);
+    });
   });
 });

@@ -148,6 +148,7 @@ describe("Anthropic credential detection (PR fix)", () => {
     });
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(getApiKeyMock).toHaveBeenCalledWith("anthropic");
@@ -183,6 +184,7 @@ describe("Anthropic credential detection (PR fix)", () => {
     });
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(getMock).toHaveBeenCalledWith("anthropic");
@@ -218,6 +220,7 @@ describe("Anthropic credential detection (PR fix)", () => {
     });
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(getMock).toHaveBeenCalledWith("anthropic");
@@ -253,6 +256,7 @@ describe("Anthropic credential detection (PR fix)", () => {
     });
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
   });
 
@@ -283,6 +287,7 @@ describe("Anthropic credential detection (PR fix)", () => {
     });
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
   });
 
@@ -315,6 +320,7 @@ describe("Anthropic credential detection (PR fix)", () => {
     });
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
   });
 
@@ -346,6 +352,7 @@ describe("Anthropic credential detection (PR fix)", () => {
     });
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
   });
 
@@ -376,6 +383,7 @@ describe("Anthropic credential detection (PR fix)", () => {
     });
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
   });
 });

@@ -33,7 +33,7 @@ vi.mock("../src/usage-fetchers.js");
 vi.mock("../src/config.js");
 vi.mock("../src/widget.js");
 
-describe("mapping wizard removal", () => {
+describe("mapping wizard actions", () => {
   type CommandHandler = (
     args: Record<string, unknown>,
     ctx: Record<string, unknown>,
@@ -107,6 +107,35 @@ describe("mapping wizard removal", () => {
     ctx.ui.input = vi.fn(() => Promise.resolve(undefined));
   };
 
+  const mockReserveChangeFlow = (reserveInput: string) => {
+    let menuVisits = 0;
+    ctx.ui.select = vi.fn((message: string, options: string[]) => {
+      if (message === "Model selector configuration") {
+        menuVisits += 1;
+        return Promise.resolve(menuVisits === 1 ? "Edit mappings" : "Done");
+      }
+      if (message === "Select a usage bucket to map") {
+        expect(options).toHaveLength(1);
+        return Promise.resolve(options[0]);
+      }
+      if (message === "Modify mapping in") {
+        return Promise.resolve("Project (project.json)");
+      }
+      if (message.startsWith("Select action for")) {
+        expect(options).toContain("Change reserve");
+        return Promise.resolve("Change reserve");
+      }
+      if (message.startsWith("Set reserve for")) {
+        expect(options).toEqual(["No reserve (0)", "Set reserve"]);
+        return Promise.resolve("Set reserve");
+      }
+      return Promise.resolve(undefined);
+    });
+
+    ctx.ui.confirm = vi.fn(() => Promise.resolve(false));
+    ctx.ui.input = vi.fn(() => Promise.resolve(reserveInput));
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
     commands = {};
@@ -177,6 +206,7 @@ describe("mapping wizard removal", () => {
     mockWizardSelectionFlow("Stop ignoring");
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(configMod.removeMapping).toHaveBeenCalledTimes(1);
@@ -234,6 +264,7 @@ describe("mapping wizard removal", () => {
     mockWizardSelectionFlow("Remove mapping");
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(configMod.removeMapping).toHaveBeenCalledTimes(1);
@@ -251,5 +282,265 @@ describe("mapping wizard removal", () => {
       initialConfig.raw.project,
     );
     expect(configMod.loadConfig).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    {
+      name: "pattern model",
+      mapping: {
+        usage: { provider: "p1", windowPattern: "^w1$" },
+        model: { provider: "p1", id: "m1" },
+      },
+    },
+    {
+      name: "catch-all model",
+      mapping: {
+        usage: { provider: "p1" },
+        model: { provider: "p1", id: "m1" },
+      },
+    },
+  ])("updates reserve for matched $name entry", async ({ mapping }) => {
+    const initialConfig = baseConfigFor(mapping),
+      updatedMapping: MappingEntry = {
+        ...mapping,
+        reserve: 25,
+      },
+      reloadedConfig: LoadedConfig = {
+        ...initialConfig,
+        mappings: [updatedMapping],
+        raw: { global: {}, project: { mappings: [updatedMapping] } },
+      };
+
+    vi.mocked(configMod.loadConfig)
+      .mockResolvedValueOnce(initialConfig)
+      .mockResolvedValueOnce(reloadedConfig);
+
+    mockReserveChangeFlow("25");
+
+    const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
+    await runWizard({}, ctx as unknown as Record<string, unknown>);
+
+    const projectMappings = (initialConfig.raw.project.mappings ??
+      []) as Array<MappingEntry>;
+    expect(projectMappings[0]!.reserve).toBe(25);
+    expect(configMod.saveConfigFile).toHaveBeenCalledWith(
+      "project.json",
+      initialConfig.raw.project,
+    );
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("Reserve updated to 25%"),
+      "info",
+    );
+  });
+
+  it("updates reserve when raw mapping needs normalization", async () => {
+    const normalizedMapping: MappingEntry = {
+      usage: { provider: "p1" },
+      model: { provider: "p1", id: "m1" },
+    };
+    const rawProjectMapping: Record<string, unknown> = {
+      usage: { provider: "p1", account: null },
+      model: { provider: "p1", id: "m1" },
+    };
+
+    const initialConfig: LoadedConfig = {
+      ...baseConfigFor(normalizedMapping),
+      raw: {
+        global: {},
+        project: { mappings: [rawProjectMapping] },
+      },
+    };
+    const reloadedConfig: LoadedConfig = {
+      ...initialConfig,
+      mappings: [{ ...normalizedMapping, reserve: 30 }],
+      raw: {
+        global: {},
+        project: {
+          mappings: [{ ...normalizedMapping, reserve: 30 }],
+        },
+      },
+    };
+
+    vi.mocked(configMod.loadConfig)
+      .mockResolvedValueOnce(initialConfig)
+      .mockResolvedValueOnce(reloadedConfig);
+
+    vi.mocked(configMod.getRawMappings).mockImplementation(
+      (raw: Record<string, unknown>): MappingEntry[] => {
+        const mappings = raw.mappings;
+        if (!Array.isArray(mappings)) return [];
+
+        const normalized: MappingEntry[] = [];
+        for (const entry of mappings) {
+          if (!entry || typeof entry !== "object") continue;
+          const typed = entry as {
+            usage?: {
+              provider?: unknown;
+              account?: unknown;
+              window?: unknown;
+              windowPattern?: unknown;
+            };
+            model?: { provider?: unknown; id?: unknown };
+            ignore?: unknown;
+          };
+          if (typeof typed.usage?.provider !== "string") continue;
+          if (
+            typeof typed.model?.provider !== "string" ||
+            typeof typed.model?.id !== "string"
+          ) {
+            continue;
+          }
+
+          const usage: MappingEntry["usage"] = {
+            provider: typed.usage.provider,
+          };
+          if (typeof typed.usage.account === "string") {
+            usage.account = typed.usage.account;
+          }
+          if (typeof typed.usage.window === "string") {
+            usage.window = typed.usage.window;
+          }
+          if (typeof typed.usage.windowPattern === "string") {
+            usage.windowPattern = typed.usage.windowPattern;
+          }
+
+          normalized.push({
+            usage,
+            model: {
+              provider: typed.model.provider,
+              id: typed.model.id,
+            },
+            ignore: typed.ignore === true,
+          });
+        }
+
+        return normalized;
+      },
+    );
+
+    mockReserveChangeFlow("30");
+
+    const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
+    await runWizard({}, ctx as unknown as Record<string, unknown>);
+
+    const projectMappings = (initialConfig.raw.project.mappings ?? []) as Array<
+      Record<string, unknown>
+    >;
+    expect(projectMappings[0]!.reserve).toBe(30);
+    expect(configMod.saveConfigFile).toHaveBeenCalledWith(
+      "project.json",
+      initialConfig.raw.project,
+    );
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("Reserve updated to 30%"),
+      "info",
+    );
+  });
+
+  it("treats reserve 0 as no reserve when mapping a model", async () => {
+    const initialConfig: LoadedConfig = {
+        mappings: [],
+        priority: ["remainingPercent"],
+        widget: { enabled: true, placement: "belowEditor", showCount: 3 },
+        autoRun: false,
+        disabledProviders: [],
+        sources: { globalPath: "global.json", projectPath: "project.json" },
+        raw: { global: {}, project: {} },
+      },
+      reloadedConfig: LoadedConfig = {
+        ...initialConfig,
+        mappings: [
+          {
+            usage: { provider: "p1", account: "acc1", window: "w1" },
+            model: { provider: "p1", id: "m1" },
+          },
+        ],
+        raw: {
+          global: {},
+          project: {
+            mappings: [
+              {
+                usage: { provider: "p1", account: "acc1", window: "w1" },
+                model: { provider: "p1", id: "m1" },
+              },
+            ],
+          },
+        },
+      };
+
+    vi.mocked(configMod.loadConfig)
+      .mockResolvedValueOnce(initialConfig)
+      .mockResolvedValueOnce(reloadedConfig);
+
+    let menuVisits = 0;
+    ctx.ui.select = vi.fn((message: string, options: string[]) => {
+      if (message === "Model selector configuration") {
+        menuVisits += 1;
+        return Promise.resolve(menuVisits === 1 ? "Edit mappings" : "Done");
+      }
+      if (message === "Select a usage bucket to map") {
+        expect(options).toHaveLength(1);
+        return Promise.resolve(options[0]);
+      }
+      if (message === "Modify mapping in") {
+        return Promise.resolve("Project (project.json)");
+      }
+      if (message.startsWith("Select action for")) {
+        return Promise.resolve("Map to model");
+      }
+      if (message.startsWith("Select model for")) {
+        return Promise.resolve("p1/m1");
+      }
+      if (message.startsWith("Set a minimum reserve to preserve?")) {
+        return Promise.resolve("Set reserve");
+      }
+      return Promise.resolve(undefined);
+    });
+
+    ctx.ui.confirm = vi.fn(() => Promise.resolve(false));
+    ctx.ui.input = vi.fn(() => Promise.resolve("0"));
+
+    const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
+    await runWizard({}, ctx as unknown as Record<string, unknown>);
+
+    expect(configMod.upsertMapping).toHaveBeenCalledTimes(1);
+    const [, mapping] = vi.mocked(configMod.upsertMapping).mock.calls[0] as [
+      Record<string, unknown>,
+      MappingEntry,
+    ];
+
+    expect(mapping).toEqual({
+      usage: { provider: "p1", account: "acc1", window: "w1" },
+      model: { provider: "p1", id: "m1" },
+    });
+    expect(mapping).not.toHaveProperty("reserve");
+  });
+
+  it("rejects whitespace-only reserve input", async () => {
+    const mapping: MappingEntry = {
+        usage: { provider: "p1", window: "w1" },
+        model: { provider: "p1", id: "m1" },
+        reserve: 40,
+      },
+      initialConfig = baseConfigFor(mapping);
+
+    vi.mocked(configMod.loadConfig).mockResolvedValueOnce(initialConfig);
+    mockReserveChangeFlow("   ");
+
+    const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
+    await runWizard({}, ctx as unknown as Record<string, unknown>);
+
+    const projectMappings = (initialConfig.raw.project.mappings ??
+      []) as Array<MappingEntry>;
+    expect(projectMappings[0]!.reserve).toBe(40);
+    expect(configMod.saveConfigFile).not.toHaveBeenCalled();
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("Invalid reserve value"),
+      "error",
+    );
   });
 });

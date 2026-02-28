@@ -63,15 +63,24 @@ export async function fetchGeminiUsage(
     ) => {
       if (projectId) discoveredProjectIds.add(projectId);
       if (token || refreshToken || projectId) {
-        discoveredCredentials.push({
-          token,
-          refreshToken,
-          projectId,
-          clientId,
-          clientSecret,
-          expiresAt,
-          source,
-        });
+        const fragment: {
+          token?: string;
+          refreshToken?: string;
+          projectId?: string;
+          clientId?: string;
+          clientSecret?: string;
+          expiresAt?: number;
+          source: string;
+        } = { source };
+
+        if (token !== undefined) fragment.token = token;
+        if (refreshToken !== undefined) fragment.refreshToken = refreshToken;
+        if (projectId !== undefined) fragment.projectId = projectId;
+        if (clientId !== undefined) fragment.clientId = clientId;
+        if (clientSecret !== undefined) fragment.clientSecret = clientSecret;
+        if (expiresAt !== undefined) fragment.expiresAt = expiresAt;
+
+        discoveredCredentials.push(fragment);
         writeDebugLog(`fetchGeminiUsage: discovered fragment from ${source}`);
       }
     };
@@ -163,15 +172,31 @@ export async function fetchGeminiUsage(
     for (const cred of discoveredCredentials) {
       const key = `${cred.token || ""}|${cred.refreshToken || ""}|${cred.clientId || ""}|${cred.clientSecret || ""}`;
       if (!groupedAuth.has(key)) {
-        groupedAuth.set(key, {
-          token: cred.token,
-          refreshToken: cred.refreshToken,
-          clientId: cred.clientId,
-          clientSecret: cred.clientSecret,
-          expiresAt: cred.expiresAt,
+        const initialGroup: {
+          token?: string;
+          refreshToken?: string;
+          clientId?: string;
+          clientSecret?: string;
+          expiresAt?: number;
+          projectIds: Set<string>;
+          sources: Set<string>;
+        } = {
           projectIds: new Set(),
           sources: new Set(),
-        });
+        };
+
+        if (cred.token !== undefined) initialGroup.token = cred.token;
+        if (cred.refreshToken !== undefined) {
+          initialGroup.refreshToken = cred.refreshToken;
+        }
+        if (cred.clientId !== undefined) initialGroup.clientId = cred.clientId;
+        if (cred.clientSecret !== undefined) {
+          initialGroup.clientSecret = cred.clientSecret;
+        }
+        if (cred.expiresAt !== undefined)
+          initialGroup.expiresAt = cred.expiresAt;
+
+        groupedAuth.set(key, initialGroup);
       }
       const group = groupedAuth.get(key);
       if (!group) continue;
@@ -208,15 +233,26 @@ export async function fetchGeminiUsage(
             ...Array.from(group.sources),
           ]);
 
-          configs.push({
+          const configForProject: GeminiTokenInfo = {
             projectId: pid,
-            token: group.token,
-            refreshToken: group.refreshToken,
-            clientId: group.clientId,
-            clientSecret: group.clientSecret,
-            expiresAt: group.expiresAt,
             sources: Array.from(combinedSources),
-          });
+          };
+
+          if (group.token !== undefined) configForProject.token = group.token;
+          if (group.refreshToken !== undefined) {
+            configForProject.refreshToken = group.refreshToken;
+          }
+          if (group.clientId !== undefined) {
+            configForProject.clientId = group.clientId;
+          }
+          if (group.clientSecret !== undefined) {
+            configForProject.clientSecret = group.clientSecret;
+          }
+          if (group.expiresAt !== undefined) {
+            configForProject.expiresAt = group.expiresAt;
+          }
+
+          configs.push(configForProject);
         }
       }
     }
@@ -234,14 +270,25 @@ export async function fetchGeminiUsage(
       );
 
       if (!alreadyUsed) {
-        configs.push({
-          token: group.token,
-          refreshToken: group.refreshToken,
-          clientId: group.clientId,
-          clientSecret: group.clientSecret,
-          expiresAt: group.expiresAt,
+        const configWithoutProject: GeminiTokenInfo = {
           sources: Array.from(group.sources),
-        });
+        };
+
+        if (group.token !== undefined) configWithoutProject.token = group.token;
+        if (group.refreshToken !== undefined) {
+          configWithoutProject.refreshToken = group.refreshToken;
+        }
+        if (group.clientId !== undefined) {
+          configWithoutProject.clientId = group.clientId;
+        }
+        if (group.clientSecret !== undefined) {
+          configWithoutProject.clientSecret = group.clientSecret;
+        }
+        if (group.expiresAt !== undefined) {
+          configWithoutProject.expiresAt = group.expiresAt;
+        }
+
+        configs.push(configWithoutProject);
       }
     }
 
@@ -392,7 +439,8 @@ export async function fetchGeminiUsage(
 
                 if (!family) family = "Other";
 
-                if (families[family] === undefined || frac < families[family]) {
+                const existingFamily = families[family];
+                if (existingFamily === undefined || frac < existingFamily) {
                   families[family] = frac;
                 }
               }

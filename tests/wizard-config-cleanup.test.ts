@@ -169,6 +169,7 @@ describe("mapping wizard config cleanup", () => {
     ctx.ui.confirm = vi.fn(() => Promise.resolve(true));
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(configMod.cleanupConfigRaw).toHaveBeenCalledWith(
@@ -240,6 +241,7 @@ describe("mapping wizard config cleanup", () => {
     ctx.ui.confirm = vi.fn(() => Promise.resolve(true));
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(configMod.saveConfigFile).toHaveBeenCalledWith(
@@ -291,6 +293,7 @@ describe("mapping wizard config cleanup", () => {
     ctx.ui.confirm = vi.fn(() => Promise.resolve(true));
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(configMod.saveConfigFile).not.toHaveBeenCalled();
@@ -328,6 +331,7 @@ describe("mapping wizard config cleanup", () => {
     ctx.ui.confirm = vi.fn(() => Promise.resolve(false));
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(configMod.saveConfigFile).not.toHaveBeenCalled();

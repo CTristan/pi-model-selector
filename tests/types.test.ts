@@ -64,8 +64,8 @@ describe("Types / Utilities", () => {
     writeDebugLog("Test message");
     // mkdir called with /mock/dir
     const mkdirCalls = vi.mocked(fs.mkdir).mock.calls;
-    const lastMkdirCall = mkdirCalls[mkdirCalls.length - 1];
-    expect(lastMkdirCall[0]).toBe("/mock/dir");
+    const lastMkdirCall = mkdirCalls[mkdirCalls.length - 1]!;
+    expect(lastMkdirCall[0]!).toBe("/mock/dir");
 
     // Trigger the callback
     const mkdirCb = lastMkdirCall[lastMkdirCall.length - 1] as (
@@ -75,8 +75,8 @@ describe("Types / Utilities", () => {
 
     expect(fs.appendFile).toHaveBeenCalled();
     const appendCalls = vi.mocked(fs.appendFile).mock.calls;
-    const lastAppendCall = appendCalls[appendCalls.length - 1];
-    const appendCb = lastAppendCall[lastAppendCall.length - 1] as (
+    const lastAppendCall = appendCalls[appendCalls.length - 1]!;
+    const appendCb = lastAppendCall[lastAppendCall.length - 1]! as (
       ...args: unknown[]
     ) => unknown;
 
@@ -93,8 +93,8 @@ describe("Types / Utilities", () => {
 
     writeDebugLog("Error test");
     const mkdirCalls = vi.mocked(fs.mkdir).mock.calls;
-    const lastMkdirCall = mkdirCalls[mkdirCalls.length - 1];
-    const mkdirCb = lastMkdirCall[lastMkdirCall.length - 1] as (
+    const lastMkdirCall = mkdirCalls[mkdirCalls.length - 1]!;
+    const mkdirCb = lastMkdirCall[lastMkdirCall.length - 1]! as (
       ...args: unknown[]
     ) => unknown;
 

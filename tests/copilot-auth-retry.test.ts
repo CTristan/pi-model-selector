@@ -76,9 +76,9 @@ describe("Copilot 401 Error Regression", () => {
     // If the fix is NOT implemented, it will fail to exchange and return 401.
     // We want it to succeed.
     expect(results).toHaveLength(1);
-    expect(results[0].error).toBeUndefined();
-    expect(results[0].account).toBe("test-user");
-    expect(results[0].windows[0].usedPercent).toBe(20);
+    expect(results[0]!.error).toBeUndefined();
+    expect(results[0]!.account).toBe("test-user");
+    expect(results[0]!.windows[0]!.usedPercent).toBe(20);
   });
 
   it("should suppress 401 errors from invalid tokens if at least one token succeeds", async () => {
@@ -131,8 +131,8 @@ describe("Copilot 401 Error Regression", () => {
     // Should contain ONLY the success from valid token
     // The invalid token error is suppressed because one account succeeded and the error is anonymous.
     expect(results).toHaveLength(1);
-    expect(results[0].account).toBe("valid-user");
-    expect(results[0].error).toBeUndefined();
+    expect(results[0]!.account).toBe("valid-user");
+    expect(results[0]!.error).toBeUndefined();
   });
 
   it("should suppress stale auth.json token errors when gh-cli succeeds", async () => {
@@ -180,7 +180,7 @@ describe("Copilot 401 Error Regression", () => {
     );
 
     expect(results).toHaveLength(1);
-    expect(results[0].account).toBe("valid-user");
-    expect(results[0].error).toBeUndefined();
+    expect(results[0]!.account).toBe("valid-user");
+    expect(results[0]!.error).toBeUndefined();
   });
 });

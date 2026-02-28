@@ -212,12 +212,13 @@ describe("429 cooldown and ignored provider behavior", () => {
     ]);
 
     const selectHandler = commands["model-select"];
+    if (!selectHandler) throw new Error("Command not found: model-select");
     await selectHandler({}, ctx as unknown as Record<string, unknown>);
 
     // No 429 notification should be shown for ignored provider
     const notifications = vi.mocked(ctx.ui.notify).mock.calls;
     const fourTwoNineNotifications = notifications.filter(
-      (call) => call[0].includes("429") || call[0].includes("Rate limit"),
+      (call) => call[0]!.includes("429") || call[0]!.includes("Rate limit"),
     );
 
     expect(fourTwoNineNotifications).toHaveLength(0);
@@ -249,18 +250,19 @@ describe("429 cooldown and ignored provider behavior", () => {
     ]);
 
     const selectHandler = commands["model-select"];
+    if (!selectHandler) throw new Error("Command not found: model-select");
     await selectHandler({}, ctx as unknown as Record<string, unknown>);
 
     // 429 notification should be shown for non-ignored provider
     const notifications = vi.mocked(ctx.ui.notify).mock.calls;
     const fourTwoNineNotifications = notifications.filter(
-      (call) => call[0].includes("429") || call[0].includes("Rate limit"),
+      (call) => call[0]!.includes("429") || call[0]!.includes("Rate limit"),
     );
 
     expect(fourTwoNineNotifications.length).toBeGreaterThan(0);
-    expect(fourTwoNineNotifications[0][0]).toContain("Rate limit (429)");
-    expect(fourTwoNineNotifications[0][0]).toContain("Provider 1");
-    expect(fourTwoNineNotifications[0][1]).toBe("warning");
+    expect(fourTwoNineNotifications[0]![0]!).toContain("Rate limit (429)");
+    expect(fourTwoNineNotifications[0]![0]!).toContain("Provider 1");
+    expect(fourTwoNineNotifications[0]![1]!).toBe("warning");
 
     // Cooldown should be set for non-ignored provider
     const cooldownKey = getCooldownKey("p1", "acc1");
@@ -305,6 +307,7 @@ describe("429 cooldown and ignored provider behavior", () => {
     ]);
 
     const selectHandler = commands["model-select"];
+    if (!selectHandler) throw new Error("Command not found: model-select");
     await selectHandler({}, ctx as unknown as Record<string, unknown>);
 
     // Check cooldown state
@@ -327,11 +330,11 @@ describe("429 cooldown and ignored provider behavior", () => {
     // Only p2 should have a 429 notification
     const notifications = vi.mocked(ctx.ui.notify).mock.calls;
     const fourTwoNineNotifications = notifications.filter(
-      (call) => call[0].includes("429") || call[0].includes("Rate limit"),
+      (call) => call[0]!.includes("429") || call[0]!.includes("Rate limit"),
     );
 
     expect(fourTwoNineNotifications.length).toBe(1);
-    expect(fourTwoNineNotifications[0][0]).toContain("Provider 2");
+    expect(fourTwoNineNotifications[0]![0]!).toContain("Provider 2");
   });
 
   it("skips error notifications for ignored providers (non-429 errors)", async () => {
@@ -357,6 +360,7 @@ describe("429 cooldown and ignored provider behavior", () => {
     ]);
 
     const selectHandler = commands["model-select"];
+    if (!selectHandler) throw new Error("Command not found: model-select");
     await selectHandler({}, ctx as unknown as Record<string, unknown>);
 
     const notifications = vi.mocked(ctx.ui.notify).mock.calls;
@@ -366,15 +370,15 @@ describe("429 cooldown and ignored provider behavior", () => {
 
     // p1 is ignored, should NOT have error notification
     const p1ErrorNotification = errorNotifications.filter((call) =>
-      call[0].includes("Provider 1"),
+      call[0]!.includes("Provider 1"),
     );
     expect(p1ErrorNotification).toHaveLength(0);
 
     // p2 is NOT ignored, SHOULD have error notification
     const p2ErrorNotification = errorNotifications.filter((call) =>
-      call[0].includes("Provider 2"),
+      call[0]!.includes("Provider 2"),
     );
     expect(p2ErrorNotification).toHaveLength(1);
-    expect(p2ErrorNotification[0][0]).toContain("Network error");
+    expect(p2ErrorNotification[0]![0]!).toContain("Network error");
   });
 });

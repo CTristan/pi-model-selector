@@ -157,6 +157,324 @@ expires in 3 days
     const bonusWindows = result.windows.filter((w) => /bonus/i.test(w.label));
 
     expect(bonusWindows).toHaveLength(1);
-    expect(bonusWindows[0].resetDescription).toBe("3d left");
+    expect(bonusWindows[0]!.resetDescription).toBe("3d left");
+  });
+
+  it("should merge reset info from later duplicate with same label", async () => {
+    vi.mocked(child_process.exec).mockImplementation(((
+      cmd: string,
+      options: any,
+      cb: any,
+    ) => {
+      if (typeof options === "function") cb = options;
+      if (cmd.includes("which") || cmd.includes("where"))
+        cb(null, "/bin/kiro-cli", "");
+      else if (cmd.includes("whoami")) cb(null, "user", "");
+      else if (cmd.includes("/usage")) {
+        cb(
+          null,
+          `
+Model A Quota: 50%
+Model A Quota: 50%
+resets on 02/10
+`,
+          "",
+        );
+      } else {
+        cb(null, "", "");
+      }
+    }) as any);
+
+    const result = await fetchKiroUsage();
+    const modelA = result.windows.find((w) => w.label === "Model A Quota");
+
+    expect(modelA).toBeDefined();
+    expect(modelA?.usedPercent).toBe(50);
+    expect(modelA?.resetsAt?.getMonth()).toBe(1); // Feb
+    expect(modelA?.resetsAt?.getDate()).toBe(10);
+  });
+
+  it("should merge reset info from later duplicate when first has higher usage", async () => {
+    vi.mocked(child_process.exec).mockImplementation(((
+      cmd: string,
+      options: any,
+      cb: any,
+    ) => {
+      if (typeof options === "function") cb = options;
+      if (cmd.includes("which") || cmd.includes("where"))
+        cb(null, "/bin/kiro-cli", "");
+      else if (cmd.includes("whoami")) cb(null, "user", "");
+      else if (cmd.includes("/usage")) {
+        cb(
+          null,
+          `
+Model B Usage: 75%
+Model B Usage: 50%
+resets on 03/10
+`,
+          "",
+        );
+      } else {
+        cb(null, "", "");
+      }
+    }) as any);
+
+    const result = await fetchKiroUsage();
+    const modelB = result.windows.find((w) => w.label === "Model B Usage");
+
+    expect(modelB).toBeDefined();
+    // First window with 75% should be kept (higher usage)
+    expect(modelB?.usedPercent).toBe(75);
+    // But reset info from second window should be merged
+    expect(modelB?.resetsAt?.getMonth()).toBe(2); // Mar
+    expect(modelB?.resetsAt?.getDate()).toBe(10);
+  });
+
+  it("should handle invalid date strings and return undefined for reset date", async () => {
+    vi.mocked(child_process.exec).mockImplementation(((
+      cmd: string,
+      options: any,
+      cb: any,
+    ) => {
+      if (typeof options === "function") cb = options;
+      if (cmd.includes("which") || cmd.includes("where"))
+        cb(null, "/bin/kiro-cli", "");
+      else if (cmd.includes("whoami")) cb(null, "user", "");
+      else if (cmd.includes("/usage")) {
+        cb(
+          null,
+          `
+Model A Quota: 50%
+resets on invalid-date
+`,
+          "",
+        );
+      } else {
+        cb(null, "", "");
+      }
+    }) as any);
+
+    const result = await fetchKiroUsage();
+    const modelA = result.windows.find((w) => w.label === "Model A Quota");
+
+    expect(modelA).toBeDefined();
+    expect(modelA?.usedPercent).toBe(50);
+    expect(modelA?.resetsAt).toBeUndefined();
+  });
+
+  it("should handle empty or whitespace-only output", async () => {
+    vi.mocked(child_process.exec).mockImplementation(((
+      cmd: string,
+      options: any,
+      cb: any,
+    ) => {
+      if (typeof options === "function") cb = options;
+      if (cmd.includes("which") || cmd.includes("where"))
+        cb(null, "/bin/kiro-cli", "");
+      else if (cmd.includes("whoami")) cb(null, "user", "");
+      else if (cmd.includes("/usage")) {
+        cb(null, "   \n\n  ", "");
+      } else {
+        cb(null, "", "");
+      }
+    }) as any);
+
+    const result = await fetchKiroUsage();
+
+    expect(result.windows).toHaveLength(0);
+  });
+
+  it("should handle percentages with no reset info", async () => {
+    vi.mocked(child_process.exec).mockImplementation(((
+      cmd: string,
+      options: any,
+      cb: any,
+    ) => {
+      if (typeof options === "function") cb = options;
+      if (cmd.includes("which") || cmd.includes("where"))
+        cb(null, "/bin/kiro-cli", "");
+      else if (cmd.includes("whoami")) cb(null, "user", "");
+      else if (cmd.includes("/usage")) {
+        cb(null, "Model Usage: 60%\nOther Quota: 30%", "");
+      } else {
+        cb(null, "", "");
+      }
+    }) as any);
+
+    const result = await fetchKiroUsage();
+
+    expect(result.windows).toHaveLength(2);
+    expect(result.windows[0]!.label).toBe("Model Usage");
+    expect(result.windows[0]!.usedPercent).toBe(60);
+    expect(result.windows[0]!.resetsAt).toBeUndefined();
+    expect(result.windows[1]!.label).toBe("Other Quota");
+    expect(result.windows[1]!.usedPercent).toBe(30);
+    expect(result.windows[1]!.resetsAt).toBeUndefined();
+  });
+
+  it("should assign expiry to last window when no preceding quota on line", async () => {
+    vi.mocked(child_process.exec).mockImplementation(((
+      cmd: string,
+      options: any,
+      cb: any,
+    ) => {
+      if (typeof options === "function") cb = options;
+      if (cmd.includes("which") || cmd.includes("where"))
+        cb(null, "/bin/kiro-cli", "");
+      else if (cmd.includes("whoami")) cb(null, "user", "");
+      else if (cmd.includes("/usage")) {
+        cb(
+          null,
+          `
+Model Usage: 60%
+expires in 5 days
+`,
+          "",
+        );
+      } else {
+        cb(null, "", "");
+      }
+    }) as any);
+
+    const result = await fetchKiroUsage();
+    const model = result.windows.find((w) => w.label === "Model Usage");
+
+    expect(model).toBeDefined();
+    expect(model?.resetDescription).toBe("5d left");
+  });
+
+  it("should handle whoami error with kiro-cli available", async () => {
+    vi.mocked(child_process.exec).mockImplementation(((
+      cmd: string,
+      options: any,
+      cb: any,
+    ) => {
+      if (typeof options === "function") cb = options;
+      if (cmd.includes("which") || cmd.includes("where"))
+        cb(null, "/bin/kiro-cli", "");
+      else if (cmd.includes("whoami")) {
+        cb(new Error("Not logged in"), "", "");
+      } else {
+        cb(null, "", "");
+      }
+    }) as any);
+
+    const result = await fetchKiroUsage();
+
+    expect(result.provider).toBe("kiro");
+    expect(result.error).toBe("Not logged in");
+    expect(result.windows).toHaveLength(0);
+  });
+
+  it("should handle general fetch errors", async () => {
+    vi.mocked(child_process.exec).mockImplementation(((
+      cmd: string,
+      options: any,
+      cb: any,
+    ) => {
+      if (typeof options === "function") cb = options;
+      if (cmd.includes("which") || cmd.includes("where"))
+        cb(null, "/bin/kiro-cli", "");
+      else if (cmd.includes("whoami")) cb(null, "user", "");
+      else if (cmd.includes("/usage")) {
+        cb(new Error("Connection failed"), "", "");
+      } else {
+        cb(null, "", "");
+      }
+    }) as any);
+
+    const result = await fetchKiroUsage();
+
+    expect(result.provider).toBe("kiro");
+    expect(result.error).toBe("Error: Connection failed");
+    expect(result.windows).toHaveLength(0);
+  });
+
+  it("should handle kiro-cli not found", async () => {
+    vi.mocked(child_process.exec).mockImplementation(((
+      cmd: string,
+      options: any,
+      cb: any,
+    ) => {
+      if (typeof options === "function") cb = options;
+      if (cmd.includes("which") || cmd.includes("where")) {
+        cb(new Error("not found"), "", "");
+      } else {
+        cb(null, "", "");
+      }
+    }) as any);
+
+    const result = await fetchKiroUsage();
+
+    expect(result.provider).toBe("kiro");
+    expect(result.error).toBe("kiro-cli not found");
+    expect(result.windows).toHaveLength(0);
+  });
+
+  it("should ignore system health labels", async () => {
+    vi.mocked(child_process.exec).mockImplementation(((
+      cmd: string,
+      options: any,
+      cb: any,
+    ) => {
+      if (typeof options === "function") cb = options;
+      if (cmd.includes("which") || cmd.includes("where"))
+        cb(null, "/bin/kiro-cli", "");
+      else if (cmd.includes("whoami")) cb(null, "user", "");
+      else if (cmd.includes("/usage")) {
+        cb(
+          null,
+          `
+System Health: 80%
+Disk Usage: 70%
+Memory: 60%
+Bonus credits: 2/10
+`,
+          "",
+        );
+      } else {
+        cb(null, "", "");
+      }
+    }) as any);
+
+    const result = await fetchKiroUsage();
+
+    expect(result.provider).toBe("kiro");
+    // Should only include "Bonus", not the ignored labels
+    expect(result.windows).toHaveLength(1);
+    expect(result.windows[0]!.label).toBe("Bonus");
+  });
+
+  it("should ignore cpu bandwidth labels", async () => {
+    vi.mocked(child_process.exec).mockImplementation(((
+      cmd: string,
+      options: any,
+      cb: any,
+    ) => {
+      if (typeof options === "function") cb = options;
+      if (cmd.includes("which") || cmd.includes("where"))
+        cb(null, "/bin/kiro-cli", "");
+      else if (cmd.includes("whoami")) cb(null, "user", "");
+      else if (cmd.includes("/usage")) {
+        cb(
+          null,
+          `
+CPU: 50%
+Bandwidth: 40%
+Quota: 30%
+`,
+          "",
+        );
+      } else {
+        cb(null, "", "");
+      }
+    }) as any);
+
+    const result = await fetchKiroUsage();
+
+    expect(result.provider).toBe("kiro");
+    // Should only include "Quota", not CPU or Bandwidth
+    expect(result.windows).toHaveLength(1);
+    expect(result.windows[0]!.label).toBe("Quota");
   });
 });

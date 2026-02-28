@@ -868,7 +868,8 @@ async function finalizeSelection(
 
   const runnerUp =
       rankedCandidates.length > 1
-        ? candidateKey(rankedCandidates[0]) === candidateKey(best)
+        ? rankedCandidates[0] !== undefined &&
+          candidateKey(rankedCandidates[0]) === candidateKey(best)
           ? rankedCandidates[1]
           : rankedCandidates[0]
         : undefined,

@@ -104,29 +104,39 @@ export async function fetchZaiUsage(
       }
 
       if (limit.type === "TOKENS_LIMIT") {
-        windows.push({
+        const window: RateWindow = {
           label: `Tokens (${windowLabel})`,
           usedPercent: percent,
-          resetDescription: nextReset ? formatReset(nextReset) : undefined,
-          resetsAt: nextReset,
-        });
+        };
+        if (nextReset) {
+          window.resetDescription = formatReset(nextReset);
+          window.resetsAt = nextReset;
+        }
+        windows.push(window);
       } else if (limit.type === "TIME_LIMIT") {
-        windows.push({
+        const window: RateWindow = {
           label: "Monthly",
           usedPercent: percent,
-          resetDescription: nextReset ? formatReset(nextReset) : undefined,
-          resetsAt: nextReset,
-        });
+        };
+        if (nextReset) {
+          window.resetDescription = formatReset(nextReset);
+          window.resetsAt = nextReset;
+        }
+        windows.push(window);
       }
     }
 
-    return {
+    const result: UsageSnapshot = {
       provider: "zai",
       displayName: "z.ai",
       windows,
-      plan: dataTyped.data?.planName || dataTyped.data?.plan,
       account: "pi-auth",
     };
+    const planValue = dataTyped.data?.planName || dataTyped.data?.plan;
+    if (planValue !== undefined) {
+      result.plan = planValue;
+    }
+    return result;
   } catch (error: unknown) {
     return {
       provider: "zai",

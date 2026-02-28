@@ -10,14 +10,8 @@ interface CodexCredential {
   source: string;
 }
 
-function getPiCodexAuths(
-  piAuth: Record<string, unknown>,
-): Array<{ accessToken: string; accountId?: string; source: string }> {
-  const results: Array<{
-    accessToken: string;
-    accountId?: string;
-    source: string;
-  }> = [];
+function getPiCodexAuths(piAuth: Record<string, unknown>): CodexCredential[] {
+  const results: CodexCredential[] = [];
 
   try {
     const codexKeys = Object.keys(piAuth)
@@ -50,7 +44,13 @@ function getPiCodexAuths(
           key === "openai-codex"
             ? "pi"
             : `pi:${key.replace("openai-codex-", "")}`;
-        results.push({ accessToken, accountId, source: label });
+        const result: CodexCredential = { accessToken, source: label };
+
+        if (accountId !== undefined) {
+          result.accountId = accountId;
+        }
+
+        results.push(result);
       }
     }
   } catch {
@@ -70,11 +70,13 @@ async function readCodexAuthFile(
     ) as Record<string, unknown>;
     const tokens = data.tokens as Record<string, unknown> | undefined;
     if (typeof tokens?.access_token === "string") {
-      return {
+      const result: { accessToken: string; accountId?: string } = {
         accessToken: tokens.access_token,
-        accountId:
-          typeof tokens.account_id === "string" ? tokens.account_id : undefined,
       };
+      if (typeof tokens.account_id === "string") {
+        result.accountId = tokens.account_id;
+      }
+      return result;
     }
     if (typeof data.OPENAI_API_KEY === "string" && data.OPENAI_API_KEY) {
       return { accessToken: data.OPENAI_API_KEY };
@@ -94,11 +96,14 @@ async function discoverCodexCredentials(
     piAuths = getPiCodexAuths(piAuth);
   for (const p of piAuths) {
     if (!seenTokens.has(p.accessToken)) {
-      credentials.push({
+      const result: CodexCredential = {
         accessToken: p.accessToken,
-        accountId: p.accountId,
         source: p.source,
-      });
+      };
+      if (p.accountId !== undefined) {
+        result.accountId = p.accountId;
+      }
+      credentials.push(result);
       seenTokens.add(p.accessToken);
     }
   }
@@ -124,11 +129,14 @@ async function discoverCodexCredentials(
           cred?.type === "oauth" && typeof cred.accountId === "string"
             ? cred.accountId
             : undefined;
-      credentials.push({
+      const result: CodexCredential = {
         accessToken: registryToken,
-        accountId,
         source: "registry",
-      });
+      };
+      if (accountId !== undefined) {
+        result.accountId = accountId;
+      }
+      credentials.push(result);
       seenTokens.add(registryToken);
     }
   } catch {
@@ -156,11 +164,14 @@ async function discoverCodexCredentials(
         const nameMatch = authFile.match(/auth[_-]?(.+)?\.json/i),
           suffix = nameMatch?.[1] || "auth",
           label = `.codex:${suffix}`;
-        credentials.push({
+        const result: CodexCredential = {
           accessToken: auth.accessToken,
-          accountId: auth.accountId,
           source: label,
-        });
+        };
+        if (auth.accountId !== undefined) {
+          result.accountId = auth.accountId;
+        }
+        credentials.push(result);
       }
     }
   } catch {
@@ -269,9 +280,11 @@ async function fetchCodexUsageForCredential(
       const entry: RateWindow = {
         label,
         usedPercent: used,
-        resetDescription: resetAt ? formatReset(resetAt) : undefined,
-        resetsAt: resetAt,
       };
+      if (resetAt) {
+        entry.resetDescription = formatReset(resetAt);
+        entry.resetsAt = resetAt;
+      }
 
       const existing = windowsByLabel.get(label);
       if (!existing) {
@@ -327,13 +340,16 @@ async function fetchCodexUsageForCredential(
         : `$${balance.toFixed(2)}`;
     }
 
-    return {
+    const result: UsageSnapshot = {
       provider: "codex",
       displayName,
       windows,
-      plan,
       account: cred.accountId || cred.source,
     };
+    if (plan !== undefined) {
+      result.plan = plan;
+    }
+    return result;
   } catch (error: unknown) {
     return {
       provider: "codex",
