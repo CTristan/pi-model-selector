@@ -39,6 +39,7 @@ export interface MappingEntry {
   model?: ModelMappingTarget;
   ignore?: boolean;
   combine?: string;
+  reserve?: number; // Minimum usage percentage (0-99) to preserve; candidate excluded if remaining <= reserve
 }
 
 export type PriorityRule =

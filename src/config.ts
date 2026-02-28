@@ -278,6 +278,7 @@ interface RawMappingItem {
   };
   ignore?: unknown;
   combine?: unknown;
+  reserve?: unknown;
 }
 
 function normalizeMappings(
@@ -346,14 +347,38 @@ function normalizeMappings(
       continue;
     }
 
+    // Validate reserve field
+    let reserve: number | undefined;
+    if (item.reserve !== undefined) {
+      if (typeof item.reserve !== "number") {
+        errors.push(
+          `[${sourceLabel}] mapping.reserve must be a number if provided`,
+        );
+        continue;
+      }
+      if (item.reserve < 0 || item.reserve >= 100) {
+        errors.push(
+          `[${sourceLabel}] mapping.reserve must be >= 0 and < 100 (got ${item.reserve})`,
+        );
+        continue;
+      }
+      if (!model) {
+        errors.push(
+          `[${sourceLabel}] mapping.reserve is only valid on mappings with a model target`,
+        );
+        continue;
+      }
+      reserve = item.reserve;
+    }
+
     mappings.push({
       usage: {
         provider: usage.provider,
         account: typeof usage.account === "string" ? usage.account : undefined,
         window: typeof usage.window === "string" ? usage.window : undefined,
         windowPattern:
-          typeof usage.windowPattern === "string"
-            ? usage.windowPattern
+          typeof item.usage.windowPattern === "string"
+            ? item.usage.windowPattern
             : undefined,
       },
       model: model
@@ -361,6 +386,7 @@ function normalizeMappings(
         : undefined,
       ignore,
       combine,
+      reserve,
     });
   }
 

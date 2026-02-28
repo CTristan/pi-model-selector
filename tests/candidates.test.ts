@@ -4,6 +4,7 @@ import {
   compareCandidates,
   dedupeCandidates,
   findModelMapping,
+  getReserveThreshold,
   selectionReason,
 } from "../src/candidates.js";
 import type {
@@ -264,6 +265,103 @@ describe("Candidate Logic", () => {
       const deduped = dedupeCandidates(candidates);
       expect(deduped).toHaveLength(1);
       expect(deduped[0].remainingPercent).toBe(50);
+    });
+  });
+
+  describe("getReserveThreshold", () => {
+    it("should return 0 when no mapping exists", () => {
+      const candidate: UsageCandidate = {
+        provider: "p1",
+        windowLabel: "w1",
+        remainingPercent: 50,
+      } as UsageCandidate;
+      const mappings: MappingEntry[] = [];
+      expect(getReserveThreshold(candidate, mappings)).toBe(0);
+    });
+
+    it("should return 0 when mapping has no reserve", () => {
+      const candidate: UsageCandidate = {
+        provider: "p1",
+        windowLabel: "w1",
+        remainingPercent: 50,
+      } as UsageCandidate;
+      const mappings: MappingEntry[] = [
+        {
+          usage: { provider: "p1", window: "w1" },
+          model: { provider: "m1", id: "i1" },
+        },
+      ];
+      expect(getReserveThreshold(candidate, mappings)).toBe(0);
+    });
+
+    it("should return the configured reserve value", () => {
+      const candidate: UsageCandidate = {
+        provider: "p1",
+        windowLabel: "w1",
+        remainingPercent: 50,
+      } as UsageCandidate;
+      const mappings: MappingEntry[] = [
+        {
+          usage: { provider: "p1", window: "w1" },
+          model: { provider: "m1", id: "i1" },
+          reserve: 20,
+        },
+      ];
+      expect(getReserveThreshold(candidate, mappings)).toBe(20);
+    });
+
+    it("should work with pattern-matched mappings", () => {
+      const candidate: UsageCandidate = {
+        provider: "p1",
+        windowLabel: "w123",
+        remainingPercent: 50,
+      } as UsageCandidate;
+      const mappings: MappingEntry[] = [
+        {
+          usage: { provider: "p1", windowPattern: "w\\d+" },
+          model: { provider: "m1", id: "i1" },
+          reserve: 30,
+        },
+      ];
+      expect(getReserveThreshold(candidate, mappings)).toBe(30);
+    });
+
+    it("should work with catch-all mappings", () => {
+      const candidate: UsageCandidate = {
+        provider: "p1",
+        windowLabel: "any-window",
+        remainingPercent: 50,
+      } as UsageCandidate;
+      const mappings: MappingEntry[] = [
+        {
+          usage: { provider: "p1" },
+          model: { provider: "m1", id: "i1" },
+          reserve: 15,
+        },
+      ];
+      expect(getReserveThreshold(candidate, mappings)).toBe(15);
+    });
+
+    it("should prefer more specific account mapping over generic", () => {
+      const candidate: UsageCandidate = {
+        provider: "p1",
+        windowLabel: "w1",
+        account: "work",
+        remainingPercent: 50,
+      } as UsageCandidate;
+      const mappings: MappingEntry[] = [
+        {
+          usage: { provider: "p1", window: "w1" },
+          model: { provider: "m1", id: "i1" },
+          reserve: 10,
+        },
+        {
+          usage: { provider: "p1", account: "work", window: "w1" },
+          model: { provider: "m1", id: "i2" },
+          reserve: 25,
+        },
+      ];
+      expect(getReserveThreshold(candidate, mappings)).toBe(25);
     });
   });
 });

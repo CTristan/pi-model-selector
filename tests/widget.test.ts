@@ -291,4 +291,165 @@ describe("Widget", () => {
       expect(output[1]).toContain("D3");
     });
   });
+
+  describe("Reserve Indicator", () => {
+    it("should show reserve indicator for candidate below reserve threshold", () => {
+      const setWidgetMock = vi.fn();
+      const mockCtx = {
+        hasUI: true,
+        ui: { setWidget: setWidgetMock },
+      } as unknown as ExtensionContext;
+      const config = {
+        mappings: [
+          {
+            usage: { provider: "p1", window: "W1" },
+            model: { provider: "mp", id: "mi" },
+            reserve: 20,
+          },
+        ],
+        widget: { enabled: true, showCount: 5, placement: "belowEditor" },
+      } as unknown as LoadedConfig;
+      const candidates = [
+        {
+          provider: "p1",
+          displayName: "D1",
+          windowLabel: "W1",
+          usedPercent: 85,
+          remainingPercent: 15,
+        },
+      ] as unknown as UsageCandidate[];
+      updateWidgetState({ candidates, config });
+      renderUsageWidget(mockCtx);
+      const renderFn = setWidgetMock.mock.calls[0][1];
+      const widget = renderFn(null, theme);
+      const output = widget.render(500);
+      expect(output[1]).toContain("reserve: 20%");
+    });
+
+    it("should not show reserve indicator for candidate above reserve threshold", () => {
+      const setWidgetMock = vi.fn();
+      const mockCtx = {
+        hasUI: true,
+        ui: { setWidget: setWidgetMock },
+      } as unknown as ExtensionContext;
+      const config = {
+        mappings: [
+          {
+            usage: { provider: "p1", window: "W1" },
+            model: { provider: "mp", id: "mi" },
+            reserve: 20,
+          },
+        ],
+        widget: { enabled: true, showCount: 5, placement: "belowEditor" },
+      } as unknown as LoadedConfig;
+      const candidates = [
+        {
+          provider: "p1",
+          displayName: "D1",
+          windowLabel: "W1",
+          usedPercent: 50,
+          remainingPercent: 50,
+        },
+      ] as unknown as UsageCandidate[];
+      updateWidgetState({ candidates, config });
+      renderUsageWidget(mockCtx);
+      const renderFn = setWidgetMock.mock.calls[0][1];
+      const widget = renderFn(null, theme);
+      const output = widget.render(500);
+      expect(output[1]).not.toContain("reserve:");
+    });
+
+    it("should not show reserve indicator for candidate at 0% (exhausted)", () => {
+      const setWidgetMock = vi.fn();
+      const mockCtx = {
+        hasUI: true,
+        ui: { setWidget: setWidgetMock },
+      } as unknown as ExtensionContext;
+      const config = {
+        mappings: [
+          {
+            usage: { provider: "p1", window: "W1" },
+            model: { provider: "mp", id: "mi" },
+            reserve: 20,
+          },
+        ],
+        widget: { enabled: true, showCount: 5, placement: "belowEditor" },
+      } as unknown as LoadedConfig;
+      const candidates = [
+        {
+          provider: "p1",
+          displayName: "D1",
+          windowLabel: "W1",
+          usedPercent: 100,
+          remainingPercent: 0,
+        },
+      ] as unknown as UsageCandidate[];
+      updateWidgetState({ candidates, config });
+      renderUsageWidget(mockCtx);
+      const renderFn = setWidgetMock.mock.calls[0][1];
+      const widget = renderFn(null, theme);
+      const output = widget.render(500);
+      expect(output[1]).not.toContain("reserve:");
+    });
+
+    it("should not show reserve indicator for unmapped candidate", () => {
+      const setWidgetMock = vi.fn();
+      const mockCtx = {
+        hasUI: true,
+        ui: { setWidget: setWidgetMock },
+      } as unknown as ExtensionContext;
+      const config = {
+        mappings: [],
+        widget: { enabled: true, showCount: 5, placement: "belowEditor" },
+      } as unknown as LoadedConfig;
+      const candidates = [
+        {
+          provider: "p1",
+          displayName: "D1",
+          windowLabel: "W1",
+          usedPercent: 85,
+          remainingPercent: 15,
+        },
+      ] as unknown as UsageCandidate[];
+      updateWidgetState({ candidates, config });
+      renderUsageWidget(mockCtx);
+      const renderFn = setWidgetMock.mock.calls[0][1];
+      const widget = renderFn(null, theme);
+      const output = widget.render(500);
+      expect(output[1]).not.toContain("reserve:");
+    });
+
+    it("should not show reserve indicator when reserve is 0", () => {
+      const setWidgetMock = vi.fn();
+      const mockCtx = {
+        hasUI: true,
+        ui: { setWidget: setWidgetMock },
+      } as unknown as ExtensionContext;
+      const config = {
+        mappings: [
+          {
+            usage: { provider: "p1", window: "W1" },
+            model: { provider: "mp", id: "mi" },
+            reserve: 0,
+          },
+        ],
+        widget: { enabled: true, showCount: 5, placement: "belowEditor" },
+      } as unknown as LoadedConfig;
+      const candidates = [
+        {
+          provider: "p1",
+          displayName: "D1",
+          windowLabel: "W1",
+          usedPercent: 85,
+          remainingPercent: 15,
+        },
+      ] as unknown as UsageCandidate[];
+      updateWidgetState({ candidates, config });
+      renderUsageWidget(mockCtx);
+      const renderFn = setWidgetMock.mock.calls[0][1];
+      const widget = renderFn(null, theme);
+      const output = widget.render(500);
+      expect(output[1]).not.toContain("reserve:");
+    });
+  });
 });

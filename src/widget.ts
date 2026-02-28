@@ -1,6 +1,10 @@
 import type { ExtensionContext, Theme } from "@mariozechner/pi-coding-agent";
 import { truncateToWidth } from "@mariozechner/pi-tui";
-import { findIgnoreMapping, findModelMapping } from "./candidates.js";
+import {
+  findIgnoreMapping,
+  findModelMapping,
+  getReserveThreshold,
+} from "./candidates.js";
 import type { LoadedConfig, MappingEntry, UsageCandidate } from "./types.js";
 import { formatReset } from "./usage-fetchers.js";
 
@@ -73,13 +77,24 @@ function formatCandidate(
           : "success",
     percentStr = theme.fg(percentColor, remainingStr);
 
+  // Reserve indicator
+  let reserveStr = "";
+  const reserve = getReserveThreshold(candidate, mappings);
+  if (
+    reserve > 0 &&
+    candidate.remainingPercent > 0 &&
+    candidate.remainingPercent <= reserve
+  ) {
+    reserveStr = ` ${theme.fg("warning", `◆ reserve: ${reserve}%`)}`;
+  }
+
   // Time left
   let resetStr = "";
   if (candidate.resetsAt) {
     resetStr = ` ${theme.fg("dim", `(${formatReset(candidate.resetsAt)})`)}`;
   }
 
-  return `${statusIcon} ${providerWindow} ${bar} ${percentStr}${resetStr}`;
+  return `${statusIcon} ${providerWindow} ${bar} ${percentStr}${reserveStr}${resetStr}`;
 }
 
 // ============================================================================
