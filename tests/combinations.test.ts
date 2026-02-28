@@ -131,7 +131,7 @@ describe("Candidate Combinations", () => {
     ];
 
     const result = combineCandidates(candidates, mappings);
-    expect(result[0].remainingPercent).toBe(60);
-    expect(result[0].resetsAt).toEqual(future2); // Bottleneck's reset
+    expect(result[0]!.remainingPercent).toBe(60);
+    expect(result[0]!.resetsAt).toEqual(future2); // Bottleneck's reset
   });
 });

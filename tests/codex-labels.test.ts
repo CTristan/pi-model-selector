@@ -41,8 +41,8 @@ describe("Codex Window Labels", () => {
       {},
       { "openai-codex": { access: "tok" } },
     );
-    expect(results[0].windows[0].label).not.toBe("Week");
-    expect(results[0].windows[0].label).toBe("1d");
+    expect(results[0]!.windows[0]!.label).not.toBe("Week");
+    expect(results[0]!.windows[0]!.label).toBe("1d");
   });
 
   it("should label 168h window as '1w' or 'Week'", async () => {
@@ -64,7 +64,7 @@ describe("Codex Window Labels", () => {
       {},
       { "openai-codex": { access: "tok" } },
     );
-    expect(results[0].windows[0].label).toBe("1w");
+    expect(results[0]!.windows[0]!.label).toBe("1w");
   });
 
   it("should distinguish 401 and 403 errors", async () => {
@@ -77,7 +77,7 @@ describe("Codex Window Labels", () => {
       {},
       { "openai-codex": { access: "tok1" } },
     );
-    expect(res401[0].error).toBe("Token expired");
+    expect(res401[0]!.error).toBe("Token expired");
 
     vi.mocked(fetch).mockResolvedValueOnce({
       ok: false,
@@ -87,6 +87,6 @@ describe("Codex Window Labels", () => {
       {},
       { "openai-codex": { access: "tok2" } },
     );
-    expect(res403[0].error).toBe("Permission denied");
+    expect(res403[0]!.error).toBe("Permission denied");
   });
 });

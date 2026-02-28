@@ -33,7 +33,7 @@ describe("Gemini Usage Fetcher", () => {
 
     const snapshots = await fetchGeminiUsage(modelRegistry, {});
     expect(snapshots.length).toBeGreaterThan(0);
-    expect(snapshots[0].provider).toBe("gemini");
-    expect(snapshots[0].account).toBe("test-project");
+    expect(snapshots[0]!.provider).toBe("gemini");
+    expect(snapshots[0]!.account).toBe("test-project");
   });
 });

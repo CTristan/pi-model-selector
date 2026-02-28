@@ -20,7 +20,7 @@ describe("Google Auth (common.ts)", () => {
     // 1. Matching clientId
     await refreshGoogleToken("ref-token", "my-client-id", "my-secret");
     const body = (
-      mockFetch.mock.calls[0][1] as { body: URLSearchParams }
+      mockFetch.mock.calls![0]![1]! as { body: URLSearchParams }
     ).body.toString();
     expect(body).toContain("client_id=my-client-id");
     expect(body).toContain("client_secret=my-secret");
@@ -40,14 +40,14 @@ describe("Google Auth (common.ts)", () => {
 
     // First call (undefined client_id)
     const body1 = (
-      mockFetch.mock.calls[0][1] as { body: URLSearchParams }
+      mockFetch.mock.calls![0]![1]! as { body: URLSearchParams }
     ).body.toString();
     expect(body1).not.toContain("client_id=");
     expect(body1).not.toContain("client_secret=");
 
     // Second call (GOOGLE_CLOUD_SHELL_CLIENT_ID)
     const body2 = (
-      mockFetch.mock.calls[1][1] as { body: URLSearchParams }
+      mockFetch.mock.calls![1]![1]! as { body: URLSearchParams }
     ).body.toString();
     expect(body2).toContain(`client_id=${GOOGLE_CLOUD_SHELL_CLIENT_ID}`);
     expect(body2).not.toContain("client_secret=");

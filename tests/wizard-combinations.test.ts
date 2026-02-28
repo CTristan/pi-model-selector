@@ -110,11 +110,12 @@ describe("Wizard Combination Flow", () => {
     ctx.ui.confirm.mockResolvedValue(false); // Do not add another mapping
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx);
 
     // Verify upsertMapping was called with correct structure
     expect(configMod.upsertMapping).toHaveBeenCalledTimes(1);
-    const [raw, mapping] = vi.mocked(configMod.upsertMapping).mock.calls[0];
+    const [raw, mapping] = vi.mocked(configMod.upsertMapping).mock.calls[0]!;
 
     expect(raw).toBe(initialConfig.raw.project);
     expect(mapping).toEqual({
@@ -162,11 +163,12 @@ describe("Wizard Combination Flow", () => {
     ctx.ui.confirm.mockResolvedValue(false);
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx);
 
     // Verify upsertMapping was called with correct structure
     expect(configMod.upsertMapping).toHaveBeenCalledTimes(1);
-    const [_raw, mapping] = vi.mocked(configMod.upsertMapping).mock.calls[0];
+    const [_raw, mapping] = vi.mocked(configMod.upsertMapping).mock.calls[0]!;
 
     expect(mapping).toEqual({
       usage: {
@@ -206,9 +208,10 @@ describe("Wizard Combination Flow", () => {
     ctx.ui.confirm.mockResolvedValue(false);
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx);
 
-    const [, mapping] = vi.mocked(configMod.upsertMapping).mock.calls[0];
+    const [, mapping] = vi.mocked(configMod.upsertMapping).mock.calls[0]!;
     expect(mapping.combine).toBe("Existing Group");
   });
 
@@ -233,9 +236,10 @@ describe("Wizard Combination Flow", () => {
     ctx.ui.confirm.mockResolvedValue(false);
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx);
 
-    const [, mapping] = vi.mocked(configMod.upsertMapping).mock.calls[0];
+    const [, mapping] = vi.mocked(configMod.upsertMapping).mock.calls[0]!;
     expect(mapping.combine).toBe("Brand New Group");
   });
 
@@ -273,6 +277,7 @@ describe("Wizard Combination Flow", () => {
     );
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx);
 
     // Should see both the source bucket (Sonnet) and the synthetic bucket (My Group)
@@ -365,6 +370,7 @@ describe("Wizard Combination Flow", () => {
     });
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx);
 
     // Verify "Dissolve combination" was an option

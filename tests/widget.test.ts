@@ -100,7 +100,7 @@ describe("Widget", () => {
       ] as unknown as UsageCandidate[];
       updateWidgetState({ candidates, config });
       renderUsageWidget(mockCtx);
-      const renderFn = setWidgetMock.mock.calls[0][1];
+      const renderFn = setWidgetMock.mock.calls![0]![1]!;
       const widget = renderFn(null, theme);
       const output = widget.render(200);
       expect(output[1]).not.toContain("│");
@@ -148,7 +148,7 @@ describe("Widget", () => {
       ] as unknown as UsageCandidate[];
       updateWidgetState({ candidates, config });
       renderUsageWidget(mockCtx);
-      const renderFn = setWidgetMock.mock.calls[0][1];
+      const renderFn = setWidgetMock.mock.calls![0]![1]!;
       const widget = renderFn(null, theme);
       const output = widget.render(500);
       expect(output[1]).toContain("[error]");
@@ -180,7 +180,7 @@ describe("Widget", () => {
         config,
       });
       renderUsageWidget(mockCtx);
-      const renderFn = setWidgetMock.mock.calls[0][1];
+      const renderFn = setWidgetMock.mock.calls![0]![1]!;
       const widget = renderFn(null, theme);
       expect(widget.render(5)).toHaveLength(3);
       expect(widget.invalidate()).toBeUndefined();
@@ -214,7 +214,7 @@ describe("Widget", () => {
       ] as unknown as UsageCandidate[];
       updateWidgetState({ candidates, config, autoSelectionDisabled: true });
       renderUsageWidget(mockCtx);
-      const renderFn = setWidgetMock.mock.calls[0][1];
+      const renderFn = setWidgetMock.mock.calls![0]![1]!;
       const widget = renderFn(null, theme);
       const output = widget.render(500);
       // Should show AUTO OFF message only, no candidates
@@ -239,7 +239,7 @@ describe("Widget", () => {
         autoSelectionDisabled: true,
       });
       renderUsageWidget(mockCtx);
-      const renderFn = setWidgetMock.mock.calls[0][1];
+      const renderFn = setWidgetMock.mock.calls![0]![1]!;
       const widget = renderFn(null, theme);
       const output = widget.render(500);
       // Should show AUTO OFF message even without candidates
@@ -281,7 +281,7 @@ describe("Widget", () => {
       ] as unknown as UsageCandidate[];
       updateWidgetState({ candidates, config, autoSelectionDisabled: false });
       renderUsageWidget(mockCtx);
-      const renderFn = setWidgetMock.mock.calls[0][1];
+      const renderFn = setWidgetMock.mock.calls![0]![1]!;
       const widget = renderFn(null, theme);
       const output = widget.render(500);
       // Should show candidates when auto-selection is enabled
@@ -320,7 +320,7 @@ describe("Widget", () => {
       ] as unknown as UsageCandidate[];
       updateWidgetState({ candidates, config });
       renderUsageWidget(mockCtx);
-      const renderFn = setWidgetMock.mock.calls[0][1];
+      const renderFn = setWidgetMock.mock.calls![0]![1]!;
       const widget = renderFn(null, theme);
       const output = widget.render(500);
       expect(output[1]).toContain("reserve: 20%");
@@ -353,7 +353,7 @@ describe("Widget", () => {
       ] as unknown as UsageCandidate[];
       updateWidgetState({ candidates, config });
       renderUsageWidget(mockCtx);
-      const renderFn = setWidgetMock.mock.calls[0][1];
+      const renderFn = setWidgetMock.mock.calls![0]![1]!;
       const widget = renderFn(null, theme);
       const output = widget.render(500);
       expect(output[1]).not.toContain("reserve:");
@@ -386,7 +386,7 @@ describe("Widget", () => {
       ] as unknown as UsageCandidate[];
       updateWidgetState({ candidates, config });
       renderUsageWidget(mockCtx);
-      const renderFn = setWidgetMock.mock.calls[0][1];
+      const renderFn = setWidgetMock.mock.calls![0]![1]!;
       const widget = renderFn(null, theme);
       const output = widget.render(500);
       expect(output[1]).not.toContain("reserve:");
@@ -413,7 +413,7 @@ describe("Widget", () => {
       ] as unknown as UsageCandidate[];
       updateWidgetState({ candidates, config });
       renderUsageWidget(mockCtx);
-      const renderFn = setWidgetMock.mock.calls[0][1];
+      const renderFn = setWidgetMock.mock.calls![0]![1]!;
       const widget = renderFn(null, theme);
       const output = widget.render(500);
       expect(output[1]).not.toContain("reserve:");
@@ -446,7 +446,7 @@ describe("Widget", () => {
       ] as unknown as UsageCandidate[];
       updateWidgetState({ candidates, config });
       renderUsageWidget(mockCtx);
-      const renderFn = setWidgetMock.mock.calls[0][1];
+      const renderFn = setWidgetMock.mock.calls![0]![1]!;
       const widget = renderFn(null, theme);
       const output = widget.render(500);
       expect(output[1]).not.toContain("reserve:");

@@ -166,7 +166,7 @@ describe("Usage Fetchers", () => {
       const result = await fetchClaudeUsage(undefined, {
         anthropic: { access: "mock" },
       });
-      expect(result.windows[0].resetsAt).toBeDefined();
+      expect(result.windows[0]!.resetsAt).toBeDefined();
     });
 
     it("should handle Sonnet/Opus specific windows and pessimistic logic", async () => {
@@ -244,7 +244,7 @@ describe("Usage Fetchers", () => {
         },
         {},
       );
-      expect(results[0].provider).toBe("copilot");
+      expect(results[0]!.provider).toBe("copilot");
     });
 
     it("should handle token exchange and SKU Found fallback", async () => {
@@ -279,8 +279,8 @@ describe("Usage Fetchers", () => {
         },
         {},
       );
-      expect(results[0].plan).toBe("Enterprise");
-      expect(results[0].account).toBe(
+      expect(results[0]!.plan).toBe("Enterprise");
+      expect(results[0]!.account).toBe(
         "fallback:registry:github-copilot:apiKey, registry:github:apiKey",
       );
     });
@@ -303,7 +303,7 @@ describe("Usage Fetchers", () => {
         },
         {},
       );
-      expect(results[0].account).toBe(
+      expect(results[0]!.account).toBe(
         "304-fallback:registry:github-copilot:apiKey, registry:github:apiKey",
       );
     });
@@ -406,7 +406,7 @@ describe("Usage Fetchers", () => {
       );
 
       expect(ifNoneMatchOnExchangedCall).toBe(exchangedEtag);
-      expect(results[0].account).toBe("cache-user");
+      expect(results[0]!.account).toBe("cache-user");
     });
 
     it("should aggregate unique errors from multiple tokens", async () => {
@@ -427,9 +427,9 @@ describe("Usage Fetchers", () => {
         },
         {},
       );
-      expect(results[0].account).toBe("registry:github-copilot:apiKey");
-      expect(results[1].error).toContain("HTTP 429");
-      expect(results[0].error).toContain("HTTP 401");
+      expect(results[0]!.account).toBe("registry:github-copilot:apiKey");
+      expect(results[1]!.error).toContain("HTTP 429");
+      expect(results[0]!.error).toContain("HTTP 401");
     });
   });
 
@@ -452,9 +452,9 @@ describe("Usage Fetchers", () => {
         {},
         { "google-gemini-cli": { access: "tok", projectId: "pid" } },
       );
-      expect(result[0].windows).toHaveLength(2);
+      expect(result[0]!.windows).toHaveLength(2);
       expect(
-        result[0].windows.find((w: RateWindow) => w.label === "Pro")
+        result[0]!.windows.find((w: RateWindow) => w.label === "Pro")
           ?.usedPercent,
       ).toBe(80);
     });
@@ -482,7 +482,7 @@ describe("Usage Fetchers", () => {
           },
         },
       );
-      expect(result[0].provider).toBe("gemini");
+      expect(result[0]!.provider).toBe("gemini");
     });
   });
 
@@ -663,8 +663,8 @@ describe("Usage Fetchers", () => {
       );
       // Should have 2 because although usage is identical, they are from different accounts
       expect(result).toHaveLength(2);
-      expect(result[0].account).toBe("pi:1");
-      expect(result[1].account).toBe("pi:2");
+      expect(result[0]!.account).toBe("pi:1");
+      expect(result[1]!.account).toBe("pi:2");
     });
 
     it("should handle non-integer hour windows in Codex", async () => {
@@ -688,7 +688,7 @@ describe("Usage Fetchers", () => {
           "openai-codex": { access: "token" },
         },
       );
-      expect(result[0].windows[0].label).toBe("1.5h");
+      expect(result[0]!.windows[0]!.label).toBe("1.5h");
     });
 
     it("should not deduplicate Codex errors from different accounts", async () => {
@@ -714,8 +714,8 @@ describe("Usage Fetchers", () => {
       );
       // Both should be present because they are from different accounts
       expect(result).toHaveLength(2);
-      expect(result[0].account).toBe("pi:1");
-      expect(result[1].account).toBe("pi:2");
+      expect(result[0]!.account).toBe("pi:1");
+      expect(result[1]!.account).toBe("pi:2");
     });
   });
 
@@ -745,7 +745,7 @@ describe("Usage Fetchers", () => {
       await vi.runAllTimersAsync();
 
       const result = await promise;
-      expect(result[0].error).toBe("Timeout");
+      expect(result[0]!.error).toBe("Timeout");
       vi.useRealTimers();
     });
   });

@@ -302,8 +302,8 @@ describe("Usage Fetchers Branch Coverage", () => {
         },
       };
       const results = await fetchCopilotUsage(modelRegistry, {});
-      expect(results[0].provider).toBe("copilot");
-      expect(results[0].error).toBe("No token found");
+      expect(results[0]!.provider).toBe("copilot");
+      expect(results[0]!.error).toBe("No token found");
     });
 
     it("should pick up token from gh auth token", async () => {
@@ -332,7 +332,7 @@ describe("Usage Fetchers Branch Coverage", () => {
       );
 
       const results = await fetchCopilotUsage({}, {});
-      expect(results[0].account).toBe("gh-cli");
+      expect(results[0]!.account).toBe("gh-cli");
     });
 
     it("should fallback to 304 cached state", async () => {
@@ -353,8 +353,8 @@ describe("Usage Fetchers Branch Coverage", () => {
       );
 
       const results = await fetchCopilotUsage({}, {});
-      expect(results[0].account).toBe("304-fallback:gh-cli");
-      expect(results[0].windows[0].resetDescription).toContain("cached");
+      expect(results[0]!.account).toBe("304-fallback:gh-cli");
+      expect(results[0]!.windows[0]!.resetDescription).toContain("cached");
     });
 
     it("fetchCopilotUsage should use registry token", async () => {
@@ -376,7 +376,7 @@ describe("Usage Fetchers Branch Coverage", () => {
       );
 
       const results = await fetchCopilotUsage(modelRegistry, {});
-      expect(results[0].account).toContain("registry");
+      expect(results[0]!.account).toContain("registry");
     });
   });
 
@@ -411,7 +411,7 @@ describe("Usage Fetchers Branch Coverage", () => {
       );
 
       const result = await fetchGeminiUsage({}, piAuth);
-      expect(result[0].provider).toBe("gemini");
+      expect(result[0]!.provider).toBe("gemini");
       expect(fetchMock).toHaveBeenCalledTimes(4);
     });
 
@@ -430,7 +430,7 @@ describe("Usage Fetchers Branch Coverage", () => {
         {},
         { "google-gemini-cli": { access: "tok", projectId: "pid" } },
       );
-      expect(result[0].windows[0].label).toBe("Unknown");
+      expect(result[0]!.windows[0]!.label).toBe("Unknown");
     });
 
     it("refreshGoogleToken should handle API failures", async () => {
@@ -603,7 +603,7 @@ describe("Usage Fetchers Branch Coverage", () => {
       vi.stubGlobal("fetch", fetchMock);
 
       await fetchAntigravityUsage({}, piAuth);
-      expect(fetchMock.mock.calls[0][0]).toContain("oauth2.googleapis.com");
+      expect(fetchMock.mock.calls![0]![0]!).toContain("oauth2.googleapis.com");
     });
 
     it("fetchAntigravityUsage should continue if proactive refresh fails", async () => {
@@ -651,7 +651,7 @@ describe("Usage Fetchers Branch Coverage", () => {
       );
 
       const result = await fetchAntigravityUsage({}, piAuth);
-      expect(result.windows[0].usedPercent).toBe(90);
+      expect(result.windows[0]!.usedPercent).toBe(90);
     });
 
     it("fetchAntigravityUsage should compare multiple models", async () => {
@@ -675,7 +675,7 @@ describe("Usage Fetchers Branch Coverage", () => {
       );
 
       const result = await fetchAntigravityUsage({}, piAuth);
-      expect(result.windows[0].usedPercent).toBe(80);
+      expect(result.windows[0]!.usedPercent).toBe(80);
     });
   });
 
@@ -731,7 +731,7 @@ describe("Usage Fetchers Branch Coverage", () => {
         {},
         { "openai-codex": { access: "t" } },
       );
-      expect(result[0].plan).toBe("Pro ($20.50)");
+      expect(result[0]!.plan).toBe("Pro ($20.50)");
     });
 
     it("fetchAllCodexUsages handles errors in fingerprinting", async () => {
@@ -792,7 +792,7 @@ describe("Usage Fetchers Branch Coverage", () => {
       });
 
       const result = await fetchKiroUsage();
-      expect(result.windows[0].resetsAt).toBeDefined();
+      expect(result.windows[0]!.resetsAt).toBeDefined();
     });
 
     it("kiro date heuristic branches", async () => {
@@ -808,7 +808,7 @@ describe("Usage Fetchers Branch Coverage", () => {
         }
       });
       const result = await fetchKiroUsage();
-      expect(result.windows[0].resetsAt).toBeDefined();
+      expect(result.windows[0]!.resetsAt).toBeDefined();
     });
     it("fetchAntigravityUsage should fail if piAuth is missing projectId", async () => {
       const piAuth = { "google-antigravity": { access: "tok" } }; // No projectId
@@ -820,7 +820,7 @@ describe("Usage Fetchers Branch Coverage", () => {
       const piAuth = { "google-gemini-cli": { access: "tok" } };
       vi.mocked(fs.promises.access).mockRejectedValue(new Error("no file"));
       const result = await fetchGeminiUsage({}, piAuth);
-      expect(result[0].error).toBe("Missing projectId");
+      expect(result[0]!.error).toBe("Missing projectId");
     });
 
     it("fetchCopilotUsage should handle exchange exception", async () => {
@@ -846,7 +846,7 @@ describe("Usage Fetchers Branch Coverage", () => {
 
       const results = await fetchCopilotUsage({}, piAuth);
       // Should fail eventually
-      expect(results[0].error).toBeDefined();
+      expect(results[0]!.error).toBeDefined();
     });
     it("fetchGeminiUsage should try file fallback if refreshed token still fails", async () => {
       const piAuth = {
@@ -880,7 +880,7 @@ describe("Usage Fetchers Branch Coverage", () => {
       );
 
       const result = await fetchGeminiUsage({}, piAuth);
-      expect(result[0].provider).toBe("gemini");
+      expect(result[0]!.provider).toBe("gemini");
       expect(fetchMock).toHaveBeenCalledTimes(4);
     });
 
@@ -903,7 +903,7 @@ describe("Usage Fetchers Branch Coverage", () => {
       await fetchAntigravityUsage({}, piAuth);
       // Should only call models endpoint, not refresh
       expect(fetchMock).toHaveBeenCalledTimes(1);
-      expect(fetchMock.mock.calls[0][0]).toContain("cloudcode-pa");
+      expect(fetchMock.mock.calls![0]![0]!).toContain("cloudcode-pa");
     });
     it("fetchGeminiUsage should skip file fallback if token is same", async () => {
       const piAuth = {
@@ -933,7 +933,7 @@ describe("Usage Fetchers Branch Coverage", () => {
       );
 
       const result = await fetchGeminiUsage({}, piAuth);
-      expect(result[0].provider).toBe("gemini");
+      expect(result[0]!.provider).toBe("gemini");
       expect(fetchMock).toHaveBeenCalledTimes(3); // Should NOT call 4th time
     });
 
@@ -1086,7 +1086,7 @@ describe("Usage Fetchers Branch Coverage", () => {
 
         vi.stubGlobal("fetch", fetchMock);
         const results = await fetchCopilotUsage({}, piAuth);
-        expect(results[0].error).toBeDefined();
+        expect(results[0]!.error).toBeDefined();
       });
 
       it("should handle tryExchange response ok but no token", async () => {
@@ -1106,7 +1106,7 @@ describe("Usage Fetchers Branch Coverage", () => {
 
         vi.stubGlobal("fetch", fetchMock);
         const results = await fetchCopilotUsage({}, piAuth);
-        expect(results[0].error).toBeDefined();
+        expect(results[0]!.error).toBeDefined();
       });
 
       it("should ignore unlimited chat snapshots", async () => {
@@ -1121,8 +1121,8 @@ describe("Usage Fetchers Branch Coverage", () => {
           }),
         );
         const results = await fetchCopilotUsage({}, piAuth);
-        expect(results[0].windows).toHaveLength(1);
-        expect(results[0].windows[0].label).toBe("Access");
+        expect(results[0]!.windows).toHaveLength(1);
+        expect(results[0]!.windows[0]!.label).toBe("Access");
       });
 
       it("should find tokens in piAuth directly", async () => {
@@ -1135,7 +1135,7 @@ describe("Usage Fetchers Branch Coverage", () => {
           }),
         );
         const results = await fetchCopilotUsage({}, piAuth);
-        expect(results[0].account).toBe("auth.json.access");
+        expect(results[0]!.account).toBe("auth.json.access");
       });
 
       it("should handle gh auth token throwing", async () => {
@@ -1147,7 +1147,7 @@ describe("Usage Fetchers Branch Coverage", () => {
           },
         );
         const results = await fetchCopilotUsage({}, {});
-        expect(results[0].error).toBe("No token found");
+        expect(results[0]!.error).toBe("No token found");
       });
     });
 
@@ -1164,7 +1164,7 @@ describe("Usage Fetchers Branch Coverage", () => {
           }),
         );
         const res = await fetchGeminiUsage({}, piAuth);
-        expect(res[0].error).toBeUndefined();
+        expect(res[0]!.error).toBeUndefined();
       });
 
       it("should accept projectId (camelCase) in file creds", async () => {
@@ -1183,14 +1183,14 @@ describe("Usage Fetchers Branch Coverage", () => {
           }),
         );
         const res = await fetchGeminiUsage({}, {});
-        expect(res[0].error).toBeUndefined();
+        expect(res[0]!.error).toBeUndefined();
       });
 
       it("should handle invalid file content gracefully", async () => {
         vi.mocked(fs.promises.access).mockResolvedValue(undefined);
         vi.mocked(fs.promises.readFile).mockResolvedValue("invalid json");
         const res = await fetchGeminiUsage({}, {});
-        expect(res[0].error).toBe("No credentials");
+        expect(res[0]!.error).toBe("No credentials");
       });
     });
 
@@ -1259,7 +1259,7 @@ describe("Usage Fetchers Branch Coverage", () => {
         );
         const res = await fetchAllCodexUsages({}, piAuth);
         expect(res).toHaveLength(1);
-        expect(res[0].account).toBe("acc");
+        expect(res[0]!.account).toBe("acc");
       });
 
       it("should handle file read error in discovery", async () => {
@@ -1270,7 +1270,7 @@ describe("Usage Fetchers Branch Coverage", () => {
         vi.mocked(fs.promises.readFile).mockRejectedValue(new Error("fail"));
 
         const res = await fetchAllCodexUsages({}, {});
-        expect(res[0].error).toBe("No credentials");
+        expect(res[0]!.error).toBe("No credentials");
       });
 
       it("should handle fetch 403 (Forbidden)", async () => {
@@ -1280,7 +1280,7 @@ describe("Usage Fetchers Branch Coverage", () => {
           vi.fn().mockResolvedValue({ ok: false, status: 403 }),
         );
         const res = await fetchAllCodexUsages({}, piAuth);
-        expect(res[0].error).toBe("Permission denied");
+        expect(res[0]!.error).toBe("Permission denied");
       });
 
       it("should handle secondary window logic", async () => {
@@ -1304,7 +1304,7 @@ describe("Usage Fetchers Branch Coverage", () => {
           }),
         );
         const res = await fetchAllCodexUsages({}, piAuth);
-        expect(res[0].windows[0].usedPercent).toBe(90);
+        expect(res[0]!.windows[0]!.usedPercent).toBe(90);
       });
 
       it("should expose both windows when labels differ", async () => {
@@ -1328,8 +1328,8 @@ describe("Usage Fetchers Branch Coverage", () => {
           }),
         );
         const res = await fetchAllCodexUsages({}, piAuth);
-        expect(res[0].windows).toHaveLength(2);
-        expect(res[0].windows.map((w) => w.label)).toEqual(["1w", "1h"]);
+        expect(res[0]!.windows).toHaveLength(2);
+        expect(res[0]!.windows.map((w) => w.label)).toEqual(["1w", "1h"]);
       });
 
       it("should handle same usage percent but later reset", async () => {
@@ -1356,7 +1356,7 @@ describe("Usage Fetchers Branch Coverage", () => {
           }),
         );
         const res = await fetchAllCodexUsages({}, piAuth);
-        expect(res[0].windows[0].resetsAt?.getTime()).toBeGreaterThan(
+        expect(res[0]!.windows[0]!.resetsAt?.getTime()).toBeGreaterThan(
           Date.now() + 150000,
         );
       });
@@ -1375,7 +1375,7 @@ describe("Usage Fetchers Branch Coverage", () => {
           },
         );
         const res = await fetchKiroUsage();
-        expect(res.windows[0].usedPercent).toBe(60);
+        expect(res.windows[0]!.usedPercent).toBe(60);
       });
 
       it("should handle 'Credits' percentage format", async () => {
@@ -1390,7 +1390,7 @@ describe("Usage Fetchers Branch Coverage", () => {
           },
         );
         const res = await fetchKiroUsage();
-        expect(res.windows[0].usedPercent).toBe(90);
+        expect(res.windows[0]!.usedPercent).toBe(90);
       });
 
       it("should handle ambiguous dates favoring future", async () => {
@@ -1406,7 +1406,7 @@ describe("Usage Fetchers Branch Coverage", () => {
           },
         );
         const res = await fetchKiroUsage();
-        expect(res.windows[0].resetsAt).toBeDefined();
+        expect(res.windows[0]!.resetsAt).toBeDefined();
       });
 
       it("should handle dates in the past (assume next year)", async () => {
@@ -1426,7 +1426,7 @@ describe("Usage Fetchers Branch Coverage", () => {
         vi.setSystemTime(new Date(2025, 1, 1)); // Feb 1 2025
 
         const res = await fetchKiroUsage();
-        const reset = res.windows[0].resetsAt;
+        const reset = res.windows[0]!.resetsAt;
         expect(reset?.getFullYear()).toBe(2026);
 
         vi.useRealTimers();
@@ -1451,7 +1451,7 @@ describe("Usage Fetchers Branch Coverage", () => {
           }),
         );
         const res = await fetchZaiUsage({ "z-ai": { access: "k" } });
-        expect(res.windows[0].label).toBe("Tokens (10m)");
+        expect(res.windows[0]!.label).toBe("Tokens (10m)");
       });
 
       it("should ignore unknown limit types", async () => {

@@ -64,9 +64,9 @@ describe("Config Reserve Validation", () => {
     const config = await loadConfig(mockCtx);
     expect(config).not.toBeNull();
     expect(config?.mappings).toHaveLength(3);
-    expect(config?.mappings[0].reserve).toBe(0);
-    expect(config?.mappings[1].reserve).toBe(20);
-    expect(config?.mappings[2].reserve).toBe(99);
+    expect(config?.mappings[0]?.reserve).toBe(0);
+    expect(config?.mappings[1]?.reserve).toBe(20);
+    expect(config?.mappings[2]?.reserve).toBe(99);
   });
 
   it("should reject negative reserve values", async () => {
@@ -168,6 +168,6 @@ describe("Config Reserve Validation", () => {
     };
 
     upsertMapping(raw, mapping);
-    expect((raw.mappings as MappingEntry[])[0].reserve).toBe(25);
+    expect((raw.mappings as MappingEntry[])[0]!.reserve).toBe(25);
   });
 });

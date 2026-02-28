@@ -105,6 +105,7 @@ describe("Wizard Settings", () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(configMod.loadConfig).not.toHaveBeenCalled();
@@ -129,6 +130,7 @@ describe("Wizard Settings", () => {
     });
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(configMod.updateWidgetConfig).toHaveBeenCalledWith(
@@ -152,6 +154,7 @@ describe("Wizard Settings", () => {
       .mockResolvedValueOnce("Done");
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(configMod.updateWidgetConfig).toHaveBeenCalledWith(
@@ -172,6 +175,7 @@ describe("Wizard Settings", () => {
       .mockResolvedValueOnce("Done");
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(configMod.updateWidgetConfig).toHaveBeenCalledWith(
@@ -192,6 +196,7 @@ describe("Wizard Settings", () => {
       .mockResolvedValueOnce("Done");
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(configMod.updateWidgetConfig).toHaveBeenCalledWith(
@@ -214,6 +219,7 @@ describe("Wizard Settings", () => {
       .mockResolvedValueOnce("Done");
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(configMod.saveConfigFile).toHaveBeenCalledWith(
@@ -236,6 +242,7 @@ describe("Wizard Settings", () => {
       .mockResolvedValueOnce("Done");
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(configMod.saveConfigFile).toHaveBeenCalledWith(
@@ -270,6 +277,7 @@ describe("Wizard Settings", () => {
     ctx.ui.input.mockResolvedValueOnce("logs/selector.log");
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(configMod.saveConfigFile).toHaveBeenCalledWith(
@@ -305,6 +313,7 @@ describe("Wizard Settings", () => {
       .mockResolvedValueOnce("Done");
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(configMod.saveConfigFile).toHaveBeenCalledWith(
@@ -345,6 +354,7 @@ describe("Wizard Settings", () => {
       .mockResolvedValueOnce("Done");
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(configMod.saveConfigFile).toHaveBeenCalledWith(

@@ -177,6 +177,7 @@ describe("mapping wizard removal", () => {
     mockWizardSelectionFlow("Stop ignoring");
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(configMod.removeMapping).toHaveBeenCalledTimes(1);
@@ -234,6 +235,7 @@ describe("mapping wizard removal", () => {
     mockWizardSelectionFlow("Remove mapping");
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(configMod.removeMapping).toHaveBeenCalledTimes(1);

@@ -42,9 +42,9 @@ describe("fetchAllUsages fallback branches", () => {
       const results = await fetchAllUsages({}, disabledProviders);
 
       expect(results).toHaveLength(1);
-      expect(results[0].displayName).toBe("zai");
+      expect(results[0]!.displayName).toBe("zai");
     } finally {
-      PROVIDER_DISPLAY_NAMES.zai = originalName;
+      PROVIDER_DISPLAY_NAMES.zai = originalName!;
       setTimeoutSpy.mockRestore();
     }
   });

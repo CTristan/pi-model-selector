@@ -141,6 +141,7 @@ describe("mapping wizard provider configuration", () => {
     });
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(configMod.saveConfigFile).toHaveBeenCalledWith(
@@ -193,6 +194,7 @@ describe("mapping wizard provider configuration", () => {
     });
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(configMod.saveConfigFile).toHaveBeenCalledWith(
@@ -236,6 +238,7 @@ describe("mapping wizard provider configuration", () => {
     });
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(configMod.saveConfigFile).toHaveBeenCalledWith(

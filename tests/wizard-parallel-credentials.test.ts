@@ -148,6 +148,7 @@ describe("configureProviders parallel credential checking", () => {
     });
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     expect(ctx.ui.notify).toHaveBeenCalledWith(
@@ -202,6 +203,7 @@ describe("configureProviders parallel credential checking", () => {
     });
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
     // Verify saveConfigFile was called (provider was toggled)
@@ -247,6 +249,7 @@ describe("configureProviders parallel credential checking", () => {
     });
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
   });
 
@@ -282,6 +285,7 @@ describe("configureProviders parallel credential checking", () => {
     });
 
     const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
   });
 });

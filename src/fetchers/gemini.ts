@@ -392,7 +392,8 @@ export async function fetchGeminiUsage(
 
                 if (!family) family = "Other";
 
-                if (families[family] === undefined || frac < families[family]) {
+                const existingFamily = families[family];
+                if (existingFamily === undefined || frac < existingFamily) {
                   families[family] = frac;
                 }
               }

@@ -61,8 +61,8 @@ describe("Copilot Token Fetch Isolation & Uniqueness", () => {
     // One failed (t1), one succeeded (t2 -> user2).
     // The failure from t1 is suppressed because user2 succeeded and t1 is anonymous (registry).
     expect(results).toHaveLength(1);
-    expect(results[0].account).toBe("user2");
-    expect(results[0].error).toBeUndefined();
+    expect(results[0]!.account).toBe("user2");
+    expect(results[0]!.error).toBeUndefined();
   });
 
   it("should use unique identifiers for fallback accounts", async () => {
@@ -92,7 +92,7 @@ describe("Copilot Token Fetch Isolation & Uniqueness", () => {
 
     // Both are 304 (success-ish), so they should both be included as long as they have unique accounts
     expect(results).toHaveLength(2);
-    expect(results[0].account).not.toBe(results[1].account);
+    expect(results[0]!.account).not.toBe(results[1]!.account);
   });
 
   it("should suppress errors if at least one successful snapshot is found", async () => {
@@ -135,8 +135,8 @@ describe("Copilot Token Fetch Isolation & Uniqueness", () => {
     // One failed (t1 -> 401), one succeeded (t2 -> user2).
     // The failure from t1 is suppressed because user2 succeeded.
     expect(results).toHaveLength(1);
-    expect(results[0].account).toBe("user2");
-    expect(results[0].error).toBeUndefined();
+    expect(results[0]!.account).toBe("user2");
+    expect(results[0]!.error).toBeUndefined();
   });
 
   it("should handle null modelRegistry gracefully", async () => {
@@ -146,6 +146,6 @@ describe("Copilot Token Fetch Isolation & Uniqueness", () => {
 
     // Should not throw, should return "No token found" snapshot if no other tokens
     expect(results).toHaveLength(1);
-    expect(results[0].error).toBe("No token found");
+    expect(results[0]!.error).toBe("No token found");
   });
 });

@@ -39,8 +39,8 @@ describe("Wizard Logic", () => {
     const combinedCandidates = combineCandidates(rawCandidates, mappings);
 
     expect(combinedCandidates.length).toBe(1);
-    expect(combinedCandidates[0].windowLabel).toBe("MyGroup");
-    expect(combinedCandidates[0].isSynthetic).toBe(true);
+    expect(combinedCandidates[0]!.windowLabel).toBe("MyGroup");
+    expect(combinedCandidates[0]!.isSynthetic).toBe(true);
 
     const merged = dedupeCandidates([...rawCandidates, ...combinedCandidates]);
 

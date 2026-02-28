@@ -154,7 +154,9 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 
       const priorityIndex = priorityLabels.indexOf(priorityChoice);
       if (priorityIndex < 0) return;
-      const selectedPriority = priorityOptions[priorityIndex].value,
+      const priorityOption = priorityOptions[priorityIndex];
+      if (!priorityOption) return;
+      const selectedPriority = priorityOption.value,
         priorityLocation = await selectWrapped(
           ctx,
           "Save priority to",
@@ -230,6 +232,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         const selectedIndex = optionLabels.indexOf(selectedLabel);
         if (selectedIndex < 0) return;
         const selectedCandidate = sortedCandidates[selectedIndex];
+        if (!selectedCandidate) return;
 
         // Ask which config file (Global / Project) the user wants to modify first
         const locationChoice = await selectWrapped(
@@ -470,7 +473,9 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 
           const modelIndex = modelLabels.indexOf(modelChoice);
           if (modelIndex < 0) return;
-          selectedModel = availableModels[modelIndex];
+          const model = availableModels[modelIndex];
+          if (!model) return;
+          selectedModel = model;
 
           // Ask for reserve threshold
           const reserveChoice = await selectWrapped(
@@ -488,7 +493,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 
             const reserveValue = Number(reserveInput.trim());
             if (
-              isNaN(reserveValue) ||
+              Number.isNaN(reserveValue) ||
               !Number.isInteger(reserveValue) ||
               reserveValue < 0 ||
               reserveValue >= 100
@@ -1116,6 +1121,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
       const modelIndex = modelLabels.indexOf(modelChoice);
       if (modelIndex < 0) return;
       const selectedModel = availableModels[modelIndex];
+      if (!selectedModel) return;
 
       const lockChoice = await selectWrapped(
         ctx,

@@ -73,7 +73,7 @@ describe("Config Loading", () => {
     const config = await loadConfig(mockCtx);
 
     expect(config).not.toBeNull();
-    expect(config?.mappings[0].model?.id).toBe("project-sonnet");
+    expect(config?.mappings[0]?.model?.id).toBe("project-sonnet");
     expect(config?.widget.enabled).toBe(false);
     expect(config?.autoRun).toBe(true);
   });
@@ -216,7 +216,7 @@ describe("Config Loading", () => {
     expect(fs.promises.writeFile).toHaveBeenCalled();
     // Default mappings length is 11
     expect(config?.mappings).toHaveLength(11);
-    expect(config?.mappings[0].usage.provider).toBe("anthropic");
+    expect(config?.mappings[0]?.usage.provider).toBe("anthropic");
   });
 
   it("should NOT seed global config if file exists but is invalid JSON", async () => {
@@ -418,7 +418,7 @@ describe("Config Mutation", () => {
     };
     upsertMapping(raw, updated);
     expect(raw.mappings).toHaveLength(1);
-    expect((raw.mappings as MappingEntry[])[0].model?.id).toBe("m2");
+    expect((raw.mappings as MappingEntry[])[0]!.model?.id).toBe("m2");
   });
 
   it("should clear exact bucket mappings for both generic and account-specific entries", () => {
@@ -547,7 +547,7 @@ describe("Config Mutation", () => {
     // Only the ignore mapping should have been removed, leaving the model mapping
     const remaining = raw.mappings as MappingEntry[];
     expect(remaining).toHaveLength(1);
-    expect(remaining[0].model).toBeDefined();
-    expect(remaining[0].ignore).not.toBe(true);
+    expect(remaining[0]!.model).toBeDefined();
+    expect(remaining[0]!.ignore).not.toBe(true);
   });
 });

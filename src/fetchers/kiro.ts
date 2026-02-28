@@ -15,7 +15,8 @@ async function whichAsync(cmd: string): Promise<string | null> {
     const isWindows = os.platform() === "win32";
     const whichCmd = isWindows ? `where ${cmd}` : `which ${cmd}`;
     const { stdout } = await execAsync(whichCmd, { encoding: "utf-8" });
-    return stdout.trim().split(/\r?\n/)[0];
+    const lines = stdout.trim().split(/\r?\n/);
+    return lines[0] ?? null;
   } catch {
     return null;
   }
@@ -29,6 +30,8 @@ export function parseSingleKiroResetDate(dateStr: string): Date | undefined {
   const second = parts[1];
   const now = new Date();
   const year = now.getFullYear();
+
+  if (first === undefined || second === undefined) return undefined;
 
   const dateMD = new Date(year, first - 1, second);
   const dateDM = new Date(year, second - 1, first);
@@ -74,12 +77,12 @@ export function parseSingleKiroResetDate(dateStr: string): Date | undefined {
 
   const resetsAt = candidates[0];
 
-  if (resetsAt) {
-    // If we picked a date > 7 days in the past, assume it's actually next year's occurrence
-    // (This handles cases where the CLI shows a fixed day of month that just passed)
-    if (resetsAt.getTime() < now.getTime() - 7 * 24 * 60 * 60 * 1000) {
-      resetsAt.setFullYear(resetsAt.getFullYear() + 1);
-    }
+  if (!resetsAt) return undefined;
+
+  // If we picked a date > 7 days in the past, assume it's actually next year's occurrence
+  // (This handles cases where the CLI shows a fixed day of month that just passed)
+  if (resetsAt.getTime() < now.getTime() - 7 * 24 * 60 * 60 * 1000) {
+    resetsAt.setFullYear(resetsAt.getFullYear() + 1);
   }
 
   return resetsAt;
@@ -107,8 +110,10 @@ export function parseKiroWindows(output: string): RateWindow[] {
   ];
 
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
+    const line = lines[i];
     if (!line) continue;
+    const trimmedLine = line.trim();
+    if (!trimmedLine) continue;
 
     // Reset regex indices for each line to avoid persistence bugs
     combinedRegex.lastIndex = 0;
@@ -118,14 +123,15 @@ export function parseKiroWindows(output: string): RateWindow[] {
     // Keep track of quotas found on this line with their positions
     const quotasWithIndices: Array<{ w: RateWindow; end: number }> = [];
 
-    let match = combinedRegex.exec(line);
+    let match = combinedRegex.exec(trimmedLine);
     while (match !== null) {
       const fullPrefix = match[1] || "";
       const isPct = match[2] !== undefined;
       const keyword = isPct ? match[2] : match[4];
 
       const prefixParts = fullPrefix.split("|");
-      let cleanPrefix = prefixParts[prefixParts.length - 1].trim();
+      const lastPrefixPart = prefixParts[prefixParts.length - 1];
+      let cleanPrefix = lastPrefixPart?.trim() ?? "";
       // Remove residues from previous quotas on the same line
       cleanPrefix = cleanPrefix
         .replace(/resets\s+on\s+\b\d{1,2}\/\d{1,2}\b\s*/gi, "")
@@ -147,7 +153,7 @@ export function parseKiroWindows(output: string): RateWindow[] {
       }
 
       if (ignoreLabels.some((l) => label.toLowerCase().includes(l))) {
-        match = combinedRegex.exec(line);
+        match = combinedRegex.exec(trimmedLine);
         continue;
       }
 
@@ -160,17 +166,24 @@ export function parseKiroWindows(output: string): RateWindow[] {
 
       let usedPercent = 0;
       if (isPct) {
-        const val = parseInt(match[3], 10);
-        usedPercent = isRemaining ? 100 - val : val;
+        const valStr = match[3];
+        if (valStr !== undefined) {
+          const val = parseInt(valStr, 10);
+          usedPercent = isRemaining ? 100 - val : val;
+        }
       } else {
-        const val1 = parseFloat(match[5]);
-        const total = parseFloat(match[6]);
-        usedPercent =
-          total > 0
-            ? isRemaining
-              ? ((total - val1) / total) * 100
-              : (val1 / total) * 100
-            : 0;
+        const val1Str = match[5];
+        const totalStr = match[6];
+        if (val1Str !== undefined && totalStr !== undefined) {
+          const val1 = parseFloat(val1Str);
+          const total = parseFloat(totalStr);
+          usedPercent =
+            total > 0
+              ? isRemaining
+                ? ((total - val1) / total) * 100
+                : (val1 / total) * 100
+              : 0;
+        }
       }
 
       const window: RateWindow = {
@@ -180,7 +193,7 @@ export function parseKiroWindows(output: string): RateWindow[] {
       if (
         window.label.toLowerCase().includes("bonus") ||
         (window.label.toLowerCase() === "remaining" &&
-          line.toLowerCase().includes("bonus"))
+          trimmedLine.toLowerCase().includes("bonus"))
       ) {
         if (
           /^(?:remaining\s+)?bonus(?:\s+credits)?$/i.test(window.label) ||
@@ -191,51 +204,56 @@ export function parseKiroWindows(output: string): RateWindow[] {
       }
       windows.push(window);
       quotasWithIndices.push({ w: window, end: combinedRegex.lastIndex });
-      match = combinedRegex.exec(line);
+      match = combinedRegex.exec(trimmedLine);
     }
 
     // Sort quotas on this line by their end position to help with assignments
     quotasWithIndices.sort((a, b) => a.end - b.end);
 
     // Reset dates: assign to the most recent quota found before the reset string
-    let resetMatch = resetRegex.exec(line);
+    let resetMatch = resetRegex.exec(trimmedLine);
     while (resetMatch !== null) {
-      const resetsAt = parseSingleKiroResetDate(resetMatch[1]);
-      if (resetsAt) {
-        const target = [...quotasWithIndices]
-          .reverse()
-          .find((q) => q.end <= (resetMatch?.index ?? 0));
-        if (target) {
-          target.w.resetsAt = resetsAt;
-          target.w.resetDescription = formatReset(resetsAt);
-        } else if (windows.length > 0) {
-          // Fallback to the very last window found so far
-          const last = windows[windows.length - 1];
-          if (!last.resetsAt) {
-            last.resetsAt = resetsAt;
-            last.resetDescription = formatReset(resetsAt);
+      const dateStr = resetMatch[1];
+      if (dateStr !== undefined) {
+        const resetsAt = parseSingleKiroResetDate(dateStr);
+        if (resetsAt) {
+          const target = [...quotasWithIndices]
+            .reverse()
+            .find((q) => q.end <= (resetMatch?.index ?? 0));
+          if (target) {
+            target.w.resetsAt = resetsAt;
+            target.w.resetDescription = formatReset(resetsAt);
+          } else if (windows.length > 0) {
+            // Fallback to the very last window found so far
+            const last = windows[windows.length - 1];
+            if (last && !last.resetsAt) {
+              last.resetsAt = resetsAt;
+              last.resetDescription = formatReset(resetsAt);
+            }
           }
         }
       }
-      resetMatch = resetRegex.exec(line);
+      resetMatch = resetRegex.exec(trimmedLine);
     }
 
     // Expiry: assign to the most recent quota found before the expiry string
-    let expiryMatch = expiryRegex.exec(line);
+    let expiryMatch = expiryRegex.exec(trimmedLine);
     while (expiryMatch !== null) {
-      const days = expiryMatch[1];
-      const target = [...quotasWithIndices]
-        .reverse()
-        .find((q) => q.end <= (expiryMatch?.index ?? 0));
-      if (target) {
-        target.w.resetDescription = `${days}d left`;
-      } else if (windows.length > 0) {
-        const last = windows[windows.length - 1];
-        if (!last.resetDescription) {
-          last.resetDescription = `${days}d left`;
+      const daysStr = expiryMatch[1];
+      if (daysStr !== undefined) {
+        const target = [...quotasWithIndices]
+          .reverse()
+          .find((q) => q.end <= (expiryMatch?.index ?? 0));
+        if (target) {
+          target.w.resetDescription = `${daysStr}d left`;
+        } else if (windows.length > 0) {
+          const last = windows[windows.length - 1];
+          if (last && !last.resetDescription) {
+            last.resetDescription = `${daysStr}d left`;
+          }
         }
       }
-      expiryMatch = expiryRegex.exec(line);
+      expiryMatch = expiryRegex.exec(trimmedLine);
     }
   }
 
@@ -252,7 +270,7 @@ export function parseKiroWindows(output: string): RateWindow[] {
       deduped[w.label] = w;
     } else if (existing && !existing.resetDescription && w.resetDescription) {
       existing.resetDescription = w.resetDescription;
-      existing.resetsAt = w.resetsAt;
+      existing.resetsAt = w.resetsAt ?? undefined;
     }
   }
 
@@ -295,7 +313,7 @@ export async function fetchKiroUsage(): Promise<UsageSnapshot> {
 
     let planName = "Kiro";
     const planMatch = stripped.match(/\|\s*(KIRO\s+\w+)/i);
-    if (planMatch) {
+    if (planMatch?.[1]) {
       planName = planMatch[1].trim();
     }
 

@@ -152,32 +152,32 @@ describe("Candidates Branch Coverage", () => {
     ];
 
     it("should match exact account", () => {
-      const m = findModelMapping(candidate, [mappings[0]]);
+      const m = findModelMapping(candidate, [mappings[0]!]);
       expect(m?.model?.id).toBe("exact-acc");
     });
 
     it("should match exact generic", () => {
-      const m = findModelMapping(candidate, [mappings[1]]);
+      const m = findModelMapping(candidate, [mappings[1]!]);
       expect(m?.model?.id).toBe("exact-gen");
     });
 
     it("should match pattern account", () => {
-      const m = findModelMapping(candidate, [mappings[2]]);
+      const m = findModelMapping(candidate, [mappings[2]!]);
       expect(m?.model?.id).toBe("pat-acc");
     });
 
     it("should match pattern generic", () => {
-      const m = findModelMapping(candidate, [mappings[3]]);
+      const m = findModelMapping(candidate, [mappings[3]!]);
       expect(m?.model?.id).toBe("pat-gen");
     });
 
     it("should match catch-all account", () => {
-      const m = findModelMapping(candidate, [mappings[4]]);
+      const m = findModelMapping(candidate, [mappings[4]!]);
       expect(m?.model?.id).toBe("catch-acc");
     });
 
     it("should match catch-all generic", () => {
-      const m = findModelMapping(candidate, [mappings[5]]);
+      const m = findModelMapping(candidate, [mappings[5]!]);
       expect(m?.model?.id).toBe("catch-gen");
     });
 
@@ -215,7 +215,7 @@ describe("Candidates Branch Coverage", () => {
 
       const res = dedupeCandidates([c1, c2]);
       expect(res).toHaveLength(1);
-      expect(res[0].remainingPercent).toBe(90);
+      expect(res[0]!.remainingPercent).toBe(90);
     });
 
     it("should NOT update existing candidate if new one has worse remainingPercent", () => {
@@ -234,7 +234,7 @@ describe("Candidates Branch Coverage", () => {
 
       const res = dedupeCandidates([c1, c2]);
       expect(res).toHaveLength(1);
-      expect(res[0].remainingPercent).toBe(90);
+      expect(res[0]!.remainingPercent).toBe(90);
     });
   });
 });

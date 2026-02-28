@@ -352,7 +352,10 @@ export function combineCandidates(
     if (members.length === 0) continue;
 
     // Whichever one has the least remaining availability
-    let bottleneck = members[0];
+    const firstMember = members[0];
+    if (!firstMember) continue;
+
+    let bottleneck = firstMember;
     for (const m of members) {
       if (m.remainingPercent < bottleneck.remainingPercent) {
         bottleneck = m;

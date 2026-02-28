@@ -64,8 +64,8 @@ describe("Candidate Logic", () => {
       },
     ];
     const res = buildCandidates(usages);
-    expect(res[0].usedPercent).toBe(0);
-    expect(res[1].usedPercent).toBe(100);
+    expect(res[0]!.usedPercent).toBe(0);
+    expect(res[1]!.usedPercent).toBe(100);
     expect(res).toHaveLength(2);
   });
 
@@ -264,7 +264,7 @@ describe("Candidate Logic", () => {
       ];
       const deduped = dedupeCandidates(candidates);
       expect(deduped).toHaveLength(1);
-      expect(deduped[0].remainingPercent).toBe(50);
+      expect(deduped[0]!.remainingPercent).toBe(50);
     });
   });
 

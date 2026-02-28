@@ -153,6 +153,7 @@ describe("Provider Credential Detection", () => {
       });
 
       const runWizard = commands["model-select-config"];
+      if (!runWizard) throw new Error("Command not found: model-select-config");
       await runWizard({}, ctx as unknown as Record<string, unknown>);
 
       expect(ctx.ui.select).toHaveBeenCalled();
@@ -194,6 +195,7 @@ describe("Provider Credential Detection", () => {
       });
 
       const runWizard = commands["model-select-config"];
+      if (!runWizard) throw new Error("Command not found: model-select-config");
       await runWizard({}, ctx as unknown as Record<string, unknown>);
 
       const selectCalls = vi.mocked(ctx.ui.select).mock.calls;
@@ -237,6 +239,7 @@ describe("Provider Credential Detection", () => {
       });
 
       const runWizard = commands["model-select-config"];
+      if (!runWizard) throw new Error("Command not found: model-select-config");
       await runWizard({}, ctx as unknown as Record<string, unknown>);
 
       const selectCalls = vi.mocked(ctx.ui.select).mock.calls;
@@ -276,6 +279,7 @@ describe("Provider Credential Detection", () => {
       });
 
       const runWizard = commands["model-select-config"];
+      if (!runWizard) throw new Error("Command not found: model-select-config");
       await runWizard({}, ctx as unknown as Record<string, unknown>);
 
       const selectCalls = vi.mocked(ctx.ui.select).mock.calls;
@@ -319,6 +323,7 @@ describe("Provider Credential Detection", () => {
       });
 
       const runWizard = commands["model-select-config"];
+      if (!runWizard) throw new Error("Command not found: model-select-config");
       await runWizard({}, ctx as unknown as Record<string, unknown>);
 
       const selectCalls = vi.mocked(ctx.ui.select).mock.calls;
@@ -360,6 +365,7 @@ describe("Provider Credential Detection", () => {
       });
 
       const runWizard = commands["model-select-config"];
+      if (!runWizard) throw new Error("Command not found: model-select-config");
       await runWizard({}, ctx as unknown as Record<string, unknown>);
 
       const selectCalls = vi.mocked(ctx.ui.select).mock.calls;
@@ -398,6 +404,7 @@ describe("Provider Credential Detection", () => {
       });
 
       const runWizard = commands["model-select-config"];
+      if (!runWizard) throw new Error("Command not found: model-select-config");
       await runWizard({}, ctx as unknown as Record<string, unknown>);
 
       const selectCalls = vi.mocked(ctx.ui.select).mock.calls;
@@ -457,6 +464,8 @@ describe("Provider Credential Detection", () => {
         });
 
         const runWizard = commands["model-select-config"];
+        if (!runWizard)
+          throw new Error("Command not found: model-select-config");
         await runWizard({}, ctx as unknown as Record<string, unknown>);
 
         expect(getApiKeyMock).toHaveBeenCalledWith("github-copilot");
@@ -489,6 +498,8 @@ describe("Provider Credential Detection", () => {
         });
 
         const runWizard = commands["model-select-config"];
+        if (!runWizard)
+          throw new Error("Command not found: model-select-config");
         await runWizard({}, ctx as unknown as Record<string, unknown>);
 
         expect(getApiKeyMock).toHaveBeenCalledWith("github");
@@ -523,6 +534,8 @@ describe("Provider Credential Detection", () => {
         });
 
         const runWizard = commands["model-select-config"];
+        if (!runWizard)
+          throw new Error("Command not found: model-select-config");
         await runWizard({}, ctx as unknown as Record<string, unknown>);
 
         expect(getMock).toHaveBeenCalledWith("github-copilot");
@@ -557,6 +570,8 @@ describe("Provider Credential Detection", () => {
         });
 
         const runWizard = commands["model-select-config"];
+        if (!runWizard)
+          throw new Error("Command not found: model-select-config");
         await runWizard({}, ctx as unknown as Record<string, unknown>);
 
         expect(getApiKeyMock).toHaveBeenCalledWith("google-gemini");
@@ -589,6 +604,8 @@ describe("Provider Credential Detection", () => {
         });
 
         const runWizard = commands["model-select-config"];
+        if (!runWizard)
+          throw new Error("Command not found: model-select-config");
         await runWizard({}, ctx as unknown as Record<string, unknown>);
 
         expect(getApiKeyMock).toHaveBeenCalledWith("google-gemini-cli");
@@ -623,6 +640,8 @@ describe("Provider Credential Detection", () => {
         });
 
         const runWizard = commands["model-select-config"];
+        if (!runWizard)
+          throw new Error("Command not found: model-select-config");
         await runWizard({}, ctx as unknown as Record<string, unknown>);
 
         expect(getMock).toHaveBeenCalledWith("google-gemini");
@@ -657,6 +676,8 @@ describe("Provider Credential Detection", () => {
         });
 
         const runWizard = commands["model-select-config"];
+        if (!runWizard)
+          throw new Error("Command not found: model-select-config");
         await runWizard({}, ctx as unknown as Record<string, unknown>);
 
         expect(getApiKeyMock).toHaveBeenCalledWith("google-antigravity");
@@ -691,6 +712,8 @@ describe("Provider Credential Detection", () => {
         });
 
         const runWizard = commands["model-select-config"];
+        if (!runWizard)
+          throw new Error("Command not found: model-select-config");
         await runWizard({}, ctx as unknown as Record<string, unknown>);
 
         expect(getMock).toHaveBeenCalledWith("google-antigravity");

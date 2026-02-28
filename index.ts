@@ -258,7 +258,10 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
           config.mappings,
         );
         if (ranked.length > 0) {
-          lastSelectedCandidateKey = candidateKey(ranked[0]);
+          const topCandidate = ranked[0];
+          if (topCandidate) {
+            lastSelectedCandidateKey = candidateKey(topCandidate);
+          }
         }
       }
 
