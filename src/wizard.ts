@@ -376,7 +376,17 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
             );
             if (!reserveInput) return;
 
-            const reserveValue = Number(reserveInput.trim());
+            const trimmedReserveInput = reserveInput.trim();
+            if (trimmedReserveInput.length === 0) {
+              notify(
+                ctx,
+                "error",
+                "Invalid reserve value. Must be an integer between 0 and 99.",
+              );
+              return;
+            }
+
+            const reserveValue = Number(trimmedReserveInput);
             if (
               Number.isNaN(reserveValue) ||
               !Number.isInteger(reserveValue) ||

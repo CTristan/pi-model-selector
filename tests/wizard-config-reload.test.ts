@@ -333,4 +333,29 @@ describe("mapping wizard actions", () => {
       "info",
     );
   });
+
+  it("rejects whitespace-only reserve input", async () => {
+    const mapping: MappingEntry = {
+        usage: { provider: "p1", window: "w1" },
+        model: { provider: "p1", id: "m1" },
+        reserve: 40,
+      },
+      initialConfig = baseConfigFor(mapping);
+
+    vi.mocked(configMod.loadConfig).mockResolvedValueOnce(initialConfig);
+    mockReserveChangeFlow("   ");
+
+    const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
+    await runWizard({}, ctx as unknown as Record<string, unknown>);
+
+    const projectMappings = (initialConfig.raw.project.mappings ??
+      []) as Array<MappingEntry>;
+    expect(projectMappings[0]!.reserve).toBe(40);
+    expect(configMod.saveConfigFile).not.toHaveBeenCalled();
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("Invalid reserve value"),
+      "error",
+    );
+  });
 });
