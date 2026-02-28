@@ -43,6 +43,26 @@ import {
   updateWidgetState,
 } from "./widget.js";
 
+const RESERVE_INPUT_ERROR =
+  "Invalid reserve value. Must be an integer between 0 and 99.";
+
+function parseReserveInput(input: string): number | undefined {
+  const trimmedInput = input.trim();
+  if (trimmedInput.length === 0) return undefined;
+
+  const reserveValue = Number(trimmedInput);
+  if (
+    Number.isNaN(reserveValue) ||
+    !Number.isInteger(reserveValue) ||
+    reserveValue < 0 ||
+    reserveValue >= 100
+  ) {
+    return undefined;
+  }
+
+  return reserveValue;
+}
+
 async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
   if (!ctx.hasUI) {
     notify(
@@ -376,31 +396,12 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
             );
             if (!reserveInput) return;
 
-            const trimmedReserveInput = reserveInput.trim();
-            if (trimmedReserveInput.length === 0) {
-              notify(
-                ctx,
-                "error",
-                "Invalid reserve value. Must be an integer between 0 and 99.",
-              );
+            const parsedReserve = parseReserveInput(reserveInput);
+            if (parsedReserve === undefined) {
+              notify(ctx, "error", RESERVE_INPUT_ERROR);
               return;
             }
-
-            const reserveValue = Number(trimmedReserveInput);
-            if (
-              Number.isNaN(reserveValue) ||
-              !Number.isInteger(reserveValue) ||
-              reserveValue < 0 ||
-              reserveValue >= 100
-            ) {
-              notify(
-                ctx,
-                "error",
-                "Invalid reserve value. Must be an integer between 0 and 99.",
-              );
-              return;
-            }
-            newReserve = reserveValue;
+            newReserve = parsedReserve;
           }
 
           try {
@@ -607,21 +608,12 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
             );
             if (!reserveInput) return;
 
-            const reserveValue = Number(reserveInput.trim());
-            if (
-              Number.isNaN(reserveValue) ||
-              !Number.isInteger(reserveValue) ||
-              reserveValue < 0 ||
-              reserveValue >= 100
-            ) {
-              notify(
-                ctx,
-                "error",
-                "Invalid reserve value. Must be an integer between 0 and 99.",
-              );
+            const parsedReserve = parseReserveInput(reserveInput);
+            if (parsedReserve === undefined) {
+              notify(ctx, "error", RESERVE_INPUT_ERROR);
               return;
             }
-            selectedReserve = reserveValue;
+            selectedReserve = parsedReserve;
           }
         }
 

@@ -10,14 +10,8 @@ interface CodexCredential {
   source: string;
 }
 
-function getPiCodexAuths(
-  piAuth: Record<string, unknown>,
-): Array<{ accessToken: string; accountId?: string; source: string }> {
-  const results: Array<{
-    accessToken: string;
-    accountId?: string;
-    source: string;
-  }> = [];
+function getPiCodexAuths(piAuth: Record<string, unknown>): CodexCredential[] {
+  const results: CodexCredential[] = [];
 
   try {
     const codexKeys = Object.keys(piAuth)
@@ -50,19 +44,13 @@ function getPiCodexAuths(
           key === "openai-codex"
             ? "pi"
             : `pi:${key.replace("openai-codex-", "")}`;
-        const result = { accessToken, source: label };
+        const result: CodexCredential = { accessToken, source: label };
+
         if (accountId !== undefined) {
-          (
-            result as {
-              accessToken: string;
-              accountId?: string;
-              source: string;
-            }
-          ).accountId = accountId;
+          result.accountId = accountId;
         }
-        results.push(
-          result as { accessToken: string; accountId?: string; source: string },
-        );
+
+        results.push(result);
       }
     }
   } catch {
