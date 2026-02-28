@@ -356,6 +356,12 @@ function normalizeMappings(
         );
         continue;
       }
+      if (!Number.isInteger(item.reserve)) {
+        errors.push(
+          `[${sourceLabel}] mapping.reserve must be an integer (got ${item.reserve})`,
+        );
+        continue;
+      }
       if (item.reserve < 0 || item.reserve >= 100) {
         errors.push(
           `[${sourceLabel}] mapping.reserve must be >= 0 and < 100 (got ${item.reserve})`,

@@ -383,14 +383,16 @@ async function handleExhaustedCandidates(
 
   if (!config.fallback) {
     // Distinguish between exhausted (0%) and below reserve (>0% but below threshold)
-    const anyBelowReserve = candidates.some(
-      (c) =>
-        c.remainingPercent > 0 &&
-        c.remainingPercent <= getReserveThreshold(c, config.mappings),
-    );
     const allExhausted = candidates.every((c) => c.remainingPercent === 0);
 
-    if (anyBelowReserve && !allExhausted) {
+    if (
+      !allExhausted &&
+      candidates.some(
+        (c) =>
+          c.remainingPercent > 0 &&
+          c.remainingPercent <= getReserveThreshold(c, config.mappings),
+      )
+    ) {
       notify(
         ctx,
         "error",
@@ -405,6 +407,9 @@ async function handleExhaustedCandidates(
     }
     return false;
   }
+
+  // Distinguish between exhausted (0%) and below reserve (>0% but below threshold)
+  const allExhausted = candidates.every((c) => c.remainingPercent === 0);
 
   writeDebugLog("All candidates exhausted, attempting fallback model");
   const fallbackModel = ctx.modelRegistry.find(
@@ -485,7 +490,7 @@ async function handleExhaustedCandidates(
   notify(
     ctx,
     "info",
-    `Set model to ${config.fallback.provider}/${config.fallback.id} (last-resort fallback; all quota-tracked models exhausted)`,
+    `Set model to ${config.fallback.provider}/${config.fallback.id} (last-resort fallback; all quota-tracked models ${allExhausted ? "exhausted (0% remaining)" : "at or below reserve thresholds"})`,
   );
 
   // Set a synthetic candidate key to avoid confusing cooldown state

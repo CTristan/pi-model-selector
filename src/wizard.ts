@@ -205,7 +205,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
             mappingLabel = ignored
               ? "ignored"
               : mapping
-                ? `mapped: ${mapping.model?.provider}/${mapping.model?.id}${mapping.reserve !== undefined ? ` (reserve: ${mapping.reserve}%)` : ""}`
+                ? `mapped: ${mapping.model?.provider}/${mapping.model?.id}${(mapping.reserve ?? 0) > 0 ? ` (reserve: ${mapping.reserve}%)` : ""}`
                 : combination
                   ? `combined: ${combination.combine}`
                   : "unmapped";
@@ -479,16 +479,17 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
             );
             if (!reserveInput) return;
 
-            const reserveValue = parseInt(reserveInput, 10);
+            const reserveValue = Number(reserveInput.trim());
             if (
               isNaN(reserveValue) ||
+              !Number.isInteger(reserveValue) ||
               reserveValue < 0 ||
               reserveValue >= 100
             ) {
               notify(
                 ctx,
                 "error",
-                "Invalid reserve value. Must be a number between 0 and 99.",
+                "Invalid reserve value. Must be an integer between 0 and 99.",
               );
               return;
             }
