@@ -179,7 +179,11 @@ export async function fetchCopilotUsage(
           const d = data as CopilotTokenResponse | undefined;
           if (res.ok && d?.token) {
             writeDebugLog("fetchCopilotUsage: exchange successful");
-            return { token: d.token, sku: d.sku };
+            const result: { token: string; sku?: string } = { token: d.token };
+            if (d.sku !== undefined) {
+              result.sku = d.sku;
+            }
+            return result;
           } else if (res) {
             writeDebugLog(`fetchCopilotUsage: exchange failed: ${res.status}`);
           }
@@ -255,7 +259,7 @@ export async function fetchCopilotUsage(
             if (cachedData) {
               data = cachedData;
             } else {
-              return {
+              const result: UsageSnapshot = {
                 provider: "copilot",
                 displayName: "Copilot",
                 windows: [
@@ -265,9 +269,12 @@ export async function fetchCopilotUsage(
                     resetDescription: "Active (cached)",
                   },
                 ],
-                plan: skuFound,
                 account: `304-fallback:${sourceLabel}`,
               };
+              if (skuFound !== undefined) {
+                result.plan = skuFound;
+              }
+              return result;
             }
           }
 
@@ -301,14 +308,17 @@ export async function fetchCopilotUsage(
                 );
               }
 
-              windows.push({
+              const window: RateWindow = {
                 label: "Premium",
                 usedPercent,
                 resetDescription: resetDesc
                   ? `${resetDesc} (${remaining}/${entitlement})`
                   : `${remaining}/${entitlement}`,
-                resetsAt: resetDate,
-              });
+              };
+              if (resetDate) {
+                window.resetsAt = resetDate;
+              }
+              windows.push(window);
             }
 
             if (d.quota_snapshots?.chat && !d.quota_snapshots.chat.unlimited) {
@@ -326,12 +336,17 @@ export async function fetchCopilotUsage(
                   100 - (chat.remaining / chat.entitlement) * 100,
                 );
               }
-              windows.push({
+              const window: RateWindow = {
                 label: "Chat",
                 usedPercent,
-                resetDescription: resetDesc,
-                resetsAt: resetDate,
-              });
+                ...(resetDesc !== undefined
+                  ? { resetDescription: resetDesc }
+                  : {}),
+              };
+              if (resetDate) {
+                window.resetsAt = resetDate;
+              }
+              windows.push(window);
             }
 
             if (windows.length === 0) {
@@ -342,13 +357,17 @@ export async function fetchCopilotUsage(
               });
             }
 
-            return {
+            const result: UsageSnapshot = {
               provider: "copilot",
               displayName: "Copilot",
               windows,
-              plan: d.copilot_plan || skuFound,
               account: d.login || sourceLabel,
             };
+            const planValue = d.copilot_plan || skuFound;
+            if (planValue !== undefined) {
+              result.plan = planValue;
+            }
+            return result;
           }
 
           if (skuFound) {

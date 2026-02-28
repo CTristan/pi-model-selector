@@ -281,6 +281,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         if (hasIgnoreInTarget) actionOptions.push("Stop ignoring");
         if (hasCombinationInTarget) actionOptions.push("Stop combining");
         if (isSynthetic) actionOptions.push("Dissolve combination");
+        if (hasModelInTarget) actionOptions.push("Change reserve");
         if (hasIgnoreInTarget || hasModelInTarget || hasCombinationInTarget)
           actionOptions.push("Remove mapping");
 
@@ -353,6 +354,111 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
             "Do you want to modify another usage bucket?",
           );
           if (!addMoreAfterDissolve) continueMapping = false;
+          continue;
+        }
+
+        if (actionChoice === "Change reserve") {
+          const currentReserve = matchedModelInTarget?.reserve ?? 0;
+          const currentReserveText =
+            currentReserve > 0 ? `${currentReserve}%` : "none (0)";
+
+          const reserveChoice = await selectWrapped(
+            ctx,
+            `Set reserve for ${matchedModelInTarget?.model?.provider}/${matchedModelInTarget?.model?.id} (current: ${currentReserveText})`,
+            ["No reserve (0)", "Set reserve"],
+          );
+          if (!reserveChoice) return;
+
+          let newReserve: number | undefined;
+          if (reserveChoice === "Set reserve") {
+            const reserveInput = await ctx.ui.input(
+              "Enter reserve percentage (0-99, e.g., 20 means always keep at least 20% available)",
+            );
+            if (!reserveInput) return;
+
+            const reserveValue = Number(reserveInput.trim());
+            if (
+              Number.isNaN(reserveValue) ||
+              !Number.isInteger(reserveValue) ||
+              reserveValue < 0 ||
+              reserveValue >= 100
+            ) {
+              notify(
+                ctx,
+                "error",
+                "Invalid reserve value. Must be an integer between 0 and 99.",
+              );
+              return;
+            }
+            newReserve = reserveValue;
+          }
+
+          try {
+            const existing = Array.isArray(targetRaw.mappings)
+                ? targetRaw.mappings
+                : [],
+              targetEntries: MappingEntry[] = [];
+
+            for (const entry of existing) {
+              if (!entry || typeof entry !== "object") continue;
+              const typed = entry as MappingEntry;
+              if (typed.model && !typed.ignore) {
+                targetEntries.push(typed);
+              }
+            }
+
+            const mappingToUpdate = findModelMapping(
+              selectedCandidate,
+              targetEntries,
+            );
+
+            if (!mappingToUpdate || !mappingToUpdate.model) {
+              notify(
+                ctx,
+                "warning",
+                `No matching model mapping found in ${targetPath}. Reserve was not changed.`,
+              );
+            } else {
+              if (newReserve !== undefined && newReserve > 0) {
+                mappingToUpdate.reserve = newReserve;
+              } else {
+                delete mappingToUpdate.reserve;
+              }
+
+              await saveConfigFile(targetPath, targetRaw);
+
+              const reloaded = await loadConfig(ctx, {
+                requireMappings: false,
+              });
+              if (reloaded) {
+                config.mappings = reloaded.mappings;
+                cachedUsages = null;
+              }
+
+              const newReserveText =
+                newReserve !== undefined && newReserve > 0
+                  ? `${newReserve}%`
+                  : "none (0)";
+              notify(
+                ctx,
+                "info",
+                `Reserve updated to ${newReserveText} for ${mappingToUpdate.model.provider}/${mappingToUpdate.model.id}.`,
+              );
+            }
+          } catch (error: unknown) {
+            notify(
+              ctx,
+              "error",
+              `Failed to write ${targetPath}: ${String(error)}`,
+            );
+            return;
+          }
+
+          const addMoreAfterReserve = await ctx.ui.confirm(
+            "Modify another mapping?",
+            "Do you want to modify another usage bucket?",
+          );
+          if (!addMoreAfterReserve) continueMapping = false;
           continue;
         }
 
@@ -554,12 +660,18 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         }
 
         // Build the usage descriptor for this candidate/pattern
-        const usageDesc = {
+        const usageDesc: MappingEntry["usage"] = {
           provider: selectedCandidate.provider,
-          account: selectedCandidate.account,
-          window: pattern ? undefined : selectedCandidate.windowLabel,
-          windowPattern: pattern,
-        } as MappingEntry["usage"];
+        };
+
+        if (selectedCandidate.account !== undefined) {
+          usageDesc.account = selectedCandidate.account;
+        }
+        if (pattern) {
+          usageDesc.windowPattern = pattern;
+        } else {
+          usageDesc.window = selectedCandidate.windowLabel;
+        }
 
         let mappingEntry: MappingEntry;
         if (
@@ -592,7 +704,9 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         try {
           clearBucketMappings(targetRaw, {
             provider: selectedCandidate.provider,
-            account: selectedCandidate.account,
+            ...(selectedCandidate.account !== undefined
+              ? { account: selectedCandidate.account }
+              : {}),
             window: selectedCandidate.windowLabel,
           });
 
@@ -755,7 +869,11 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
       // Reload config to apply path resolution
       const reloaded = await loadConfig(ctx, { requireMappings: false });
       if (reloaded) {
-        config.debugLog = reloaded.debugLog;
+        if (reloaded.debugLog) {
+          config.debugLog = reloaded.debugLog;
+        } else {
+          delete config.debugLog;
+        }
         setGlobalConfig(reloaded);
       }
 
@@ -938,25 +1056,28 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         }
       }
 
+      const modelExists =
+        availableModelKeys !== null
+          ? (provider: string, id: string) =>
+              availableModelKeys.has(`${provider}\u0000${id}`)
+          : modelFinder
+            ? (provider: string, id: string) => {
+                try {
+                  return Boolean(modelFinder(provider, id));
+                } catch (error) {
+                  writeDebugLog(
+                    `Error while checking model existence for ${provider}/${id}: ${String(
+                      error,
+                    )}`,
+                  );
+                  throw error;
+                }
+              }
+            : undefined;
+
       const cleanupResult = cleanupConfigRaw(candidateRaw, {
         scope: saveToProject ? "project" : "global",
-        modelExists:
-          availableModelKeys !== null
-            ? (provider, id) => availableModelKeys.has(`${provider}\u0000${id}`)
-            : modelFinder
-              ? (provider, id) => {
-                  try {
-                    return Boolean(modelFinder(provider, id));
-                  } catch (error) {
-                    writeDebugLog(
-                      `Error while checking model existence for ${provider}/${id}: ${String(
-                        error,
-                      )}`,
-                    );
-                    throw error;
-                  }
-                }
-              : undefined,
+        ...(modelExists ? { modelExists } : {}),
       });
 
       const cleanupSummary = [...cleanupResult.summary],
@@ -1042,7 +1163,11 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         config.widget = reloaded.widget;
         config.autoRun = reloaded.autoRun;
         config.disabledProviders = reloaded.disabledProviders;
-        config.debugLog = reloaded.debugLog;
+        if (reloaded.debugLog) {
+          config.debugLog = reloaded.debugLog;
+        } else {
+          delete config.debugLog;
+        }
         config.raw = reloaded.raw;
       }
 
@@ -1100,7 +1225,11 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 
         const reloaded = await loadConfig(ctx, { requireMappings: false });
         if (reloaded) {
-          config.fallback = reloaded.fallback;
+          if (reloaded.fallback) {
+            config.fallback = reloaded.fallback;
+          } else {
+            delete config.fallback;
+          }
         }
 
         notify(ctx, "info", "Fallback model cleared.");
@@ -1159,7 +1288,11 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 
       const reloaded = await loadConfig(ctx, { requireMappings: false });
       if (reloaded) {
-        config.fallback = reloaded.fallback;
+        if (reloaded.fallback) {
+          config.fallback = reloaded.fallback;
+        } else {
+          delete config.fallback;
+        }
       }
 
       notify(

@@ -270,7 +270,9 @@ export function parseKiroWindows(output: string): RateWindow[] {
       deduped[w.label] = w;
     } else if (existing && !existing.resetDescription && w.resetDescription) {
       existing.resetDescription = w.resetDescription;
-      existing.resetsAt = w.resetsAt ?? undefined;
+      if (w.resetsAt) {
+        existing.resetsAt = w.resetsAt;
+      }
     }
   }
 

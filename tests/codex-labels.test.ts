@@ -89,4 +89,100 @@ describe("Codex Window Labels", () => {
     );
     expect(res403[0]!.error).toBe("Permission denied");
   });
+
+  it("should sort windows without reset times by usedPercent then label", async () => {
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () =>
+        Promise.resolve({
+          rate_limit: {
+            primary_window: {
+              used_percent: 30,
+              limit_window_seconds: 86400,
+              // No reset_at - tests ternary operator branch
+            },
+            secondary_window: {
+              used_percent: 50,
+              limit_window_seconds: 3600,
+              // No reset_at - tests ternary operator branch
+            },
+          },
+        }),
+    } as unknown as Response);
+
+    const results = await fetchAllCodexUsages(
+      {},
+      { "openai-codex": { access: "tok" } },
+    );
+    expect(results[0]!.windows).toHaveLength(2);
+    // Should be sorted by usedPercent descending
+    expect(results[0]!.windows[0]!.usedPercent).toBe(50);
+    expect(results[0]!.windows[1]!.usedPercent).toBe(30);
+  });
+
+  it("should sort windows with equal reset times by usedPercent then label", async () => {
+    const baseTime = Date.now();
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () =>
+        Promise.resolve({
+          rate_limit: {
+            primary_window: {
+              used_percent: 30,
+              limit_window_seconds: 86400,
+              reset_at: baseTime / 1000,
+            },
+            secondary_window: {
+              used_percent: 30,
+              limit_window_seconds: 3600,
+              reset_at: baseTime / 1000, // Same reset time
+            },
+          },
+        }),
+    } as unknown as Response);
+
+    const results = await fetchAllCodexUsages(
+      {},
+      { "openai-codex": { access: "tok" } },
+    );
+    expect(results[0]!.windows).toHaveLength(2);
+    // When usedPercent and reset time are equal, sort by label
+    // "1d" should come before "1h" alphabetically
+    expect(results[0]!.windows[0]!.label).toBe("1d");
+    expect(results[0]!.windows[1]!.label).toBe("1h");
+  });
+
+  it("should sort windows with one having reset time and one without", async () => {
+    const baseTime = Date.now();
+    vi.mocked(fetch).mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () =>
+        Promise.resolve({
+          rate_limit: {
+            primary_window: {
+              used_percent: 30,
+              limit_window_seconds: 86400,
+              // No reset_at
+            },
+            secondary_window: {
+              used_percent: 30,
+              limit_window_seconds: 3600,
+              reset_at: baseTime / 1000,
+            },
+          },
+        }),
+    } as unknown as Response);
+
+    const results = await fetchAllCodexUsages(
+      {},
+      { "openai-codex": { access: "tok" } },
+    );
+    expect(results[0]!.windows).toHaveLength(2);
+    // When usedPercent is equal, window with reset time should come first
+    expect(results[0]!.windows[0]!.resetsAt).toBeDefined();
+    expect(results[0]!.windows[1]!.resetsAt).toBeUndefined();
+  });
 });

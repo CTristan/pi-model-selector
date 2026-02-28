@@ -74,15 +74,19 @@ describe("Candidate Logic", () => {
     const a: UsageCandidate = {
       remainingPercent: 100,
       resetsAt: undefined,
-    } as UsageCandidate;
+    } as unknown as UsageCandidate;
     const b: UsageCandidate = {
       remainingPercent: 50,
       resetsAt: undefined,
-    } as UsageCandidate;
+    } as unknown as UsageCandidate;
 
     // availability diff branch
-    const a0: UsageCandidate = { remainingPercent: 0 } as UsageCandidate;
-    const b50: UsageCandidate = { remainingPercent: 50 } as UsageCandidate;
+    const a0: UsageCandidate = {
+      remainingPercent: 0,
+    } as unknown as UsageCandidate;
+    const b50: UsageCandidate = {
+      remainingPercent: 50,
+    } as unknown as UsageCandidate;
     expect(compareCandidates(a0, b50, [], []).diff).toBeLessThan(0);
 
     // remainingPercent branch
@@ -91,8 +95,12 @@ describe("Candidate Logic", () => {
     ).toBeGreaterThan(0);
 
     // fullAvailability branch
-    const aFull: UsageCandidate = { remainingPercent: 100 } as UsageCandidate;
-    const bNotFull: UsageCandidate = { remainingPercent: 99 } as UsageCandidate;
+    const aFull: UsageCandidate = {
+      remainingPercent: 100,
+    } as unknown as UsageCandidate;
+    const bNotFull: UsageCandidate = {
+      remainingPercent: 99,
+    } as unknown as UsageCandidate;
     expect(
       compareCandidates(aFull, bNotFull, ["fullAvailability"], []).diff,
     ).toBeGreaterThan(0);
@@ -101,15 +109,15 @@ describe("Candidate Logic", () => {
     const aReset: UsageCandidate = {
       remainingPercent: 50,
       resetsAt: new Date(now.getTime() + 10000),
-    } as UsageCandidate;
+    } as unknown as UsageCandidate;
     const bReset: UsageCandidate = {
       remainingPercent: 50,
       resetsAt: new Date(now.getTime() + 1000),
-    } as UsageCandidate;
+    } as unknown as UsageCandidate;
     const cNoReset: UsageCandidate = {
       remainingPercent: 50,
       resetsAt: undefined,
-    } as UsageCandidate;
+    } as unknown as UsageCandidate;
 
     expect(
       compareCandidates(aReset, bReset, ["earliestReset"], []).diff,

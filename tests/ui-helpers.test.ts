@@ -15,17 +15,17 @@ describe("UI Helpers", () => {
     });
 
     it("returns true when both window and windowPattern are undefined", () => {
-      const usage = { window: undefined, windowPattern: undefined };
+      const usage = {};
       expect(isCatchAllIgnoreMapping(usage)).toBe(true);
     });
 
     it("returns true when window is empty string and windowPattern is undefined", () => {
-      const usage = { window: "", windowPattern: undefined };
+      const usage = { window: "" };
       expect(isCatchAllIgnoreMapping(usage)).toBe(true);
     });
 
     it("returns false when window is specified and windowPattern is undefined", () => {
-      const usage = { window: "Sonnet", windowPattern: undefined };
+      const usage = { window: "Sonnet" };
       expect(isCatchAllIgnoreMapping(usage)).toBe(false);
     });
 
@@ -34,7 +34,6 @@ describe("UI Helpers", () => {
       for (const pattern of patterns) {
         expect(
           isCatchAllIgnoreMapping({
-            window: undefined,
             windowPattern: pattern,
           }),
         ).toBe(true);
@@ -42,7 +41,7 @@ describe("UI Helpers", () => {
     });
 
     it("returns false when windowPattern is a specific pattern", () => {
-      const usage = { window: undefined, windowPattern: "^Sonnet$" };
+      const usage = { windowPattern: "^Sonnet$" };
       expect(isCatchAllIgnoreMapping(usage)).toBe(false);
     });
 
@@ -62,8 +61,6 @@ describe("UI Helpers", () => {
       {
         usage: {
           provider: "anthropic",
-          account: undefined,
-          windowPattern: undefined,
         },
         ignore: true,
       },
@@ -80,7 +77,6 @@ describe("UI Helpers", () => {
           provider: "copilot",
           account: "account2",
           window: "Chat",
-          windowPattern: undefined,
         },
         ignore: false,
       },
@@ -119,8 +115,6 @@ describe("UI Helpers", () => {
         {
           usage: {
             provider: "test",
-            window: undefined,
-            windowPattern: undefined,
           },
           ignore: true,
         },
@@ -131,7 +125,7 @@ describe("UI Helpers", () => {
     it("returns true when ignore is true and account is specified in call but not in mapping", () => {
       const mappings2 = [
         {
-          usage: { provider: "test", account: undefined, window: undefined },
+          usage: { provider: "test" },
           ignore: true,
         },
       ];

@@ -112,20 +112,39 @@ function asConfigShape(raw: Record<string, unknown>): {
   debugLog?: unknown;
   disabledProviders?: unknown;
 } {
-  return {
-    mappings: Array.isArray(raw.mappings) ? raw.mappings : undefined,
-    priority: Array.isArray(raw.priority)
-      ? (raw.priority as PriorityRule[])
-      : undefined,
-    widget:
-      raw.widget && typeof raw.widget === "object" ? raw.widget : undefined,
-    autoRun: raw.autoRun,
-    fallback: raw.fallback,
-    debugLog: raw.debugLog,
-    disabledProviders: Array.isArray(raw.disabledProviders)
-      ? raw.disabledProviders
-      : undefined,
-  };
+  const shape: {
+    mappings?: unknown[];
+    priority?: unknown;
+    widget?: unknown;
+    autoRun?: unknown;
+    fallback?: unknown;
+    debugLog?: unknown;
+    disabledProviders?: unknown;
+  } = {};
+
+  if (Array.isArray(raw.mappings)) {
+    shape.mappings = raw.mappings;
+  }
+  if (Array.isArray(raw.priority)) {
+    shape.priority = raw.priority as PriorityRule[];
+  }
+  if (raw.widget && typeof raw.widget === "object") {
+    shape.widget = raw.widget;
+  }
+  if (Object.hasOwn(raw, "autoRun")) {
+    shape.autoRun = raw.autoRun;
+  }
+  if (Object.hasOwn(raw, "fallback")) {
+    shape.fallback = raw.fallback;
+  }
+  if (Object.hasOwn(raw, "debugLog")) {
+    shape.debugLog = raw.debugLog;
+  }
+  if (Array.isArray(raw.disabledProviders)) {
+    shape.disabledProviders = raw.disabledProviders;
+  }
+
+  return shape;
 }
 
 function normalizeDebugLog(
@@ -377,23 +396,39 @@ function normalizeMappings(
       continue;
     }
 
-    mappings.push({
-      usage: {
-        provider: usage.provider,
-        account: typeof usage.account === "string" ? usage.account : undefined,
-        window: typeof usage.window === "string" ? usage.window : undefined,
-        windowPattern:
-          typeof usage.windowPattern === "string"
-            ? usage.windowPattern
-            : undefined,
-      },
-      model: model
-        ? { provider: model.provider as string, id: model.id as string }
-        : undefined,
+    const normalizedUsage: MappingEntry["usage"] = {
+      provider: usage.provider,
+    };
+
+    if (typeof usage.account === "string") {
+      normalizedUsage.account = usage.account;
+    }
+    if (typeof usage.window === "string") {
+      normalizedUsage.window = usage.window;
+    }
+    if (typeof usage.windowPattern === "string") {
+      normalizedUsage.windowPattern = usage.windowPattern;
+    }
+
+    const normalizedMapping: MappingEntry = {
+      usage: normalizedUsage,
       ignore,
-      combine,
-      reserve,
-    });
+    };
+
+    if (model) {
+      normalizedMapping.model = {
+        provider: model.provider as string,
+        id: model.id as string,
+      };
+    }
+    if (combine !== undefined) {
+      normalizedMapping.combine = combine;
+    }
+    if (reserve !== undefined) {
+      normalizedMapping.reserve = reserve;
+    }
+
+    mappings.push(normalizedMapping);
   }
 
   return mappings;
@@ -521,13 +556,15 @@ export async function loadConfig(
     }
   }
 
+  const mergedFallback = projectFallback ?? globalFallback;
+
   return {
     mappings,
     priority: projectPriority ?? globalPriority ?? DEFAULT_PRIORITY,
     widget: mergeWidgetConfig(globalWidget, projectWidget),
     autoRun: projectAutoRun ?? globalAutoRun ?? false,
     disabledProviders: [...new Set([...globalDisabled, ...projectDisabled])],
-    fallback: projectFallback ?? globalFallback,
+    ...(mergedFallback !== undefined ? { fallback: mergedFallback } : {}),
     debugLog: projectConfig.debugLog ? projectDebugLog : globalDebugLog,
     sources: { globalPath: globalConfigPath, projectPath },
     raw: { global: globalRaw ?? {}, project: projectRaw },

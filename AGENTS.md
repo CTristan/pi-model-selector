@@ -197,3 +197,15 @@ This is a critical requirement to maintain code quality and maintainability. Whe
 - **Environment**: Node.js (executed within Pi extension host)
 - **Tooling**: Shell scripts (`.sh`) are used for CI/CD and Git hooks. On Windows, a bash-compatible environment such as Git Bash or WSL is required. **Do not convert shell scripts to Node.js or batch files for Windows compatibility.**
 - **Dependencies**: `@mariozechner/pi-coding-agent` for extension API types
+
+### Tooling Configuration
+
+#### TypeScript/Biome Compatibility
+
+The TypeScript compiler option `noPropertyAccessFromIndexSignature` is intentionally disabled in `tsconfig.json`. This setting conflicts with Biome's `useLiteralKeys` rule (part of the recommended preset), which enforces using dot notation for known property names rather than bracket notation with string literals.
+
+When both are enabled, they create conflicting requirements:
+- TypeScript's `noPropertyAccessFromIndexSignature` requires bracket notation (`obj['key']`) for properties defined in an index signature
+- Biome's `useLiteralKeys` requires dot notation (`obj.key`) when the property is a literal key
+
+To resolve this conflict, we disable `noPropertyAccessFromIndexSignature` and rely on Biome's linting for consistent property access style.

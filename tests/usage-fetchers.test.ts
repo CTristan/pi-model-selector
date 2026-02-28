@@ -541,6 +541,88 @@ describe("Usage Fetchers", () => {
       );
       expect(result.provider).toBe("antigravity");
     });
+
+    it("should handle resetTime in quota info", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            models: {
+              "claude-sonnet-4-5": {
+                quotaInfo: {
+                  remainingFraction: 0.5,
+                  resetTime: "2024-02-01T00:00:00Z",
+                },
+              },
+              "gemini-3-flash": {
+                quotaInfo: {
+                  remainingFraction: 0.9,
+                  resetTime: "2024-03-01T00:00:00Z",
+                },
+              },
+            },
+          }),
+        }),
+      );
+      const result = await fetchAntigravityUsage(
+        {
+          authStorage: {
+            getApiKey: async () => "tok",
+            get: async () => ({ projectId: "pid" }),
+          },
+        },
+        {},
+      );
+      expect(result.windows).toHaveLength(2);
+      const claudeWindow = result.windows.find((w) => w.label === "Claude");
+      const flashWindow = result.windows.find((w) => w.label === "G3 Flash");
+      expect(claudeWindow?.resetsAt).toBeDefined();
+      expect(claudeWindow?.resetDescription).toBeDefined();
+      expect(flashWindow?.resetsAt).toBeDefined();
+      expect(flashWindow?.resetDescription).toBeDefined();
+    });
+
+    it("should handle G3 Pro models with reset time on worst model", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            models: {
+              "gemini-3-pro-high": {
+                quotaInfo: {
+                  remainingFraction: 0.2,
+                  resetTime: "2024-03-01T00:00:00Z",
+                },
+              },
+              "gemini-3-pro-low": {
+                quotaInfo: {
+                  remainingFraction: 0.1,
+                  resetTime: "2024-04-01T00:00:00Z",
+                },
+              },
+            },
+          }),
+        }),
+      );
+      const result = await fetchAntigravityUsage(
+        {
+          authStorage: {
+            getApiKey: async () => "tok",
+            get: async () => ({ projectId: "pid" }),
+          },
+        },
+        {},
+      );
+      expect(result.windows).toHaveLength(1);
+      const g3ProWindow = result.windows.find((w) => w.label === "G3 Pro");
+      expect(g3ProWindow).toBeDefined();
+      expect(g3ProWindow?.usedPercent).toBe(90); // 1 - 0.1 = 0.9 = 90%
+      // G3 Pro has reset info from the worst model (gemini-3-pro-low)
+      expect(g3ProWindow?.resetsAt).toBeDefined();
+      expect(g3ProWindow?.resetDescription).toBeDefined();
+    });
   });
 
   describe("fetchZaiUsage", () => {
@@ -747,6 +829,39 @@ describe("Usage Fetchers", () => {
       const result = await promise;
       expect(result[0]!.error).toBe("Timeout");
       vi.useRealTimers();
+    });
+
+    it("should handle windows with same usage and reset time (sort by label)", async () => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            rate_limit: {
+              primary_window: {
+                used_percent: 10,
+                reset_at: 1704067200,
+                limit_window_seconds: 18000,
+              },
+              secondary_window: {
+                used_percent: 10,
+                reset_at: 1704067200,
+                limit_window_seconds: 3600,
+              },
+            },
+          }),
+        }),
+      );
+      const result = await fetchAllCodexUsages(
+        {},
+        {
+          "openai-codex": { access: "token" },
+        },
+      );
+      expect(result[0]!.windows.map((window) => window.label)).toEqual([
+        "1h",
+        "5h",
+      ]);
     });
   });
 });

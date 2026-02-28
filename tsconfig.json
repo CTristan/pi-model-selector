@@ -14,8 +14,10 @@
     "noFallthroughCasesInSwitch": true,
     "noImplicitOverride": true,
     "noUncheckedIndexedAccess": true,
-    "noPropertyAccessFromIndexSignature": false,
-    "exactOptionalPropertyTypes": false
+    "exactOptionalPropertyTypes": true,
+
+    // Disabled due to conflict with Biome's `useLiteralKeys` rule (part of recommended preset)
+    "noPropertyAccessFromIndexSignature": false
   },
   "include": ["index.ts", "src/**/*.ts", "tests/**/*.ts", "vitest.config.ts"]
 }

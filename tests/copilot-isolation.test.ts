@@ -148,4 +148,94 @@ describe("Copilot Token Fetch Isolation & Uniqueness", () => {
     expect(results).toHaveLength(1);
     expect(results[0]!.error).toBe("No token found");
   });
+
+  it("should suppress error from second token for same account when first succeeds", async () => {
+    vi.mocked(execAsync).mockRejectedValue(new Error("gh-cli fail"));
+
+    let callCount = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          // First token succeeds
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve({
+                login: "user1",
+                quota_snapshots: { chat: { percent_remaining: 100 } },
+              }),
+          });
+        }
+        // Second token fails, but it's for the same account
+        return Promise.resolve({ ok: false, status: 401 });
+      }),
+    );
+
+    const results = await fetchCopilotUsage(
+      {
+        authStorage: {
+          getApiKey: (id: string) => {
+            if (id === "github-copilot") return Promise.resolve("tid=t1");
+            if (id === "github") return Promise.resolve("tid=t2");
+            return Promise.resolve(undefined);
+          },
+          get: () => Promise.resolve({}),
+        },
+      },
+      {},
+    );
+
+    // Should only include the successful snapshot for user1
+    expect(results).toHaveLength(1);
+    expect(results[0]!.account).toBe("user1");
+    expect(results[0]!.error).toBeUndefined();
+  });
+
+  it("should suppress error from first token for same account when second succeeds", async () => {
+    vi.mocked(execAsync).mockRejectedValue(new Error("gh-cli fail"));
+
+    let callCount = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(() => {
+        callCount++;
+        if (callCount === 1) {
+          // First token fails
+          return Promise.resolve({ ok: false, status: 401 });
+        }
+        // Second token succeeds, but it's for the same account
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () =>
+            Promise.resolve({
+              login: "user1",
+              quota_snapshots: { chat: { percent_remaining: 100 } },
+            }),
+        });
+      }),
+    );
+
+    const results = await fetchCopilotUsage(
+      {
+        authStorage: {
+          getApiKey: (id: string) => {
+            if (id === "github-copilot") return Promise.resolve("tid=t1");
+            if (id === "github") return Promise.resolve("tid=t2");
+            return Promise.resolve(undefined);
+          },
+          get: () => Promise.resolve({}),
+        },
+      },
+      {},
+    );
+
+    // Should only include the successful snapshot for user1
+    expect(results).toHaveLength(1);
+    expect(results[0]!.account).toBe("user1");
+    expect(results[0]!.error).toBeUndefined();
+  });
 });

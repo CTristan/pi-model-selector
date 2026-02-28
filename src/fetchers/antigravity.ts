@@ -29,38 +29,54 @@ type AntigravityAuthFragment = {
 function parseAuthFragment(
   raw: Record<string, unknown>,
 ): AntigravityAuthFragment {
-  return {
-    accessToken:
+  const accessToken =
       typeof raw.access === "string"
         ? raw.access
         : typeof raw.accessToken === "string"
           ? raw.accessToken
           : undefined,
-    refreshToken:
+    refreshToken =
       typeof raw.refresh === "string"
         ? raw.refresh
         : typeof raw.refreshToken === "string"
           ? raw.refreshToken
           : undefined,
-    expiresAt:
+    expiresAt =
       typeof raw.expires === "number"
         ? raw.expires
         : typeof raw.expiresAt === "number"
           ? raw.expiresAt
           : undefined,
-    projectId:
+    projectId =
       typeof raw.projectId === "string"
         ? raw.projectId
         : typeof raw.project_id === "string"
           ? raw.project_id
           : undefined,
-    clientId:
+    clientId =
       typeof raw.clientId === "string"
         ? raw.clientId
         : typeof raw.client_id === "string"
           ? raw.client_id
-          : undefined,
-  };
+          : undefined;
+
+  const result: AntigravityAuthFragment = {};
+  if (accessToken !== undefined) {
+    result.accessToken = accessToken;
+  }
+  if (refreshToken !== undefined) {
+    result.refreshToken = refreshToken;
+  }
+  if (expiresAt !== undefined) {
+    result.expiresAt = expiresAt;
+  }
+  if (projectId !== undefined) {
+    result.projectId = projectId;
+  }
+  if (clientId !== undefined) {
+    result.clientId = clientId;
+  }
+  return result;
 }
 
 function getAntigravityAuthFromPiAuth(
@@ -74,11 +90,18 @@ function getAntigravityAuthFromPiAuth(
 }
 
 function getAntigravityAuthFromEnv(): AntigravityAuthFragment {
-  return {
-    accessToken: process.env.ANTIGRAVITY_API_KEY,
-    projectId:
-      process.env.ANTIGRAVITY_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT,
-  };
+  const accessToken = process.env.ANTIGRAVITY_API_KEY,
+    projectId =
+      process.env.ANTIGRAVITY_PROJECT_ID || process.env.GOOGLE_CLOUD_PROJECT;
+
+  const result: AntigravityAuthFragment = {};
+  if (accessToken !== undefined) {
+    result.accessToken = accessToken;
+  }
+  if (projectId !== undefined) {
+    result.projectId = projectId;
+  }
+  return result;
 }
 
 async function loadAntigravityAuth(
@@ -107,10 +130,10 @@ async function loadAntigravityAuth(
       ),
       raw = await Promise.resolve(mr?.authStorage?.get?.("google-antigravity"));
 
-    registryAuth = {
-      ...(raw ? parseAuthFragment(raw) : {}),
-      accessToken: typeof accessToken === "string" ? accessToken : undefined,
-    };
+    registryAuth = raw ? parseAuthFragment(raw) : {};
+    if (typeof accessToken === "string") {
+      registryAuth.accessToken = accessToken;
+    }
   } catch {
     // Ignore registry access errors
   }
@@ -138,14 +161,23 @@ async function loadAntigravityAuth(
     mergedClientId =
       primary.data.clientId || registryAuth.clientId || piAuthData.clientId;
 
-  return {
+  const result: AntigravityAuth & { source: AntigravityAuthSource } = {
     accessToken: primary.data.accessToken,
-    refreshToken: primary.data.refreshToken,
-    expiresAt: primary.data.expiresAt,
-    projectId: mergedProjectId,
-    clientId: mergedClientId,
     source: primary.source,
   };
+  if (primary.data.refreshToken !== undefined) {
+    result.refreshToken = primary.data.refreshToken;
+  }
+  if (primary.data.expiresAt !== undefined) {
+    result.expiresAt = primary.data.expiresAt;
+  }
+  if (mergedProjectId !== undefined) {
+    result.projectId = mergedProjectId;
+  }
+  if (mergedClientId !== undefined) {
+    result.clientId = mergedClientId;
+  }
+  return result;
 }
 
 export async function fetchAntigravityUsage(
@@ -300,7 +332,10 @@ export async function fetchAntigravityUsage(
             typeof qi.remainingFraction === "number" ? qi.remainingFraction : 0;
           // Pessimistic selection: find the model with the least remaining quota
           if (worstQI === null || rf < worstQI.remainingFraction) {
-            worstQI = { remainingFraction: rf, resetTime: qi.resetTime };
+            worstQI = { remainingFraction: rf };
+            if (qi.resetTime !== undefined) {
+              worstQI.resetTime = qi.resetTime;
+            }
           }
         }
 
@@ -313,11 +348,18 @@ export async function fetchAntigravityUsage(
           resetTime = worstQI.resetTime
             ? new Date(worstQI.resetTime)
             : undefined;
-        return {
+        const result: {
+          usedPercent: number;
+          resetDescription?: string;
+          resetsAt?: Date;
+        } = {
           usedPercent,
-          resetDescription: resetTime ? formatReset(resetTime) : undefined,
-          resetsAt: resetTime,
         };
+        if (resetTime) {
+          result.resetDescription = formatReset(resetTime);
+          result.resetsAt = resetTime;
+        }
+        return result;
       },
       windows: RateWindow[] = [],
       claudeOrGptOss = getQuotaInfo([
@@ -327,12 +369,17 @@ export async function fetchAntigravityUsage(
         "gpt-oss-120b-medium",
       ]);
     if (claudeOrGptOss) {
-      windows.push({
+      const window: RateWindow = {
         label: "Claude",
         usedPercent: claudeOrGptOss.usedPercent,
-        resetDescription: claudeOrGptOss.resetDescription,
-        resetsAt: claudeOrGptOss.resetsAt,
-      });
+      };
+      if (claudeOrGptOss.resetDescription !== undefined) {
+        window.resetDescription = claudeOrGptOss.resetDescription;
+      }
+      if (claudeOrGptOss.resetsAt !== undefined) {
+        window.resetsAt = claudeOrGptOss.resetsAt;
+      }
+      windows.push(window);
     }
 
     const gemini3Pro = getQuotaInfo([
@@ -341,22 +388,32 @@ export async function fetchAntigravityUsage(
       "gemini-3-pro-preview",
     ]);
     if (gemini3Pro) {
-      windows.push({
+      const window: RateWindow = {
         label: "G3 Pro",
         usedPercent: gemini3Pro.usedPercent,
-        resetDescription: gemini3Pro.resetDescription,
-        resetsAt: gemini3Pro.resetsAt,
-      });
+      };
+      if (gemini3Pro.resetDescription !== undefined) {
+        window.resetDescription = gemini3Pro.resetDescription;
+      }
+      if (gemini3Pro.resetsAt !== undefined) {
+        window.resetsAt = gemini3Pro.resetsAt;
+      }
+      windows.push(window);
     }
 
     const gemini3Flash = getQuotaInfo(["gemini-3-flash"]);
     if (gemini3Flash) {
-      windows.push({
+      const window: RateWindow = {
         label: "G3 Flash",
         usedPercent: gemini3Flash.usedPercent,
-        resetDescription: gemini3Flash.resetDescription,
-        resetsAt: gemini3Flash.resetsAt,
-      });
+      };
+      if (gemini3Flash.resetDescription !== undefined) {
+        window.resetDescription = gemini3Flash.resetDescription;
+      }
+      if (gemini3Flash.resetsAt !== undefined) {
+        window.resetsAt = gemini3Flash.resetsAt;
+      }
+      windows.push(window);
     }
 
     if (windows.length === 0) {
