@@ -201,14 +201,21 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         const optionLabels = sortedCandidates.map((candidate) => {
           const ignored = findIgnoreMapping(candidate, config.mappings),
             mapping = findModelMapping(candidate, config.mappings),
-            combination = findCombinationMapping(candidate, config.mappings),
-            mappingLabel = ignored
-              ? "ignored"
-              : mapping
-                ? `mapped: ${mapping.model?.provider}/${mapping.model?.id}${(mapping.reserve ?? 0) > 0 ? ` (reserve: ${mapping.reserve}%)` : ""}`
-                : combination
-                  ? `combined: ${combination.combine}`
-                  : "unmapped";
+            combination = findCombinationMapping(candidate, config.mappings);
+          let mappingLabel: string;
+          if (ignored) {
+            mappingLabel = "ignored";
+          } else if (mapping) {
+            const reserveSuffix =
+              (mapping.reserve ?? 0) > 0
+                ? ` (reserve: ${mapping.reserve}%)`
+                : "";
+            mappingLabel = `mapped: ${mapping.model?.provider}/${mapping.model?.id}${reserveSuffix}`;
+          } else if (combination) {
+            mappingLabel = `combined: ${combination.combine}`;
+          } else {
+            mappingLabel = "unmapped";
+          }
           const accountPart = candidate.account ? `${candidate.account}/` : "";
           return `${candidate.provider}/${accountPart}${candidate.windowLabel} (${candidate.remainingPercent.toFixed(0)}% remaining, ${candidate.displayName}) [${mappingLabel}]`;
         });

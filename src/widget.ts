@@ -1,10 +1,6 @@
 import type { ExtensionContext, Theme } from "@mariozechner/pi-coding-agent";
 import { truncateToWidth } from "@mariozechner/pi-tui";
-import {
-  findIgnoreMapping,
-  findModelMapping,
-  getReserveThreshold,
-} from "./candidates.js";
+import { findIgnoreMapping, findModelMapping } from "./candidates.js";
 import type { LoadedConfig, MappingEntry, UsageCandidate } from "./types.js";
 import { formatReset } from "./usage-fetchers.js";
 
@@ -79,7 +75,7 @@ function formatCandidate(
 
   // Reserve indicator
   let reserveStr = "";
-  const reserve = getReserveThreshold(candidate, mappings);
+  const reserve = mapping?.reserve ?? 0;
   if (
     reserve > 0 &&
     candidate.remainingPercent > 0 &&

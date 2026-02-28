@@ -333,21 +333,7 @@ function normalizeMappings(
       continue;
     }
 
-    if (!model && !ignore && !combine) {
-      continue; // Skip entries without model, ignore, or combine
-    }
-
-    if (
-      model &&
-      (typeof model.provider !== "string" || typeof model.id !== "string")
-    ) {
-      errors.push(
-        `[${sourceLabel}] mapping.model must have provider and id strings`,
-      );
-      continue;
-    }
-
-    // Validate reserve field
+    // Validate reserve field before early skip
     let reserve: number | undefined;
     if (item.reserve !== undefined) {
       if (typeof item.reserve !== "number") {
@@ -375,6 +361,20 @@ function normalizeMappings(
         continue;
       }
       reserve = item.reserve;
+    }
+
+    if (!model && !ignore && !combine) {
+      continue; // Skip entries without model, ignore, or combine
+    }
+
+    if (
+      model &&
+      (typeof model.provider !== "string" || typeof model.id !== "string")
+    ) {
+      errors.push(
+        `[${sourceLabel}] mapping.model must have provider and id strings`,
+      );
+      continue;
     }
 
     mappings.push({
