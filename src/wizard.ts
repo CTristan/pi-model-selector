@@ -634,7 +634,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
               notify(ctx, "error", RESERVE_INPUT_ERROR);
               return;
             }
-            selectedReserve = parsedReserve;
+            selectedReserve = parsedReserve === 0 ? undefined : parsedReserve;
           }
         }
 

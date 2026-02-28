@@ -439,6 +439,86 @@ describe("mapping wizard actions", () => {
     );
   });
 
+  it("treats reserve 0 as no reserve when mapping a model", async () => {
+    const initialConfig: LoadedConfig = {
+        mappings: [],
+        priority: ["remainingPercent"],
+        widget: { enabled: true, placement: "belowEditor", showCount: 3 },
+        autoRun: false,
+        disabledProviders: [],
+        sources: { globalPath: "global.json", projectPath: "project.json" },
+        raw: { global: {}, project: {} },
+      },
+      reloadedConfig: LoadedConfig = {
+        ...initialConfig,
+        mappings: [
+          {
+            usage: { provider: "p1", account: "acc1", window: "w1" },
+            model: { provider: "p1", id: "m1" },
+          },
+        ],
+        raw: {
+          global: {},
+          project: {
+            mappings: [
+              {
+                usage: { provider: "p1", account: "acc1", window: "w1" },
+                model: { provider: "p1", id: "m1" },
+              },
+            ],
+          },
+        },
+      };
+
+    vi.mocked(configMod.loadConfig)
+      .mockResolvedValueOnce(initialConfig)
+      .mockResolvedValueOnce(reloadedConfig);
+
+    let menuVisits = 0;
+    ctx.ui.select = vi.fn((message: string, options: string[]) => {
+      if (message === "Model selector configuration") {
+        menuVisits += 1;
+        return Promise.resolve(menuVisits === 1 ? "Edit mappings" : "Done");
+      }
+      if (message === "Select a usage bucket to map") {
+        expect(options).toHaveLength(1);
+        return Promise.resolve(options[0]);
+      }
+      if (message === "Modify mapping in") {
+        return Promise.resolve("Project (project.json)");
+      }
+      if (message.startsWith("Select action for")) {
+        return Promise.resolve("Map to model");
+      }
+      if (message.startsWith("Select model for")) {
+        return Promise.resolve("p1/m1");
+      }
+      if (message.startsWith("Set a minimum reserve to preserve?")) {
+        return Promise.resolve("Set reserve");
+      }
+      return Promise.resolve(undefined);
+    });
+
+    ctx.ui.confirm = vi.fn(() => Promise.resolve(false));
+    ctx.ui.input = vi.fn(() => Promise.resolve("0"));
+
+    const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
+    await runWizard({}, ctx as unknown as Record<string, unknown>);
+
+    expect(configMod.upsertMapping).toHaveBeenCalledTimes(1);
+    const [, mapping] = vi.mocked(configMod.upsertMapping).mock.calls[0] as [
+      Record<string, unknown>,
+      MappingEntry,
+    ];
+
+    expect(mapping).toEqual({
+      usage: { provider: "p1", account: "acc1", window: "w1" },
+      model: { provider: "p1", id: "m1" },
+    });
+    expect(mapping).not.toHaveProperty("reserve");
+  });
+
   it("rejects whitespace-only reserve input", async () => {
     const mapping: MappingEntry = {
         usage: { provider: "p1", window: "w1" },
