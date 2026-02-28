@@ -73,13 +73,24 @@ function formatCandidate(
           : "success",
     percentStr = theme.fg(percentColor, remainingStr);
 
+  // Reserve indicator
+  let reserveStr = "";
+  const reserve = mapping?.reserve ?? 0;
+  if (
+    reserve > 0 &&
+    candidate.remainingPercent > 0 &&
+    candidate.remainingPercent <= reserve
+  ) {
+    reserveStr = ` ${theme.fg("warning", `◆ reserve: ${reserve}%`)}`;
+  }
+
   // Time left
   let resetStr = "";
   if (candidate.resetsAt) {
     resetStr = ` ${theme.fg("dim", `(${formatReset(candidate.resetsAt)})`)}`;
   }
 
-  return `${statusIcon} ${providerWindow} ${bar} ${percentStr}${resetStr}`;
+  return `${statusIcon} ${providerWindow} ${bar} ${percentStr}${reserveStr}${resetStr}`;
 }
 
 // ============================================================================

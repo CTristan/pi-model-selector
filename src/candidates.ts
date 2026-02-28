@@ -273,6 +273,20 @@ export function findCombinationMapping(
   );
 }
 
+/**
+ * Returns the reserve threshold for a candidate.
+ * If the candidate has a model mapping with a reserve value, returns that value.
+ * Otherwise, returns 0 (no reserve).
+ */
+export function getReserveThreshold(
+  candidate: UsageCandidate,
+  mappings: MappingEntry[],
+): number {
+  const mapping = findModelMapping(candidate, mappings);
+  if (!mapping) return 0;
+  return mapping.reserve ?? 0;
+}
+
 export function candidateKey(candidate: UsageCandidate): string {
   return `${candidate.provider}|${candidate.account ?? ""}|${candidate.windowLabel}|${candidate.isSynthetic ? "synthetic" : "raw"}`;
 }

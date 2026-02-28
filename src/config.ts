@@ -278,6 +278,7 @@ interface RawMappingItem {
   };
   ignore?: unknown;
   combine?: unknown;
+  reserve?: unknown;
 }
 
 function normalizeMappings(
@@ -332,6 +333,36 @@ function normalizeMappings(
       continue;
     }
 
+    // Validate reserve field before early skip
+    let reserve: number | undefined;
+    if (item.reserve !== undefined) {
+      if (typeof item.reserve !== "number") {
+        errors.push(
+          `[${sourceLabel}] mapping.reserve must be a number if provided`,
+        );
+        continue;
+      }
+      if (!Number.isInteger(item.reserve)) {
+        errors.push(
+          `[${sourceLabel}] mapping.reserve must be an integer (got ${item.reserve})`,
+        );
+        continue;
+      }
+      if (item.reserve < 0 || item.reserve >= 100) {
+        errors.push(
+          `[${sourceLabel}] mapping.reserve must be >= 0 and < 100 (got ${item.reserve})`,
+        );
+        continue;
+      }
+      if (!model) {
+        errors.push(
+          `[${sourceLabel}] mapping.reserve is only valid on mappings with a model target`,
+        );
+        continue;
+      }
+      reserve = item.reserve;
+    }
+
     if (!model && !ignore && !combine) {
       continue; // Skip entries without model, ignore, or combine
     }
@@ -361,6 +392,7 @@ function normalizeMappings(
         : undefined,
       ignore,
       combine,
+      reserve,
     });
   }
 

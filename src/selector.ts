@@ -9,6 +9,7 @@ import {
   combineCandidates,
   findIgnoreMapping,
   findModelMapping,
+  getReserveThreshold,
   selectionReason,
   sortCandidates,
 } from "./candidates.js";
@@ -228,9 +229,12 @@ export async function runSelector(
     // Save candidates for widget display (includes exhausted buckets)
     const displayCandidates = eligibleCandidates.slice();
 
-    // Hard filter: never pick fully exhausted buckets for model selection.
+    // Hard filter: never pick buckets at or below their reserve threshold for model selection.
+    // This naturally handles 0% exhaustion when reserve defaults to 0.
     eligibleCandidates = eligibleCandidates.filter(
-      (candidate: UsageCandidate) => candidate.remainingPercent > 0,
+      (candidate: UsageCandidate) =>
+        candidate.remainingPercent >
+        getReserveThreshold(candidate, config.mappings),
     );
 
     // Sort display candidates for the widget (includes exhausted buckets)
@@ -249,7 +253,7 @@ export async function runSelector(
     renderUsageWidget(ctx);
 
     if (eligibleCandidates.length === 0) {
-      // All candidates are exhausted - check for fallback model
+      // All candidates are exhausted or below reserve - check for fallback model
       return await handleExhaustedCandidates(
         ctx,
         config,
@@ -260,6 +264,7 @@ export async function runSelector(
         lockKeyForErrorCleanup,
         cooldownManager,
         autoSelectionDisabled,
+        displayCandidates,
       );
     }
 
@@ -371,20 +376,48 @@ async function handleExhaustedCandidates(
   _lockKeyForErrorCleanup: string | undefined,
   cooldownManager: CooldownManager,
   _autoSelectionDisabled: boolean,
+  candidates: UsageCandidate[],
 ): Promise<boolean> {
   void _lockKeyForErrorCleanup;
   void _autoSelectionDisabled;
 
   if (!config.fallback) {
-    notify(
-      ctx,
-      "error",
-      "All non-ignored usage buckets are exhausted (0% remaining).",
-    );
+    // Distinguish between exhausted (0%) and below reserve (>0% but below threshold)
+    const allExhausted = candidates.every((c) => c.remainingPercent === 0);
+
+    if (
+      !allExhausted &&
+      candidates.some(
+        (c) =>
+          c.remainingPercent > 0 &&
+          c.remainingPercent <= getReserveThreshold(c, config.mappings),
+      )
+    ) {
+      notify(
+        ctx,
+        "error",
+        "All non-ignored usage buckets are at or below their reserve thresholds.",
+      );
+    } else {
+      notify(
+        ctx,
+        "error",
+        "All non-ignored usage buckets are exhausted (0% remaining).",
+      );
+    }
     return false;
   }
 
-  writeDebugLog("All candidates exhausted, attempting fallback model");
+  // Distinguish between exhausted (0%) and below reserve (>0% but below threshold)
+  const allExhausted = candidates.every((c) => c.remainingPercent === 0);
+
+  if (allExhausted) {
+    writeDebugLog("All candidates exhausted, attempting fallback model");
+  } else {
+    writeDebugLog(
+      "All candidates at or below their reserve thresholds, attempting fallback model",
+    );
+  }
   const fallbackModel = ctx.modelRegistry.find(
     config.fallback.provider,
     config.fallback.id,
@@ -463,7 +496,7 @@ async function handleExhaustedCandidates(
   notify(
     ctx,
     "info",
-    `Set model to ${config.fallback.provider}/${config.fallback.id} (last-resort fallback; all quota-tracked models exhausted)`,
+    `Set model to ${config.fallback.provider}/${config.fallback.id} (last-resort fallback; all quota-tracked models ${allExhausted ? "exhausted (0% remaining)" : "at or below reserve thresholds"})`,
   );
 
   // Set a synthetic candidate key to avoid confusing cooldown state

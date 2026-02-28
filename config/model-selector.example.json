@@ -79,7 +79,8 @@
       "model": {
         "provider": "github-copilot",
         "id": "gpt-4o"
-      }
+      },
+      "reserve": 20
     },
 
     {

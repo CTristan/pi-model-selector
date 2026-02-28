@@ -57,11 +57,11 @@
 1. **Trigger**: Extension runs on session start, `/model-select`, or `before_agent_start` (request preflight).
 2. **Configuration Load**: Reads and merges global + project configs.
 3. **Quota Retrieval**: Fetches usage from all configured providers in parallel.
-4. **Candidate Evaluation**: Builds candidates, applies combinations, filters ignored/cooldowned/exhausted (0% remaining), sorts by priority.
-5. **Widget Update**: Updates the visual widget with top N candidates.
+4. **Candidate Evaluation**: Builds candidates, applies combinations, filters ignored/cooldowned/reserved (at or below reserve threshold or 0% remaining), sorts by priority.
+5. **Widget Update**: Updates the visual widget with top N candidates. Candidates below their reserve threshold are visually indicated with a reserve marker.
 6. **Model Selection**: Selects best candidate, looks up mapping, calls `pi.setModel()`.
 7. **Lock Coordination**: For request preflight, acquires a per-model cross-instance lock (fall through ranked candidates; wait/poll only when all mapped models are busy).
-8. **Fallback**: If all quota-tracked models are exhausted or locked, attempts to use the configured fallback model (if any).
+8. **Fallback**: If all quota-tracked models are exhausted, below reserve, or locked, attempts to use the configured fallback model (if any).
 
 ## Cooldown Mechanism
 
@@ -116,6 +116,11 @@ To prevent the extension from failing entirely when all quota-tracked models are
       "model": { "provider": "anthropic", "id": "claude-sonnet-4-5" }
     },
     {
+      "usage": { "provider": "copilot", "window": "Chat" },
+      "model": { "provider": "github-copilot", "id": "gpt-4o" },
+      "reserve": 20
+    },
+    {
       "usage": { "provider": "gemini", "window": "Flash" },
       "ignore": true
     },
@@ -141,7 +146,10 @@ To prevent the extension from failing entirely when all quota-tracked models are
 - **`widget.placement`**: `"aboveEditor"` or `"belowEditor"`.
 - **`widget.showCount`**: Number of top candidates to display (default: 3).
 - **`mappings`**: Array linking usage sources to models, marking as ignored, or grouping for combination.
+  - **`model`**: Optional object with `provider` and `id` fields. Maps the usage bucket to a specific Pi model.
+  - **`ignore`**: Optional boolean. If `true`, excludes the usage bucket from model selection.
   - **`combine`**: Optional string. If specified, candidates matching this mapping are grouped together. A new synthetic candidate is created with this name, using the minimum availability (bottleneck) among all group members.
+  - **`reserve`**: Optional number (0-99). Minimum usage percentage to preserve for this mapping. Candidates at or below their reserve threshold are excluded from model selection (same as exhausted candidates). Only valid on mappings with a `model` target. Defaults to 0 (no reserve).
 
 ## Development Guidelines
 

@@ -201,14 +201,21 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         const optionLabels = sortedCandidates.map((candidate) => {
           const ignored = findIgnoreMapping(candidate, config.mappings),
             mapping = findModelMapping(candidate, config.mappings),
-            combination = findCombinationMapping(candidate, config.mappings),
-            mappingLabel = ignored
-              ? "ignored"
-              : mapping
-                ? `mapped: ${mapping.model?.provider}/${mapping.model?.id}`
-                : combination
-                  ? `combined: ${combination.combine}`
-                  : "unmapped";
+            combination = findCombinationMapping(candidate, config.mappings);
+          let mappingLabel: string;
+          if (ignored) {
+            mappingLabel = "ignored";
+          } else if (mapping) {
+            const reserveSuffix =
+              (mapping.reserve ?? 0) > 0
+                ? ` (reserve: ${mapping.reserve}%)`
+                : "";
+            mappingLabel = `mapped: ${mapping.model?.provider}/${mapping.model?.id}${reserveSuffix}`;
+          } else if (combination) {
+            mappingLabel = `combined: ${combination.combine}`;
+          } else {
+            mappingLabel = "unmapped";
+          }
           const accountPart = candidate.account ? `${candidate.account}/` : "";
           return `${candidate.provider}/${accountPart}${candidate.windowLabel} (${candidate.remainingPercent.toFixed(0)}% remaining, ${candidate.displayName}) [${mappingLabel}]`;
         });
@@ -449,6 +456,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         }
 
         let selectedModel: { provider: string; id: string } | undefined;
+        let selectedReserve: number | undefined;
         if (
           actionChoice === "Map to model" ||
           actionChoice === "Map by pattern"
@@ -463,6 +471,37 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
           const modelIndex = modelLabels.indexOf(modelChoice);
           if (modelIndex < 0) return;
           selectedModel = availableModels[modelIndex];
+
+          // Ask for reserve threshold
+          const reserveChoice = await selectWrapped(
+            ctx,
+            "Set a minimum reserve to preserve? (0 = no reserve, model can be used fully)",
+            ["No reserve (0)", "Set reserve"],
+          );
+          if (!reserveChoice) return;
+
+          if (reserveChoice === "Set reserve") {
+            const reserveInput = await ctx.ui.input(
+              "Enter reserve percentage (0-99, e.g., 20 means always keep at least 20% available)",
+            );
+            if (!reserveInput) return;
+
+            const reserveValue = Number(reserveInput.trim());
+            if (
+              isNaN(reserveValue) ||
+              !Number.isInteger(reserveValue) ||
+              reserveValue < 0 ||
+              reserveValue >= 100
+            ) {
+              notify(
+                ctx,
+                "error",
+                "Invalid reserve value. Must be an integer between 0 and 99.",
+              );
+              return;
+            }
+            selectedReserve = reserveValue;
+          }
         }
 
         let combineName: string | undefined;
@@ -529,6 +568,9 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
               provider: selectedModel.provider,
               id: selectedModel.id,
             },
+            ...(selectedReserve !== undefined
+              ? { reserve: selectedReserve }
+              : {}),
           };
         } else if (combineName) {
           mappingEntry = {

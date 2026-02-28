@@ -67,6 +67,10 @@ Map a provider's usage window to a specific Pi model ID.
 
 > **Note**: The `model.provider` and `model.id` must match the names used in the Pi model registry (e.g., `github-copilot`, `anthropic`, `google`).
 
+#### Reserve Threshold
+
+You can optionally set a `reserve` percentage on model mappings to preserve a minimum amount of usage capacity. Candidates at or below their reserve threshold are excluded from model selection (treated the same as exhausted buckets). This is useful for keeping some quota available for other tools or manual use.
+
 Example `model-selector.json`:
 
 ```json
@@ -79,7 +83,8 @@ Example `model-selector.json`:
     },
     {
       "usage": { "provider": "copilot", "window": "Chat" },
-      "model": { "provider": "github-copilot", "id": "gpt-4o" }
+      "model": { "provider": "github-copilot", "id": "gpt-4o" },
+      "reserve": 20
     },
     {
       "usage": { "provider": "gemini", "window": "Flash" },
@@ -88,3 +93,5 @@ Example `model-selector.json`:
   ]
 }
 ```
+
+In this example, the Copilot Chat mapping has a reserve of 20%. This means the model selector will only use that model when more than 20% quota remains, preserving at least 20% for other purposes.
