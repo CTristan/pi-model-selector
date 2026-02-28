@@ -334,6 +334,111 @@ describe("mapping wizard actions", () => {
     );
   });
 
+  it("updates reserve when raw mapping needs normalization", async () => {
+    const normalizedMapping: MappingEntry = {
+      usage: { provider: "p1" },
+      model: { provider: "p1", id: "m1" },
+    };
+    const rawProjectMapping: Record<string, unknown> = {
+      usage: { provider: "p1", account: null },
+      model: { provider: "p1", id: "m1" },
+    };
+
+    const initialConfig: LoadedConfig = {
+      ...baseConfigFor(normalizedMapping),
+      raw: {
+        global: {},
+        project: { mappings: [rawProjectMapping] },
+      },
+    };
+    const reloadedConfig: LoadedConfig = {
+      ...initialConfig,
+      mappings: [{ ...normalizedMapping, reserve: 30 }],
+      raw: {
+        global: {},
+        project: {
+          mappings: [{ ...normalizedMapping, reserve: 30 }],
+        },
+      },
+    };
+
+    vi.mocked(configMod.loadConfig)
+      .mockResolvedValueOnce(initialConfig)
+      .mockResolvedValueOnce(reloadedConfig);
+
+    vi.mocked(configMod.getRawMappings).mockImplementation(
+      (raw: Record<string, unknown>): MappingEntry[] => {
+        const mappings = raw.mappings;
+        if (!Array.isArray(mappings)) return [];
+
+        const normalized: MappingEntry[] = [];
+        for (const entry of mappings) {
+          if (!entry || typeof entry !== "object") continue;
+          const typed = entry as {
+            usage?: {
+              provider?: unknown;
+              account?: unknown;
+              window?: unknown;
+              windowPattern?: unknown;
+            };
+            model?: { provider?: unknown; id?: unknown };
+            ignore?: unknown;
+          };
+          if (typeof typed.usage?.provider !== "string") continue;
+          if (
+            typeof typed.model?.provider !== "string" ||
+            typeof typed.model?.id !== "string"
+          ) {
+            continue;
+          }
+
+          const usage: MappingEntry["usage"] = {
+            provider: typed.usage.provider,
+          };
+          if (typeof typed.usage.account === "string") {
+            usage.account = typed.usage.account;
+          }
+          if (typeof typed.usage.window === "string") {
+            usage.window = typed.usage.window;
+          }
+          if (typeof typed.usage.windowPattern === "string") {
+            usage.windowPattern = typed.usage.windowPattern;
+          }
+
+          normalized.push({
+            usage,
+            model: {
+              provider: typed.model.provider,
+              id: typed.model.id,
+            },
+            ignore: typed.ignore === true,
+          });
+        }
+
+        return normalized;
+      },
+    );
+
+    mockReserveChangeFlow("30");
+
+    const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
+    await runWizard({}, ctx as unknown as Record<string, unknown>);
+
+    const projectMappings = (initialConfig.raw.project.mappings ?? []) as Array<
+      Record<string, unknown>
+    >;
+    expect(projectMappings[0]!.reserve).toBe(30);
+    expect(configMod.saveConfigFile).toHaveBeenCalledWith(
+      "project.json",
+      initialConfig.raw.project,
+    );
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("Reserve updated to 30%"),
+      "info",
+    );
+  });
+
   it("rejects whitespace-only reserve input", async () => {
     const mapping: MappingEntry = {
         usage: { provider: "p1", window: "w1" },

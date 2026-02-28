@@ -23,15 +23,13 @@ async function whichAsync(cmd: string): Promise<string | null> {
 }
 
 export function parseSingleKiroResetDate(dateStr: string): Date | undefined {
-  const parts = dateStr.split("/").map(Number);
-  if (parts.length !== 2) return undefined;
+  const [first, second] = dateStr.split("/").map(Number);
+  if (first === undefined || second === undefined) return undefined;
 
-  const first = parts[0];
-  const second = parts[1];
   const now = new Date();
   const year = now.getFullYear();
 
-  if (first === undefined || second === undefined) return undefined;
+  if (!Number.isFinite(first) || !Number.isFinite(second)) return undefined;
 
   const dateMD = new Date(year, first - 1, second);
   const dateDM = new Date(year, second - 1, first);

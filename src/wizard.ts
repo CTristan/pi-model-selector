@@ -31,6 +31,7 @@ import type {
 } from "./types.js";
 import {
   ALL_PROVIDERS,
+  mappingKey,
   notify,
   setGlobalConfig,
   writeDebugLog,
@@ -406,24 +407,44 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 
           try {
             const existing = Array.isArray(targetRaw.mappings)
-                ? targetRaw.mappings
-                : [],
-              targetEntries: MappingEntry[] = [];
+              ? targetRaw.mappings
+              : [];
+            const normalizedEntries = getRawMappings(targetRaw).filter(
+              (entry) => entry.model && !entry.ignore,
+            );
+            const normalizedMatch = findModelMapping(
+              selectedCandidate,
+              normalizedEntries,
+            );
 
-            for (const entry of existing) {
-              if (!entry || typeof entry !== "object") continue;
-              const typed = entry as MappingEntry;
-              if (typed.model && !typed.ignore) {
-                targetEntries.push(typed);
+            let rawMappingToUpdate: Record<string, unknown> | undefined;
+
+            if (normalizedMatch) {
+              const targetKey = mappingKey(normalizedMatch);
+              for (const entry of existing) {
+                if (!entry || typeof entry !== "object") continue;
+                const normalizedEntry = getRawMappings({
+                  mappings: [entry],
+                })[0];
+                if (
+                  !normalizedEntry ||
+                  !normalizedEntry.model ||
+                  normalizedEntry.ignore
+                ) {
+                  continue;
+                }
+                if (mappingKey(normalizedEntry) === targetKey) {
+                  rawMappingToUpdate = entry as Record<string, unknown>;
+                  break;
+                }
               }
             }
 
-            const mappingToUpdate = findModelMapping(
-              selectedCandidate,
-              targetEntries,
-            );
-
-            if (!mappingToUpdate || !mappingToUpdate.model) {
+            if (
+              !normalizedMatch ||
+              !normalizedMatch.model ||
+              !rawMappingToUpdate
+            ) {
               notify(
                 ctx,
                 "warning",
@@ -431,9 +452,9 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
               );
             } else {
               if (newReserve !== undefined && newReserve > 0) {
-                mappingToUpdate.reserve = newReserve;
+                rawMappingToUpdate.reserve = newReserve;
               } else {
-                delete mappingToUpdate.reserve;
+                delete rawMappingToUpdate.reserve;
               }
 
               await saveConfigFile(targetPath, targetRaw);
@@ -453,7 +474,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
               notify(
                 ctx,
                 "info",
-                `Reserve updated to ${newReserveText} for ${mappingToUpdate.model.provider}/${mappingToUpdate.model.id}.`,
+                `Reserve updated to ${newReserveText} for ${normalizedMatch.model.provider}/${normalizedMatch.model.id}.`,
               );
             }
           } catch (error: unknown) {
