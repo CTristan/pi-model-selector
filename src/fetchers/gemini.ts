@@ -5,10 +5,53 @@ import type { RateWindow, UsageSnapshot } from "../types.js";
 import { writeDebugLog } from "../types.js";
 import {
   fetchWithTimeout,
+  formatReset,
   parseEpochMillis,
   refreshGoogleToken,
   URLS,
 } from "./common.js";
+
+/**
+ * Compute the next midnight in the America/Los_Angeles (Pacific) timezone.
+ * Gemini API quotas reset daily at midnight Pacific Time.
+ */
+export function nextMidnightPacific(now: Date = new Date()): Date {
+  // Format the current time in Pacific to extract date components
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Los_Angeles",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(now);
+
+  const get = (type: string) =>
+    parts.find((p) => p.type === type)?.value ?? "0";
+
+  const year = Number(get("year"));
+  const month = Number(get("month"));
+  const day = Number(get("day"));
+  const hour = Number(get("hour"));
+  const minute = Number(get("minute"));
+  const second = Number(get("second"));
+
+  // Reconstruct the current Pacific time as a pseudo-UTC Date to compute offset
+  const pacificAsUtc = new Date(
+    Date.UTC(year, month - 1, day, hour, minute, second),
+  );
+  const offsetMs = pacificAsUtc.getTime() - now.getTime();
+
+  // Next midnight Pacific = start of the next day in Pacific
+  const tomorrowMidnightPacific = new Date(
+    Date.UTC(year, month - 1, day + 1, 0, 0, 0, 0),
+  );
+
+  // Convert back to UTC by subtracting the offset
+  return new Date(tomorrowMidnightPacific.getTime() - offsetMs);
+}
 
 interface GeminiTokenInfo {
   token?: string;
@@ -446,8 +489,15 @@ export async function fetchGeminiUsage(
               }
 
               const windows: RateWindow[] = [];
+              const resetTime = nextMidnightPacific();
+              const resetDesc = formatReset(resetTime);
               for (const [label, frac] of Object.entries(families)) {
-                windows.push({ label, usedPercent: (1 - frac) * 100 });
+                windows.push({
+                  label,
+                  usedPercent: (1 - frac) * 100,
+                  resetsAt: resetTime,
+                  resetDescription: resetDesc,
+                });
               }
 
               return {
