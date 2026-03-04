@@ -22,11 +22,27 @@ export function nextMidnightPacific(now: Date = new Date()): Date {
     zone: "America/Los_Angeles",
   });
 
-  // Next midnight Pacific = start of the next calendar day in Pacific
-  const nextMidnightPacific = pacificNow.plus({ days: 1 }).startOf("day");
+  // If the Pacific time zone isn't available (e.g., missing ICU data),
+  // fall back to the next local midnight using native Date APIs.
+  if (!pacificNow.isValid) {
+    const localMidnight = new Date(now);
+    // Set to the start of the next local day
+    localMidnight.setHours(24, 0, 0, 0);
+    return localMidnight;
+  }
 
-  // Convert back to a UTC Date; luxon handles DST transitions correctly
-  return nextMidnightPacific.toJSDate();
+  // Next midnight Pacific = start of the next calendar day in Pacific
+  const nextPacificMidnight = pacificNow.plus({ days: 1 }).startOf("day");
+
+  // Convert back to a UTC Date; luxon handles DST transitions correctly.
+  // If for some reason this DateTime is invalid, also fall back to next local midnight.
+  if (!nextPacificMidnight.isValid) {
+    const localMidnight = new Date(now);
+    localMidnight.setHours(24, 0, 0, 0);
+    return localMidnight;
+  }
+
+  return nextPacificMidnight.toJSDate();
 }
 
 interface GeminiTokenInfo {
