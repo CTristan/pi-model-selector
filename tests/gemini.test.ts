@@ -233,8 +233,8 @@ describe("nextMidnightPacific", () => {
   });
 
   it("handles first occurrence of repeated hour during fall-back", () => {
-    // 2025-11-02 09:30:00 UTC = 2025-11-02 02:30:00 PDT (first 2:30 AM, PDT)
-    const now = new Date("2025-11-02T09:30:00Z");
+    // 2025-11-02 08:30:00 UTC = 2025-11-02 01:30:00 PDT (first 1:30 AM, PDT)
+    const now = new Date("2025-11-02T08:30:00Z");
     const result = nextMidnightPacific(now);
     // Next midnight is 2025-11-03 00:00:00 PST = 2025-11-03 08:00:00 UTC
     const expected = new Date("2025-11-03T08:00:00Z");
@@ -242,8 +242,8 @@ describe("nextMidnightPacific", () => {
   });
 
   it("handles second occurrence of repeated hour during fall-back", () => {
-    // 2025-11-02 10:30:00 UTC = 2025-11-02 02:30:00 PST (second 2:30 AM, PST)
-    const now = new Date("2025-11-02T10:30:00Z");
+    // 2025-11-02 09:30:00 UTC = 2025-11-02 01:30:00 PST (second 1:30 AM, PST)
+    const now = new Date("2025-11-02T09:30:00Z");
     const result = nextMidnightPacific(now);
     // Next midnight is 2025-11-03 00:00:00 PST = 2025-11-03 08:00:00 UTC
     const expected = new Date("2025-11-03T08:00:00Z");
