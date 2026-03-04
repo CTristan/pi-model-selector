@@ -163,19 +163,22 @@ describe("nextMidnightPacific", () => {
     expect(diffMs).toBeGreaterThan(0);
   });
 
-  it("accepts a custom 'now' timestamp", () => {
-    // 2025-06-15 10:00:00 UTC = 2025-06-15 03:00:00 PDT
-    const now = new Date("2025-06-15T10:00:00Z");
-    const result = nextMidnightPacific(now);
-    expect(result).toBeInstanceOf(Date);
-    // Next midnight Pacific is 2025-06-16 00:00:00 PDT = 2025-06-16 07:00:00 UTC
-    expect(result.getTime()).toBeGreaterThan(now.getTime());
+  it.runIf(hasPacificTimeZoneSupport())(
+    "accepts a custom 'now' timestamp",
+    () => {
+      // 2025-06-15 10:00:00 UTC = 2025-06-15 03:00:00 PDT
+      const now = new Date("2025-06-15T10:00:00Z");
+      const result = nextMidnightPacific(now);
+      expect(result).toBeInstanceOf(Date);
+      // Next midnight Pacific is 2025-06-16 00:00:00 PDT = 2025-06-16 07:00:00 UTC
+      expect(result.getTime()).toBeGreaterThan(now.getTime());
 
-    // Verify it's approximately 21 hours later (03:00 -> 00:00 next day)
-    const diffHours = (result.getTime() - now.getTime()) / (60 * 60 * 1000);
-    expect(diffHours).toBeGreaterThan(20);
-    expect(diffHours).toBeLessThan(22);
-  });
+      // Verify it's approximately 21 hours later (03:00 -> 00:00 next day)
+      const diffHours = (result.getTime() - now.getTime()) / (60 * 60 * 1000);
+      expect(diffHours).toBeGreaterThan(20);
+      expect(diffHours).toBeLessThan(22);
+    },
+  );
 
   describe.runIf(hasPacificTimeZoneSupport())(
     "with Pacific timezone support",
