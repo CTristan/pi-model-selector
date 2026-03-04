@@ -139,8 +139,8 @@ describe("nextMidnightPacific", () => {
   it("returns a time at most ~24h in the future", () => {
     const result = nextMidnightPacific();
     const diffMs = result.getTime() - Date.now();
-    // Should be within 24 hours + small tolerance
-    expect(diffMs).toBeLessThanOrEqual(24 * 60 * 60 * 1000 + 5000);
+    // Should be within 25 hours (to account for DST fall-back) + small tolerance
+    expect(diffMs).toBeLessThanOrEqual(25 * 60 * 60 * 1000 + 5000);
     expect(diffMs).toBeGreaterThan(0);
   });
 
