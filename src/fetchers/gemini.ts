@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { DateTime } from "luxon";
 import type { RateWindow, UsageSnapshot } from "../types.js";
 import { writeDebugLog } from "../types.js";
 import {
@@ -16,41 +17,16 @@ import {
  * Gemini API quotas reset daily at midnight Pacific Time.
  */
 export function nextMidnightPacific(now: Date = new Date()): Date {
-  // Format the current time in Pacific to extract date components
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/Los_Angeles",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).formatToParts(now);
+  // Interpret "now" in the Pacific time zone
+  const pacificNow = DateTime.fromJSDate(now, {
+    zone: "America/Los_Angeles",
+  });
 
-  const get = (type: string) =>
-    parts.find((p) => p.type === type)?.value ?? "0";
+  // Next midnight Pacific = start of the next calendar day in Pacific
+  const nextMidnightPacific = pacificNow.plus({ days: 1 }).startOf("day");
 
-  const year = Number(get("year"));
-  const month = Number(get("month"));
-  const day = Number(get("day"));
-  const hour = Number(get("hour"));
-  const minute = Number(get("minute"));
-  const second = Number(get("second"));
-
-  // Reconstruct the current Pacific time as a pseudo-UTC Date to compute offset
-  const pacificAsUtc = new Date(
-    Date.UTC(year, month - 1, day, hour, minute, second),
-  );
-  const offsetMs = pacificAsUtc.getTime() - now.getTime();
-
-  // Next midnight Pacific = start of the next day in Pacific
-  const tomorrowMidnightPacific = new Date(
-    Date.UTC(year, month - 1, day + 1, 0, 0, 0, 0),
-  );
-
-  // Convert back to UTC by subtracting the offset
-  return new Date(tomorrowMidnightPacific.getTime() - offsetMs);
+  // Convert back to a UTC Date; luxon handles DST transitions correctly
+  return nextMidnightPacific.toJSDate();
 }
 
 interface GeminiTokenInfo {

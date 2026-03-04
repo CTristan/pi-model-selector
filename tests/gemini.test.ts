@@ -193,4 +193,60 @@ describe("nextMidnightPacific", () => {
     const expected = new Date("2025-06-16T07:00:00Z");
     expect(result.getTime()).toBe(expected.getTime());
   });
+
+  it("handles spring-forward DST transition (before the gap)", () => {
+    // 2025-03-09 09:30:00 UTC = 2025-03-09 01:30:00 PST (before spring forward at 2:00 AM)
+    // At 2:00 AM, clocks jump to 3:00 AM PDT
+    const now = new Date("2025-03-09T09:30:00Z");
+    const result = nextMidnightPacific(now);
+    // Next midnight is 2025-03-10 00:00:00 PDT = 2025-03-10 07:00:00 UTC
+    const expected = new Date("2025-03-10T07:00:00Z");
+    expect(result.getTime()).toBe(expected.getTime());
+  });
+
+  it("handles spring-forward DST transition (after the gap)", () => {
+    // 2025-03-09 10:30:00 UTC = 2025-03-09 03:30:00 PDT (after spring forward)
+    const now = new Date("2025-03-09T10:30:00Z");
+    const result = nextMidnightPacific(now);
+    // Next midnight is 2025-03-10 00:00:00 PDT = 2025-03-10 07:00:00 UTC
+    const expected = new Date("2025-03-10T07:00:00Z");
+    expect(result.getTime()).toBe(expected.getTime());
+  });
+
+  it("handles fall-back DST transition (before the repeat hour)", () => {
+    // 2025-11-02 07:30:00 UTC = 2025-11-02 00:30:00 PDT (before fall back at 2:00 AM)
+    // At 2:00 AM PDT, clocks fall back to 1:00 AM PST
+    const now = new Date("2025-11-02T07:30:00Z");
+    const result = nextMidnightPacific(now);
+    // Next midnight is 2025-11-03 00:00:00 PST = 2025-11-03 08:00:00 UTC
+    const expected = new Date("2025-11-03T08:00:00Z");
+    expect(result.getTime()).toBe(expected.getTime());
+  });
+
+  it("handles fall-back DST transition (after the repeat hour)", () => {
+    // 2025-11-02 10:30:00 UTC = 2025-11-02 02:30:00 PST (after fall back)
+    const now = new Date("2025-11-02T10:30:00Z");
+    const result = nextMidnightPacific(now);
+    // Next midnight is 2025-11-03 00:00:00 PST = 2025-11-03 08:00:00 UTC
+    const expected = new Date("2025-11-03T08:00:00Z");
+    expect(result.getTime()).toBe(expected.getTime());
+  });
+
+  it("handles first occurrence of repeated hour during fall-back", () => {
+    // 2025-11-02 09:30:00 UTC = 2025-11-02 02:30:00 PDT (first 2:30 AM, PDT)
+    const now = new Date("2025-11-02T09:30:00Z");
+    const result = nextMidnightPacific(now);
+    // Next midnight is 2025-11-03 00:00:00 PST = 2025-11-03 08:00:00 UTC
+    const expected = new Date("2025-11-03T08:00:00Z");
+    expect(result.getTime()).toBe(expected.getTime());
+  });
+
+  it("handles second occurrence of repeated hour during fall-back", () => {
+    // 2025-11-02 10:30:00 UTC = 2025-11-02 02:30:00 PST (second 2:30 AM, PST)
+    const now = new Date("2025-11-02T10:30:00Z");
+    const result = nextMidnightPacific(now);
+    // Next midnight is 2025-11-03 00:00:00 PST = 2025-11-03 08:00:00 UTC
+    const expected = new Date("2025-11-03T08:00:00Z");
+    expect(result.getTime()).toBe(expected.getTime());
+  });
 });
