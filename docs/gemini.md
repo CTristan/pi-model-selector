@@ -32,6 +32,10 @@ Windows are dynamically determined based on the `modelId` returned by the API:
 - **Flash**: Groups models with "flash" in their ID (e.g., `gemini-1.5-flash`).
 - **Other**: Default group for other model IDs.
 
+## Reset Time
+
+Gemini API quotas reset daily at **midnight Pacific Time**. Since the API does not return reset timestamps, the extension computes the next midnight in `America/Los_Angeles` and sets `resetsAt` on each usage window. In environments where IANA timezone data (e.g., ICU) is unavailable, this calculation falls back to the next local midnight instead, so `resetsAt` may be based on local time in those cases. This allows Gemini candidates to participate in `earliestReset` priority ranking and display reset countdowns in the widget.
+
 ## Logic Details
 
 - **Token Refresh**:

@@ -1,14 +1,49 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { DateTime } from "luxon";
 import type { RateWindow, UsageSnapshot } from "../types.js";
 import { writeDebugLog } from "../types.js";
 import {
   fetchWithTimeout,
+  formatReset,
   parseEpochMillis,
   refreshGoogleToken,
   URLS,
 } from "./common.js";
+
+/**
+ * Compute the next midnight in the America/Los_Angeles (Pacific) timezone.
+ * Gemini API quotas reset daily at midnight Pacific Time.
+ */
+export function nextMidnightPacific(now: Date = new Date()): Date {
+  // Interpret "now" in the Pacific time zone
+  const pacificNow = DateTime.fromJSDate(now, {
+    zone: "America/Los_Angeles",
+  });
+
+  // If the Pacific time zone isn't available (e.g., missing ICU data),
+  // fall back to the next local midnight using native Date APIs.
+  if (!pacificNow.isValid) {
+    const localMidnight = new Date(now);
+    // Set to the start of the next local day
+    localMidnight.setHours(24, 0, 0, 0);
+    return localMidnight;
+  }
+
+  // Next midnight Pacific = start of the next calendar day in Pacific
+  const nextPacificMidnight = pacificNow.plus({ days: 1 }).startOf("day");
+
+  // Convert back to a UTC Date; luxon handles DST transitions correctly.
+  // If for some reason this DateTime is invalid, also fall back to next local midnight.
+  if (!nextPacificMidnight.isValid) {
+    const localMidnight = new Date(now);
+    localMidnight.setHours(24, 0, 0, 0);
+    return localMidnight;
+  }
+
+  return nextPacificMidnight.toJSDate();
+}
 
 interface GeminiTokenInfo {
   token?: string;
@@ -446,8 +481,15 @@ export async function fetchGeminiUsage(
               }
 
               const windows: RateWindow[] = [];
+              const resetTime = nextMidnightPacific();
+              const resetDesc = formatReset(resetTime);
               for (const [label, frac] of Object.entries(families)) {
-                windows.push({ label, usedPercent: (1 - frac) * 100 });
+                windows.push({
+                  label,
+                  usedPercent: (1 - frac) * 100,
+                  resetsAt: resetTime,
+                  resetDescription: resetDesc,
+                });
               }
 
               return {
