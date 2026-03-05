@@ -15,6 +15,12 @@ import {
 } from "./candidates.js";
 
 import { loadConfig } from "./config.js";
+import {
+  CONTEXT_WINDOW_SAFETY_RATIO,
+  compactAndAwait,
+  filterByContextWindow,
+  handleCompactOnSwitch,
+} from "./context.js";
 import type { CooldownManager } from "./cooldown.js";
 
 import {
@@ -237,6 +243,53 @@ export async function runSelector(
         getReserveThreshold(candidate, config.mappings),
     );
 
+    let { eligible: contextEligible, filtered: contextFiltered } =
+      filterByContextWindow(eligibleCandidates, config, ctx);
+
+    if (contextEligible.length === 0 && contextFiltered.length > 0) {
+      if (config.compactOnSwitch) {
+        notify(
+          ctx,
+          "info",
+          "All candidates exceed context window. Attempting compaction...",
+        );
+        const result = await compactAndAwait(ctx);
+        if (result.success) {
+          const reFiltered = filterByContextWindow(
+            eligibleCandidates,
+            config,
+            ctx,
+          );
+          contextEligible = reFiltered.eligible;
+          contextFiltered = reFiltered.filtered;
+        } else {
+          notify(ctx, "warning", `Compaction failed: ${result.error}`);
+        }
+      } else {
+        const usage = ctx.getContextUsage();
+        const usageTokens = usage?.tokens;
+        const tokenMessage =
+          usageTokens !== null && usageTokens !== undefined
+            ? ` (${usageTokens} tokens)`
+            : "";
+        notify(
+          ctx,
+          "error",
+          `All candidates' context windows are too small for the current context${tokenMessage}. Compact manually or enable "compactOnSwitch" in config.`,
+        );
+      }
+    }
+
+    eligibleCandidates = contextEligible;
+
+    // Update contextFiltered status for displayCandidates so widget can show it
+    const filteredKeys = new Set(contextFiltered.map((c) => candidateKey(c)));
+    for (const dc of displayCandidates) {
+      if (filteredKeys.has(candidateKey(dc))) {
+        dc.contextFiltered = true;
+      }
+    }
+
     // Sort display candidates for the widget (includes exhausted buckets)
     const rankedDisplayCandidates = sortCandidates(
       displayCandidates,
@@ -451,6 +504,32 @@ async function handleExhaustedCandidates(
       current.id === config.fallback.id;
 
   if (!isAlreadySelected) {
+    const usageTokens = ctx.getContextUsage()?.tokens;
+    if (usageTokens !== null && usageTokens !== undefined) {
+      const maxTokens =
+        fallbackModel.contextWindow * CONTEXT_WINDOW_SAFETY_RATIO;
+      if (usageTokens > maxTokens) {
+        if (!config.compactOnSwitch) {
+          notify(
+            ctx,
+            "error",
+            `Fallback model's context window is too small for the current context. Compact manually or enable "compactOnSwitch".`,
+          );
+          if (fallbackLockKey) {
+            await modelLockCoordinator.release(fallbackLockKey);
+          }
+          return false;
+        }
+      }
+    }
+
+    await handleCompactOnSwitch(
+      ctx,
+      current,
+      { provider: config.fallback.provider, id: config.fallback.id },
+      config,
+    );
+
     const success = await pi.setModel(fallbackModel);
     if (!success) {
       notify(
@@ -576,28 +655,40 @@ async function acquireModelLock(
         modelLockKey(config.fallback.provider, config.fallback.id),
       )
     ) {
-      lockableCandidates.push({
-        candidate: {
-          provider: config.fallback.provider,
-          displayName: config.fallback.provider,
-          windowLabel: "fallback",
-          usedPercent: 0,
-          remainingPercent: 100,
-        },
-        mapping: {
-          usage: {
+      const usageTokens = ctx.getContextUsage()?.tokens;
+      let fallbackEligible = true;
+      if (usageTokens !== null && usageTokens !== undefined) {
+        const maxTokens =
+          fallbackModel.contextWindow * CONTEXT_WINDOW_SAFETY_RATIO;
+        if (usageTokens > maxTokens) {
+          fallbackEligible = false;
+        }
+      }
+
+      if (fallbackEligible) {
+        lockableCandidates.push({
+          candidate: {
             provider: config.fallback.provider,
-            window: "fallback",
+            displayName: config.fallback.provider,
+            windowLabel: "fallback",
+            usedPercent: 0,
+            remainingPercent: 100,
           },
-          model: {
-            provider: config.fallback.provider,
-            id: config.fallback.id,
+          mapping: {
+            usage: {
+              provider: config.fallback.provider,
+              window: "fallback",
+            },
+            model: {
+              provider: config.fallback.provider,
+              id: config.fallback.id,
+            },
           },
-        },
-        model: fallbackModel,
-        lockKey: modelLockKey(config.fallback.provider, config.fallback.id),
-        index: lockableCandidates.length,
-      });
+          model: fallbackModel,
+          lockKey: modelLockKey(config.fallback.provider, config.fallback.id),
+          index: lockableCandidates.length,
+        });
+      }
     }
   }
 
@@ -827,6 +918,13 @@ async function finalizeSelection(
       current.id === mapping.model.id;
 
   if (!isAlreadySelected) {
+    await handleCompactOnSwitch(
+      ctx,
+      current,
+      { provider: mapping.model.provider, id: mapping.model.id },
+      config,
+    );
+
     const success = await pi.setModel(model);
     if (!success) {
       notify(

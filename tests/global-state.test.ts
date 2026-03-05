@@ -13,6 +13,7 @@ describe("Global State Management", () => {
       priority: [],
       widget: { enabled: true, placement: "belowEditor", showCount: 3 },
       autoRun: false,
+      compactOnSwitch: false,
       disabledProviders: [],
       debugLog: { enabled: true, path: "/tmp/test.log" },
       sources: { globalPath: "", projectPath: "" },

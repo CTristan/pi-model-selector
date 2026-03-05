@@ -59,6 +59,7 @@ describe("mapping wizard provider configuration", () => {
     priority: ["remainingPercent"],
     widget: { enabled: true, placement: "belowEditor", showCount: 3 },
     autoRun: false,
+    compactOnSwitch: false,
     disabledProviders: ["zai"],
     sources: { globalPath: "global.json", projectPath: "project.json" },
     raw: {
@@ -69,6 +70,7 @@ describe("mapping wizard provider configuration", () => {
 
   const enabledConfig: LoadedConfig = {
     ...initialConfig,
+    compactOnSwitch: false,
     disabledProviders: [],
     raw: {
       global: { disabledProviders: [] },
@@ -163,6 +165,7 @@ describe("mapping wizard provider configuration", () => {
       priority: ["remainingPercent"],
       widget: { enabled: true, placement: "belowEditor", showCount: 3 },
       autoRun: false,
+      compactOnSwitch: false,
       disabledProviders: ["anthropic"], // Disabled in Global
       sources: { globalPath: "global.json", projectPath: "project.json" },
       raw: {
@@ -209,6 +212,7 @@ describe("mapping wizard provider configuration", () => {
       priority: ["remainingPercent"],
       widget: { enabled: true, placement: "belowEditor", showCount: 3 },
       autoRun: false,
+      compactOnSwitch: false,
       disabledProviders: ["zai"],
       sources: { globalPath: "global.json", projectPath: "project.json" },
       raw: {

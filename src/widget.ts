@@ -84,13 +84,19 @@ function formatCandidate(
     reserveStr = ` ${theme.fg("warning", `◆ reserve: ${reserve}%`)}`;
   }
 
+  // Context filtered indicator
+  let contextStr = "";
+  if (candidate.contextFiltered) {
+    contextStr = ` ${theme.fg("error", `[ctx]`)}`;
+  }
+
   // Time left
   let resetStr = "";
   if (candidate.resetsAt) {
     resetStr = ` ${theme.fg("dim", `(${formatReset(candidate.resetsAt)})`)}`;
   }
 
-  return `${statusIcon} ${providerWindow} ${bar} ${percentStr}${reserveStr}${resetStr}`;
+  return `${statusIcon} ${providerWindow} ${bar} ${percentStr}${reserveStr}${contextStr}${resetStr}`;
 }
 
 // ============================================================================

@@ -53,6 +53,18 @@ Configuration is merged from two sources:
 
 A template for the global configuration can be found in `config/model-selector.example.json`.
 
+### Context-Aware Switching and Compaction
+
+The extension automatically prevents switching to models whose context windows are too small for your current conversation context. This prevents stuck sessions caused by context window overflow.
+
+You can also opt-in to automatic compaction on model switches by setting `"compactOnSwitch": true` in your configuration. When enabled, the extension will attempt to compact the conversation with the *old* model before switching to the new one. This is useful for preventing tool call format incompatibility errors that can occur when switching between different model providers.
+
+```json
+{
+  "compactOnSwitch": true
+}
+```
+
 ### Priority Rules
 
 You can prioritize candidates based on:

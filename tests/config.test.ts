@@ -178,6 +178,78 @@ describe("Config Loading", () => {
     expect(config?.autoRun).toBe(true);
   });
 
+  it("should handle compactOnSwitch boolean with default false", async () => {
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce("{}"); // Global
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce(
+      JSON.stringify({
+        mappings: [{ usage: { provider: "p1" }, ignore: true }],
+      }),
+    ); // Project
+    const config = await loadConfig(mockCtx);
+    expect(config?.compactOnSwitch).toBe(false);
+  });
+
+  it("should handle compactOnSwitch boolean with explicit true", async () => {
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce("{}"); // Global
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce(
+      JSON.stringify({
+        compactOnSwitch: true,
+        mappings: [{ usage: { provider: "p1" }, ignore: true }],
+      }),
+    ); // Project
+    const config = await loadConfig(mockCtx);
+    expect(config?.compactOnSwitch).toBe(true);
+  });
+
+  it("should handle compactOnSwitch boolean with explicit false", async () => {
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce(
+      JSON.stringify({
+        compactOnSwitch: false,
+        mappings: [{ usage: { provider: "p1" }, ignore: true }],
+      }),
+    ); // Global
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce(
+      JSON.stringify({
+        mappings: [{ usage: { provider: "p1" }, ignore: true }],
+      }),
+    ); // Project
+    const config = await loadConfig(mockCtx);
+    expect(config?.compactOnSwitch).toBe(false);
+  });
+
+  it("should allow project config to override global compactOnSwitch", async () => {
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce(
+      JSON.stringify({
+        compactOnSwitch: false,
+        mappings: [{ usage: { provider: "p1" }, ignore: true }],
+      }),
+    ); // Global
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce(
+      JSON.stringify({
+        compactOnSwitch: true,
+        mappings: [{ usage: { provider: "p1" }, ignore: true }],
+      }),
+    ); // Project
+    const config = await loadConfig(mockCtx);
+    expect(config?.compactOnSwitch).toBe(true);
+  });
+
+  it("should ignore invalid compactOnSwitch values", async () => {
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce(
+      JSON.stringify({
+        compactOnSwitch: "not-a-boolean",
+        mappings: [{ usage: { provider: "p1" }, ignore: true }],
+      }),
+    ); // Global
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce(
+      JSON.stringify({
+        mappings: [{ usage: { provider: "p1" }, ignore: true }],
+      }),
+    ); // Project
+    const config = await loadConfig(mockCtx);
+    expect(config?.compactOnSwitch).toBe(false);
+  });
+
   it("should normalize debug log paths", async () => {
     const debugConfig = {
       debugLog: { enabled: true, path: "relative/path.log" },

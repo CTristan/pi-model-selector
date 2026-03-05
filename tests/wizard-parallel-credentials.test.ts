@@ -71,6 +71,7 @@ describe("configureProviders parallel credential checking", () => {
     priority: ["remainingPercent"],
     widget: { enabled: true, placement: "belowEditor", showCount: 3 },
     autoRun: false,
+    compactOnSwitch: false,
     disabledProviders: [],
     sources: { globalPath: "global.json", projectPath: "project.json" },
     raw: {

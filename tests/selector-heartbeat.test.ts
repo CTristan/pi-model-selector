@@ -42,6 +42,12 @@ describe("Selector Heartbeat and Error Handling", () => {
         setStatus: vi.fn(),
       },
       hasUI: true,
+      getContextUsage: vi.fn().mockReturnValue({
+        tokens: null,
+        contextWindow: 200000,
+        percent: null,
+      }),
+      compact: vi.fn(),
     };
 
     mockConfig = {
@@ -54,6 +60,7 @@ describe("Selector Heartbeat and Error Handling", () => {
       priority: ["remainingPercent"],
       widget: { enabled: true, placement: "belowEditor", showCount: 3 },
       autoRun: false,
+      compactOnSwitch: false,
       disabledProviders: [],
       sources: { globalPath: "", projectPath: "" },
       raw: { global: {}, project: {} },

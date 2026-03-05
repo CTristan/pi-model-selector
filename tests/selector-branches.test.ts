@@ -30,6 +30,7 @@ describe("Selector Branch Coverage", () => {
     priority: ["remainingPercent"],
     widget: { enabled: true, placement: "belowEditor", showCount: 3 },
     autoRun: false,
+    compactOnSwitch: false,
     disabledProviders: [],
     sources: { globalPath: "global.json", projectPath: "project.json" },
     raw: { global: {}, project: {} },
@@ -104,7 +105,11 @@ describe("Selector Branch Coverage", () => {
       abort: vi.fn(),
       hasPendingMessages: vi.fn().mockReturnValue(false),
       shutdown: vi.fn(),
-      getContextUsage: vi.fn().mockReturnValue(undefined),
+      getContextUsage: vi.fn().mockReturnValue({
+        tokens: null,
+        contextWindow: 200000,
+        percent: null,
+      }),
       compact: vi.fn(),
       getSystemPrompt: vi.fn().mockReturnValue(""),
     }) as MockExtensionContext;

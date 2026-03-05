@@ -108,6 +108,7 @@ function asConfigShape(raw: Record<string, unknown>): {
   priority?: unknown;
   widget?: unknown;
   autoRun?: unknown;
+  compactOnSwitch?: unknown;
   fallback?: unknown;
   debugLog?: unknown;
   disabledProviders?: unknown;
@@ -117,6 +118,7 @@ function asConfigShape(raw: Record<string, unknown>): {
     priority?: unknown;
     widget?: unknown;
     autoRun?: unknown;
+    compactOnSwitch?: unknown;
     fallback?: unknown;
     debugLog?: unknown;
     disabledProviders?: unknown;
@@ -133,6 +135,9 @@ function asConfigShape(raw: Record<string, unknown>): {
   }
   if (Object.hasOwn(raw, "autoRun")) {
     shape.autoRun = raw.autoRun;
+  }
+  if (Object.hasOwn(raw, "compactOnSwitch")) {
+    shape.compactOnSwitch = raw.compactOnSwitch;
   }
   if (Object.hasOwn(raw, "fallback")) {
     shape.fallback = raw.fallback;
@@ -240,6 +245,15 @@ function normalizeAutoRun(
 ): boolean | undefined {
   if (typeof raw.autoRun === "boolean") {
     return raw.autoRun;
+  }
+  return undefined;
+}
+
+function normalizeCompactOnSwitch(
+  raw: ReturnType<typeof asConfigShape>,
+): boolean | undefined {
+  if (typeof raw.compactOnSwitch === "boolean") {
+    return raw.compactOnSwitch;
   }
   return undefined;
 }
@@ -515,6 +529,8 @@ export async function loadConfig(
     projectWidget = normalizeWidget(projectConfig),
     globalAutoRun = normalizeAutoRun(globalConfig),
     projectAutoRun = normalizeAutoRun(projectConfig),
+    globalCompactOnSwitch = normalizeCompactOnSwitch(globalConfig),
+    projectCompactOnSwitch = normalizeCompactOnSwitch(projectConfig),
     globalFallback = normalizeFallback(globalConfig, globalConfigPath, errors),
     projectFallback = normalizeFallback(projectConfig, projectPath, errors),
     globalDebugLog = normalizeDebugLog(
@@ -563,6 +579,7 @@ export async function loadConfig(
     priority: projectPriority ?? globalPriority ?? DEFAULT_PRIORITY,
     widget: mergeWidgetConfig(globalWidget, projectWidget),
     autoRun: projectAutoRun ?? globalAutoRun ?? false,
+    compactOnSwitch: projectCompactOnSwitch ?? globalCompactOnSwitch ?? false,
     disabledProviders: [...new Set([...globalDisabled, ...projectDisabled])],
     ...(mergedFallback !== undefined ? { fallback: mergedFallback } : {}),
     debugLog: projectConfig.debugLog ? projectDebugLog : globalDebugLog,

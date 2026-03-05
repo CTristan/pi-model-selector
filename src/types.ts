@@ -58,6 +58,7 @@ export interface ModelSelectorConfig {
   priority?: PriorityRule[];
   widget?: WidgetConfig;
   autoRun?: boolean;
+  compactOnSwitch?: boolean;
   fallback?: FallbackConfig;
 }
 
@@ -76,6 +77,7 @@ export interface UsageCandidate {
   resetsAt?: Date;
   account?: string;
   isSynthetic?: boolean;
+  contextFiltered?: boolean;
 }
 
 export interface LoadedConfig {
@@ -83,6 +85,7 @@ export interface LoadedConfig {
   priority: PriorityRule[];
   widget: Required<WidgetConfig>;
   autoRun: boolean;
+  compactOnSwitch: boolean;
   disabledProviders: ProviderName[];
   debugLog?: {
     enabled: boolean;

@@ -167,6 +167,12 @@ describe("Model Selector Extension", () => {
         setStatus: vi.fn(),
       },
       hasUI: true,
+      getContextUsage: vi.fn().mockReturnValue({
+        tokens: null,
+        contextWindow: 200000,
+        percent: null,
+      }),
+      compact: vi.fn(),
     };
 
     // Default mocks
@@ -184,6 +190,7 @@ describe("Model Selector Extension", () => {
       priority: ["remainingPercent"],
       widget: { enabled: true, placement: "belowEditor", showCount: 3 },
       autoRun: false,
+      compactOnSwitch: false,
       disabledProviders: [],
       sources: { globalPath: "", projectPath: "" },
       raw: { global: {}, project: {} },
@@ -230,6 +237,7 @@ describe("Model Selector Extension", () => {
       priority: ["remainingPercent"],
       widget: { enabled: true, placement: "belowEditor", showCount: 3 },
       autoRun: false,
+      compactOnSwitch: false,
       disabledProviders: [],
       sources: { globalPath: "", projectPath: "" },
       raw: { global: {}, project: {} },
@@ -417,6 +425,7 @@ describe("Model Selector Extension", () => {
       priority: ["remainingPercent"],
       widget: { enabled: true, placement: "belowEditor", showCount: 3 },
       autoRun: false,
+      compactOnSwitch: false,
       disabledProviders: [],
       debugLog: {
         enabled: true,
@@ -656,6 +665,7 @@ describe("Model Selector Extension", () => {
           priority: ["remainingPercent"],
           widget: { enabled: true, placement: "belowEditor", showCount: 3 },
           autoRun: false,
+          compactOnSwitch: false,
           disabledProviders: [],
           sources: { globalPath: "", projectPath: "" },
           raw: { global: {}, project: {} },
@@ -1087,6 +1097,7 @@ describe("Model Selector Extension", () => {
           priority: ["remainingPercent"],
           widget: { enabled: true, placement: "belowEditor", showCount: 3 },
           autoRun: false,
+          compactOnSwitch: false,
           disabledProviders: [],
           sources: { globalPath: "", projectPath: "" },
           raw: { global: {}, project: {} },

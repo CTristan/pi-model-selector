@@ -11,6 +11,7 @@
     "showCount": 3
   },
   "autoRun": true,
+  "compactOnSwitch": false,
   "debugLog": {
     "enabled": false,
     "path": ".pi/model-selector.log"

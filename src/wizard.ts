@@ -940,6 +940,48 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
       config.autoRun = newValue;
       notify(ctx, "info", `Auto-run ${newValue ? "enabled" : "disabled"}.`);
     },
+    configureCompactOnSwitch = async (): Promise<void> => {
+      const currentStatus = config.compactOnSwitch ? "enabled" : "disabled",
+        choice = await selectWrapped(
+          ctx,
+          `Compact context on model switch (current: ${currentStatus})`,
+          [
+            config.compactOnSwitch
+              ? "Disable compact-on-switch"
+              : "Enable compact-on-switch",
+          ],
+        );
+      if (!choice) return;
+
+      const newValue = choice === "Enable compact-on-switch",
+        locationChoice = await selectWrapped(
+          ctx,
+          "Save compact-on-switch setting to",
+          locationLabels,
+        );
+      if (!locationChoice) return;
+
+      const saveToProject = locationChoice === locationLabels[1],
+        targetRaw = saveToProject ? config.raw.project : config.raw.global,
+        targetPath = saveToProject
+          ? config.sources.projectPath
+          : config.sources.globalPath;
+
+      try {
+        targetRaw.compactOnSwitch = newValue;
+        await saveConfigFile(targetPath, targetRaw);
+      } catch (error: unknown) {
+        notify(ctx, "error", `Failed to write ${targetPath}: ${String(error)}`);
+        return;
+      }
+
+      config.compactOnSwitch = newValue;
+      notify(
+        ctx,
+        "info",
+        `Compact-on-switch ${newValue ? "enabled" : "disabled"}.`,
+      );
+    },
     configureProviders = async (): Promise<void> => {
       const piAuth = await loadAuth();
       const locationChoice = await selectWrapped(
@@ -1331,6 +1373,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
       "Configure fallback",
       "Configure widget",
       "Configure auto-run",
+      "Configure compact-on-switch",
       "Configure debug log",
       "Clean up config",
       "Done",
@@ -1371,6 +1414,11 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 
     if (action === "Configure auto-run") {
       await configureAutoRun();
+      continue;
+    }
+
+    if (action === "Configure compact-on-switch") {
+      await configureCompactOnSwitch();
       continue;
     }
 
