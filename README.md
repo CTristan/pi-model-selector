@@ -22,7 +22,13 @@ A Pi extension that automatically selects the best AI model based on remaining u
 To install this extension, use the `pi` CLI:
 
 ```bash
-pi package install https://github.com/CTristan/pi-model-selector
+pi install npm:@hemocode/pi-model-selector
+```
+
+Or install from GitHub directly:
+
+```bash
+pi install https://github.com/CTristan/pi-model-selector
 ```
 
 Or if you have the source code locally:

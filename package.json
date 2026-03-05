@@ -1,12 +1,28 @@
 {
-  "name": "pi-model-selector",
+  "name": "@hemocode/pi-model-selector",
   "version": "1.0.0",
   "description": "A Pi extension that automatically selects the best model based on remaining usage quotas across various providers (Claude, OpenAI, Gemini, etc.).",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CTristan/pi-model-selector.git"
+  },
   "keywords": [
     "pi-package"
   ],
   "type": "module",
   "main": "index.ts",
+  "files": [
+    "index.ts",
+    "src/",
+    "config/model-selector.example.json",
+    "docs/",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "pi": {
     "extensions": [
       "index.ts"
