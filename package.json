@@ -32,7 +32,7 @@
     "@mariozechner/pi-coding-agent": "*"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.4",
+    "@biomejs/biome": "2.4.5",
     "@mariozechner/pi-coding-agent": "latest",
     "@types/luxon": "^3.4.2",
     "@types/node": "^24.0.0",
