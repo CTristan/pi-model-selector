@@ -34,11 +34,11 @@
   "devDependencies": {
     "@biomejs/biome": "2.4.5",
     "@mariozechner/pi-coding-agent": "latest",
-    "@types/luxon": "^3.4.2",
-    "@types/node": "^24.0.0",
-    "@vitest/coverage-v8": "^4.0.18",
-    "typescript": "^5.0.0",
-    "vitest": "^4.0.18"
+    "@types/luxon": "3.7.1",
+    "@types/node": "24.11.0",
+    "@vitest/coverage-v8": "4.0.18",
+    "typescript": "5.9.3",
+    "vitest": "4.0.18"
   },
   "scripts": {
     "type-check": "tsc",
