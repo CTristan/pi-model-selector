@@ -15,7 +15,12 @@
     "enabled": false,
     "path": ".pi/model-selector.log"
   },
-  "disabledProviders": ["kiro", "zai"],
+  "disabledProviders": ["kiro", "zai", "minimax"],
+  "providerSettings": {
+    "minimax": {
+      "groupId": "1234567890"
+    }
+  },
   "mappings": [
     {
       "usage": {

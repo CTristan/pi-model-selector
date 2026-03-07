@@ -16,6 +16,7 @@ import {
   loadConfig,
   removeMapping,
   saveConfigFile,
+  updateProviderSettings,
   updateWidgetConfig,
   upsertMapping,
 } from "./config.js";
@@ -96,6 +97,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         cachedUsages = await fetchAllUsages(
           ctx.modelRegistry,
           config.disabledProviders,
+          config.providerSettings,
         );
       }
       const rawCandidates = buildCandidates(cachedUsages);
@@ -1007,10 +1009,63 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         nextDisabled = !currentlyDisabledInTarget,
         disabledSet = new Set(currentRawDisabled);
 
-      if (nextDisabled) {
-        disabledSet.add(selectedProvider);
+      const selectedProviderLabelFriendly =
+        PROVIDER_LABELS[selectedProvider as ProviderName];
+
+      if (selectedProvider === "minimax") {
+        const subMenuOptions = [
+          nextDisabled
+            ? `✅ Enable ${selectedProviderLabelFriendly}`
+            : `⏸ Disable ${selectedProviderLabelFriendly}`,
+          "Configure GroupId",
+          "Back",
+        ];
+
+        const subMenuChoice = await selectWrapped(
+          ctx,
+          `Configure ${selectedProviderLabelFriendly}`,
+          subMenuOptions,
+        );
+
+        if (!subMenuChoice || subMenuChoice === "Back") return;
+
+        if (subMenuChoice === "Configure GroupId") {
+          const currentGroupId =
+            config.providerSettings?.minimax?.groupId || "none";
+          const newGroupId = await ctx.ui.input(
+            `Enter Minimax GroupId (current: ${currentGroupId})`,
+          );
+          if (newGroupId) {
+            try {
+              updateProviderSettings(targetRaw, "minimax", {
+                groupId: newGroupId.trim(),
+              });
+              await saveConfigFile(targetPath, targetRaw);
+              notify(ctx, "info", `Minimax GroupId updated to: ${newGroupId}`);
+            } catch (error: unknown) {
+              notify(
+                ctx,
+                "error",
+                `Failed to write ${targetPath}: ${String(error)}`,
+              );
+            }
+          }
+          return;
+        }
+
+        // Otherwise, it was the enable/disable choice
+        if (nextDisabled) {
+          disabledSet.add(selectedProvider);
+        } else {
+          disabledSet.delete(selectedProvider);
+        }
       } else {
-        disabledSet.delete(selectedProvider);
+        // Standard enable/disable for other providers
+        if (nextDisabled) {
+          disabledSet.add(selectedProvider);
+        } else {
+          disabledSet.delete(selectedProvider);
+        }
       }
 
       try {
@@ -1024,13 +1079,16 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
       const reloaded = await loadConfig(ctx, { requireMappings: false });
       if (reloaded) {
         config.disabledProviders = reloaded.disabledProviders;
+        if (reloaded.providerSettings) {
+          config.providerSettings = reloaded.providerSettings;
+        } else {
+          delete config.providerSettings;
+        }
         config.raw = reloaded.raw;
       }
 
       cachedUsages = null;
 
-      const selectedProviderLabelFriendly =
-        PROVIDER_LABELS[selectedProvider as ProviderName];
       const isActuallyDisabled =
         config.disabledProviders.includes(selectedProvider);
       const scopeLabel = saveToProject ? "Project" : "Global";

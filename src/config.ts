@@ -7,7 +7,9 @@ import type {
   FallbackConfig,
   LoadedConfig,
   MappingEntry,
+  MinimaxSettings,
   PriorityRule,
+  ProviderSettings,
   WidgetConfig,
 } from "./types.js";
 import {
@@ -111,6 +113,7 @@ function asConfigShape(raw: Record<string, unknown>): {
   fallback?: unknown;
   debugLog?: unknown;
   disabledProviders?: unknown;
+  providerSettings?: unknown;
 } {
   const shape: {
     mappings?: unknown[];
@@ -120,6 +123,7 @@ function asConfigShape(raw: Record<string, unknown>): {
     fallback?: unknown;
     debugLog?: unknown;
     disabledProviders?: unknown;
+    providerSettings?: unknown;
   } = {};
 
   if (Array.isArray(raw.mappings)) {
@@ -142,6 +146,9 @@ function asConfigShape(raw: Record<string, unknown>): {
   }
   if (Array.isArray(raw.disabledProviders)) {
     shape.disabledProviders = raw.disabledProviders;
+  }
+  if (raw.providerSettings && typeof raw.providerSettings === "object") {
+    shape.providerSettings = raw.providerSettings;
   }
 
   return shape;
@@ -171,6 +178,27 @@ function normalizeDisabledProviders(
   return raw.disabledProviders.filter(
     (p): p is ProviderName => typeof p === "string" && validProviders.has(p),
   );
+}
+
+function normalizeProviderSettings(
+  raw: ReturnType<typeof asConfigShape>,
+): ProviderSettings {
+  if (!raw.providerSettings || typeof raw.providerSettings !== "object") {
+    return {};
+  }
+  const settings = raw.providerSettings as Record<string, unknown>;
+  const result: ProviderSettings = {};
+
+  if (settings.minimax && typeof settings.minimax === "object") {
+    const minimax = settings.minimax as Record<string, unknown>;
+    const minimaxSettings: MinimaxSettings = {};
+    if (typeof minimax.groupId === "string") {
+      minimaxSettings.groupId = minimax.groupId;
+    }
+    result.minimax = minimaxSettings;
+  }
+
+  return result;
 }
 
 function normalizePriority(
@@ -523,7 +551,9 @@ export async function loadConfig(
     ),
     projectDebugLog = normalizeDebugLog(projectConfig, ctx.cwd),
     globalDisabled = normalizeDisabledProviders(globalConfig),
-    projectDisabled = normalizeDisabledProviders(projectConfig);
+    projectDisabled = normalizeDisabledProviders(projectConfig),
+    globalProviderSettings = normalizeProviderSettings(globalConfig),
+    projectProviderSettings = normalizeProviderSettings(projectConfig);
 
   if (errors.length > 0) {
     notify(ctx, "error", errors.join("\n"));
@@ -558,12 +588,22 @@ export async function loadConfig(
 
   const mergedFallback = projectFallback ?? globalFallback;
 
+  const providerSettings: ProviderSettings = {
+    ...globalProviderSettings,
+    ...projectProviderSettings,
+    minimax: {
+      ...globalProviderSettings.minimax,
+      ...projectProviderSettings.minimax,
+    },
+  };
+
   return {
     mappings,
     priority: projectPriority ?? globalPriority ?? DEFAULT_PRIORITY,
     widget: mergeWidgetConfig(globalWidget, projectWidget),
     autoRun: projectAutoRun ?? globalAutoRun ?? false,
     disabledProviders: [...new Set([...globalDisabled, ...projectDisabled])],
+    providerSettings,
     ...(mergedFallback !== undefined ? { fallback: mergedFallback } : {}),
     debugLog: projectConfig.debugLog ? projectDebugLog : globalDebugLog,
     sources: { globalPath: globalConfigPath, projectPath },
@@ -835,6 +875,26 @@ export function updateWidgetConfig(
       ? (raw.widget as Record<string, unknown>)
       : {};
   raw.widget = { ...existing, ...widgetUpdate };
+}
+
+export function updateProviderSettings(
+  raw: Record<string, unknown>,
+  provider: string,
+  settingsUpdate: Record<string, unknown>,
+): void {
+  const existingSettings =
+    raw.providerSettings && typeof raw.providerSettings === "object"
+      ? (raw.providerSettings as Record<string, unknown>)
+      : {};
+  const providerSettings =
+    existingSettings[provider] && typeof existingSettings[provider] === "object"
+      ? (existingSettings[provider] as Record<string, unknown>)
+      : {};
+
+  raw.providerSettings = {
+    ...existingSettings,
+    [provider]: { ...providerSettings, ...settingsUpdate },
+  };
 }
 
 // Utility: return normalized mapping entries from a raw config object

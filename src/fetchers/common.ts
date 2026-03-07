@@ -24,6 +24,7 @@ export const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   antigravity: "Antigravity",
   kiro: "Kiro",
   zai: "z.ai",
+  minimax: "Minimax",
 };
 
 export const URLS = {
@@ -37,6 +38,8 @@ export const URLS = {
     "https://cloudcode-pa.googleapis.com/v1internal:fetchAvailableModels",
   CODEX_USAGE: "https://chatgpt.com/backend-api/wham/usage",
   ZAI_QUOTA: "https://api.z.ai/api/monitor/usage/quota/limit",
+  MINIMAX_CODING_PLAN:
+    "https://platform.minimax.io/v1/api/openplatform/coding_plan/remains",
 };
 
 export async function loadPiAuth(): Promise<Record<string, unknown>> {
