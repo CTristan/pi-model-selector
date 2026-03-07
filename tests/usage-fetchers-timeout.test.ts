@@ -23,6 +23,7 @@ const disabledProviders = [
   "codex",
   "antigravity",
   "kiro",
+  "minimax",
 ];
 
 describe("fetchAllUsages fallback branches", () => {

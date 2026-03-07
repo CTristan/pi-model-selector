@@ -237,6 +237,7 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
       const usages = await fetchAllUsages(
         ctx.modelRegistry,
         config.disabledProviders,
+        config.providerSettings,
       );
 
       const { candidateKey } = await import("./src/candidates.js");
