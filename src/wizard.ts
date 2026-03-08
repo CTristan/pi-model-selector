@@ -1069,6 +1069,20 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
                 "info",
                 `Minimax GroupId updated to: ${trimmedGroupId}`,
               );
+
+              // Reload config to update in-memory providerSettings
+              const reloaded = await loadConfig(ctx, {
+                requireMappings: false,
+              });
+              if (reloaded) {
+                if (reloaded.providerSettings) {
+                  config.providerSettings = reloaded.providerSettings;
+                }
+                config.raw = reloaded.raw;
+              }
+
+              // Clear cached usages to force refresh with new GroupId
+              cachedUsages = null;
             } catch (error: unknown) {
               notify(
                 ctx,
@@ -1108,8 +1122,6 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         config.disabledProviders = reloaded.disabledProviders;
         if (reloaded.providerSettings) {
           config.providerSettings = reloaded.providerSettings;
-        } else {
-          delete config.providerSettings;
         }
         config.raw = reloaded.raw;
       }

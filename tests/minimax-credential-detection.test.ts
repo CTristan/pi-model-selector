@@ -28,7 +28,7 @@ describe("Minimax credential detection", () => {
     );
 
     const hasCreds = await hasProviderCredential(
-      "minimax" as any,
+      "minimax",
       mockPiAuth,
       undefined,
     );
@@ -48,7 +48,7 @@ describe("Minimax credential detection", () => {
     );
 
     const hasCreds = await hasProviderCredential(
-      "minimax" as any,
+      "minimax",
       piAuthWithAccess,
       undefined,
     );
@@ -64,7 +64,7 @@ describe("Minimax credential detection", () => {
     );
 
     const hasCreds = await hasProviderCredential(
-      "minimax" as any,
+      "minimax",
       emptyPiAuth,
       undefined,
     );
@@ -78,7 +78,7 @@ describe("Minimax credential detection", () => {
     );
 
     const hasCreds = await hasProviderCredential(
-      "minimax" as any,
+      "minimax",
       emptyPiAuth,
       undefined,
     );
@@ -96,7 +96,7 @@ describe("Minimax credential detection", () => {
     );
 
     const hasCreds = await hasProviderCredential(
-      "minimax" as any,
+      "minimax",
       piAuthEmpty,
       undefined,
     );
