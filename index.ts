@@ -291,8 +291,68 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
           preloadedConfig: config,
           preloadedUsages: usages,
         });
+        // Explicitly refresh widget to show updated cooldown state
+        const { getWidgetState } = await import("./src/widget.js");
+        const state = getWidgetState();
+        if (state) {
+          updateWidgetState({ ...state, config });
+          renderUsageWidget(ctx);
+        }
       } else {
         notify(ctx, "error", "Could not determine a candidate to skip.");
+      }
+    },
+  });
+
+  pi.registerCommand("model-unskip", {
+    description:
+      "Remove all skip cooldowns and re-enable skipped models for selection",
+    handler: async (_args, ctx) => {
+      void _args;
+      // Load persisted state first (for print-mode support)
+      await cooldownManager.loadPersistedCooldowns();
+
+      const removedCount = cooldownManager.clearSkipCooldowns();
+      await cooldownManager.persistCooldowns();
+
+      if (removedCount > 0) {
+        notify(
+          ctx,
+          "info",
+          `Cleared ${removedCount} skip cooldown(s). Skipped models are now eligible.`,
+        );
+        // Re-run selection to pick from the newly un-skipped models
+        const config = await loadConfig(ctx);
+        if (config) {
+          const usages = await fetchAllUsages(
+            ctx.modelRegistry,
+            config.disabledProviders,
+            config.providerSettings,
+          );
+          await runSelectorWrapper(ctx, "command", {
+            preloadedConfig: config,
+            preloadedUsages: usages,
+          });
+          // Explicitly refresh widget to show updated cooldown state
+          const { getWidgetState } = await import("./src/widget.js");
+          const state = getWidgetState();
+          if (state) {
+            updateWidgetState({ ...state, config });
+            renderUsageWidget(ctx);
+          }
+        }
+      } else {
+        notify(ctx, "info", "No skip cooldowns to clear.");
+        // Still refresh widget to reflect current state
+        const config = await loadConfig(ctx);
+        if (config) {
+          const { getWidgetState } = await import("./src/widget.js");
+          const state = getWidgetState();
+          if (state) {
+            updateWidgetState({ ...state, config });
+            renderUsageWidget(ctx);
+          }
+        }
       }
     },
   });

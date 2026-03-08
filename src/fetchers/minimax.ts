@@ -33,23 +33,43 @@ interface MinimaxResponse {
 export function resolveMinimaxApiKey(
   piAuth: Record<string, unknown>,
 ): string | undefined {
-  if (process.env.MINIMAX_API_KEY) {
-    return process.env.MINIMAX_API_KEY;
+  const envKey = process.env.MINIMAX_API_KEY;
+  if (typeof envKey === "string") {
+    const trimmedEnvKey = envKey.trim();
+    if (trimmedEnvKey) return trimmedEnvKey;
   }
   const auth = piAuth.minimax as MinimaxAuth | undefined;
   if (!auth) return undefined;
-  if (typeof auth.key === "string" && auth.key) return auth.key;
-  if (typeof auth.access === "string" && auth.access) return auth.access;
+  if (typeof auth.key === "string") {
+    const trimmedKey = auth.key.trim();
+    if (trimmedKey) return trimmedKey;
+  }
+  if (typeof auth.access === "string") {
+    const trimmedAccess = auth.access.trim();
+    if (trimmedAccess) return trimmedAccess;
+  }
   return undefined;
 }
 
 export function resolveMinimaxGroupId(
   configGroupId?: string,
 ): string | undefined {
-  if (process.env.MINIMAX_GROUP_ID) {
-    return process.env.MINIMAX_GROUP_ID;
+  const envGroupId = process.env.MINIMAX_GROUP_ID;
+  if (typeof envGroupId === "string") {
+    const trimmedEnvGroupId = envGroupId.trim();
+    if (trimmedEnvGroupId) {
+      return trimmedEnvGroupId;
+    }
   }
-  return configGroupId;
+
+  if (typeof configGroupId === "string") {
+    const trimmedConfigGroupId = configGroupId.trim();
+    if (trimmedConfigGroupId) {
+      return trimmedConfigGroupId;
+    }
+  }
+
+  return undefined;
 }
 
 export async function fetchMinimaxUsage(
@@ -94,11 +114,15 @@ export async function fetchMinimaxUsage(
     });
 
     if (!res.ok) {
+      const statusText = res.statusText?.trim();
+      const errorMessage = statusText
+        ? `HTTP ${res.status} ${statusText}`
+        : `HTTP ${res.status}`;
       const snapshot: UsageSnapshot = {
         provider,
         displayName,
         windows: [],
-        error: `HTTP ${res.status} ${res.statusText || ""}`,
+        error: errorMessage,
       };
       return snapshot;
     }
@@ -132,10 +156,14 @@ export async function fetchMinimaxUsage(
       if (!remain.model_name) continue;
 
       const total = remain.current_interval_total_count || 0;
-      const usage = remain.current_interval_usage_count || 0;
+      // Note: API returns "usage_count" which is actually the *remaining* amount
+      const remainingRaw = remain.current_interval_usage_count || 0;
+      const remaining = Math.min(total, Math.max(0, remainingRaw));
+      const used = Math.max(0, total - remaining);
+
       let usedPercent = 0;
       if (total > 0) {
-        usedPercent = Math.min(100, Math.max(0, (usage / total) * 100));
+        usedPercent = Math.min(100, Math.max(0, (used / total) * 100));
       }
 
       const resetsAt = safeDate(remain.end_time);

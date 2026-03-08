@@ -193,7 +193,10 @@ function normalizeProviderSettings(
     const minimax = settings.minimax as Record<string, unknown>;
     const minimaxSettings: MinimaxSettings = {};
     if (typeof minimax.groupId === "string") {
-      minimaxSettings.groupId = minimax.groupId;
+      const trimmedGroupId = minimax.groupId.trim();
+      if (trimmedGroupId.length > 0) {
+        minimaxSettings.groupId = trimmedGroupId;
+      }
     }
     result.minimax = minimaxSettings;
   }
@@ -592,8 +595,8 @@ export async function loadConfig(
     ...globalProviderSettings,
     ...projectProviderSettings,
     minimax: {
-      ...globalProviderSettings.minimax,
-      ...projectProviderSettings.minimax,
+      ...(globalProviderSettings.minimax ?? {}),
+      ...(projectProviderSettings.minimax ?? {}),
     },
   };
 

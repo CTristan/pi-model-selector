@@ -76,11 +76,11 @@ describe("Minimax Fetcher", () => {
     if (!window0 || !window1) throw new Error("Windows not found");
 
     expect(window0.label).toBe("MiniMax-M2");
-    expect(window0.usedPercent).toBe(10); // (150/1500)*100
+    expect(window0.usedPercent).toBe(90); // (1500-150)/1500*100
     expect(window0.resetsAt?.getTime()).toBe(1772859600000);
 
     expect(window1.label).toBe("MiniMax-M2.5");
-    expect(window1.usedPercent).toBe(90); // (900/1000)*100
+    expect(window1.usedPercent).toBe(10); // (1000-900)/1000*100
   });
 
   it("should handle API errors", async () => {

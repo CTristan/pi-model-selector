@@ -208,10 +208,6 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
       const availableModels = await loadModels();
       if (!availableModels) return;
 
-      const modelLabels = availableModels.map(
-        (model) => `${model.provider}/${model.id}`,
-      );
-
       let continueMapping = true;
       while (continueMapping) {
         const candidates = await loadCandidates();
@@ -604,16 +600,34 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
           actionChoice === "Map to model" ||
           actionChoice === "Map by pattern"
         ) {
+          // Filter models to only show those from the same provider as the usage bucket
+          const providerModels = availableModels.filter(
+            (model) => model.provider === selectedCandidate.provider,
+          );
+
+          if (providerModels.length === 0) {
+            notify(
+              ctx,
+              "warning",
+              `No models found for provider ${selectedCandidate.provider}. Cannot map this bucket.`,
+            );
+            return;
+          }
+
+          const providerModelLabels = providerModels.map(
+            (model) => `${model.provider}/${model.id}`,
+          );
+
           const modelChoice = await selectWrapped(
             ctx,
             `Select model for ${selectedCandidate.provider}/${pattern || selectedCandidate.windowLabel}`,
-            modelLabels,
+            providerModelLabels,
           );
           if (!modelChoice) return;
 
-          const modelIndex = modelLabels.indexOf(modelChoice);
+          const modelIndex = providerModelLabels.indexOf(modelChoice);
           if (modelIndex < 0) return;
-          const model = availableModels[modelIndex];
+          const model = providerModels[modelIndex];
           if (!model) return;
           selectedModel = model;
 
@@ -1036,12 +1050,25 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
             `Enter Minimax GroupId (current: ${currentGroupId})`,
           );
           if (newGroupId) {
+            const trimmedGroupId = newGroupId.trim();
+            if (!trimmedGroupId) {
+              notify(
+                ctx,
+                "error",
+                "Minimax GroupId cannot be empty or whitespace only.",
+              );
+              return;
+            }
             try {
               updateProviderSettings(targetRaw, "minimax", {
-                groupId: newGroupId.trim(),
+                groupId: trimmedGroupId,
               });
               await saveConfigFile(targetPath, targetRaw);
-              notify(ctx, "info", `Minimax GroupId updated to: ${newGroupId}`);
+              notify(
+                ctx,
+                "info",
+                `Minimax GroupId updated to: ${trimmedGroupId}`,
+              );
             } catch (error: unknown) {
               notify(
                 ctx,
