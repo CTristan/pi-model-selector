@@ -81,6 +81,10 @@ describe("Explicit Model Selection", () => {
     vi.clearAllMocks();
     capturedDebugLogs.length = 0;
 
+    // Clear events and commands to ensure test isolation
+    Object.keys(events).forEach((key) => void delete events[key]);
+    Object.keys(commands).forEach((key) => void delete commands[key]);
+
     // Track widget state
     updateWidgetStateMock = vi.mocked(widgetMod.updateWidgetState);
     renderUsageWidgetMock = vi.mocked(widgetMod.renderUsageWidget);
