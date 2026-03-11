@@ -217,6 +217,10 @@ describe("Model Selector Extension", () => {
       "model-skip",
       expect.anything(),
     );
+    expect(pi.registerCommand).toHaveBeenCalledWith(
+      "model-unskip",
+      expect.anything(),
+    );
   });
 
   it("only fetches usage for providers referenced by mappings", async () => {
@@ -503,6 +507,65 @@ describe("Model Selector Extension", () => {
     );
     expect(ctx.ui.notify).toHaveBeenCalledWith(
       expect.stringContaining("Set model to p2/m2"),
+      "info",
+    );
+  });
+
+  it("should unskip all skipped models on /model-unskip", async () => {
+    modelSelectorExtension(pi);
+    const selectHandler = commands["model-select"];
+    if (!selectHandler) throw new Error("Command not found: model-select");
+    const skipHandler = commands["model-skip"];
+    if (!skipHandler) throw new Error("Command not found: model-skip");
+    const unskipHandler = commands["model-unskip"];
+    if (!unskipHandler) throw new Error("Command not found: model-unskip");
+
+    // 1. Run select to establish "last selected"
+    await selectHandler({}, ctx);
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("Already using p1/m1"),
+      "info",
+    );
+
+    // 2. Run skip to add cooldown for p1
+    ctx.ui.notify.mockClear();
+    await skipHandler({}, ctx);
+
+    // Should notify about cooldown
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("cooldown"),
+      "info",
+    );
+
+    // Should have selected p2 (p1 is on cooldown)
+    expect(pi.setModel).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: "p2", id: "m2" }),
+    );
+
+    // 3. Run unskip to clear skip cooldowns
+    ctx.ui.notify.mockClear();
+    await unskipHandler({}, ctx);
+
+    // Should notify about clearing cooldowns - verify at least one notification contains "Cleared"
+    const notifyCalls = ctx.ui.notify.mock.calls as Array<[string, string]>;
+    const clearedNotification = notifyCalls.find(
+      (call) => typeof call[0] === "string" && call[0].includes("Cleared"),
+    );
+    expect(clearedNotification).toBeDefined();
+    expect(clearedNotification?.[1]).toBe("info");
+  });
+
+  it("should notify when no skip cooldowns exist on /model-unskip", async () => {
+    modelSelectorExtension(pi);
+    const unskipHandler = commands["model-unskip"];
+    if (!unskipHandler) throw new Error("Command not found: model-unskip");
+
+    // Run unskip without any skips
+    await unskipHandler({}, ctx);
+
+    // Should notify that there's nothing to clear
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("No skip cooldowns"),
       "info",
     );
   });

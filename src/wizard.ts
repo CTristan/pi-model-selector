@@ -16,6 +16,7 @@ import {
   loadConfig,
   removeMapping,
   saveConfigFile,
+  updateProviderSettings,
   updateWidgetConfig,
   upsertMapping,
 } from "./config.js";
@@ -96,6 +97,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         cachedUsages = await fetchAllUsages(
           ctx.modelRegistry,
           config.disabledProviders,
+          config.providerSettings,
         );
       }
       const rawCandidates = buildCandidates(cachedUsages);
@@ -205,10 +207,6 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
     configureMappings = async (): Promise<void> => {
       const availableModels = await loadModels();
       if (!availableModels) return;
-
-      const modelLabels = availableModels.map(
-        (model) => `${model.provider}/${model.id}`,
-      );
 
       let continueMapping = true;
       while (continueMapping) {
@@ -602,16 +600,34 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
           actionChoice === "Map to model" ||
           actionChoice === "Map by pattern"
         ) {
+          // Filter models to only show those from the same provider as the usage bucket
+          const providerModels = availableModels.filter(
+            (model) => model.provider === selectedCandidate.provider,
+          );
+
+          if (providerModels.length === 0) {
+            notify(
+              ctx,
+              "warning",
+              `No models found for provider ${selectedCandidate.provider}. Cannot map this bucket.`,
+            );
+            return;
+          }
+
+          const providerModelLabels = providerModels.map(
+            (model) => `${model.provider}/${model.id}`,
+          );
+
           const modelChoice = await selectWrapped(
             ctx,
             `Select model for ${selectedCandidate.provider}/${pattern || selectedCandidate.windowLabel}`,
-            modelLabels,
+            providerModelLabels,
           );
           if (!modelChoice) return;
 
-          const modelIndex = modelLabels.indexOf(modelChoice);
+          const modelIndex = providerModelLabels.indexOf(modelChoice);
           if (modelIndex < 0) return;
-          const model = availableModels[modelIndex];
+          const model = providerModels[modelIndex];
           if (!model) return;
           selectedModel = model;
 
@@ -1007,10 +1023,90 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         nextDisabled = !currentlyDisabledInTarget,
         disabledSet = new Set(currentRawDisabled);
 
-      if (nextDisabled) {
-        disabledSet.add(selectedProvider);
+      const selectedProviderLabelFriendly =
+        PROVIDER_LABELS[selectedProvider as ProviderName];
+
+      if (selectedProvider === "minimax") {
+        const subMenuOptions = [
+          currentlyDisabledInTarget
+            ? `✅ Enable ${selectedProviderLabelFriendly}`
+            : `⏸ Disable ${selectedProviderLabelFriendly}`,
+          "Configure GroupId",
+          "Back",
+        ];
+
+        const subMenuChoice = await selectWrapped(
+          ctx,
+          `Configure ${selectedProviderLabelFriendly}`,
+          subMenuOptions,
+        );
+
+        if (!subMenuChoice || subMenuChoice === "Back") return;
+
+        if (subMenuChoice === "Configure GroupId") {
+          const currentGroupId =
+            config.providerSettings?.minimax?.groupId || "none";
+          const newGroupId = await ctx.ui.input(
+            `Enter Minimax GroupId (current: ${currentGroupId})`,
+          );
+          if (newGroupId) {
+            const trimmedGroupId = newGroupId.trim();
+            if (!trimmedGroupId) {
+              notify(
+                ctx,
+                "error",
+                "Minimax GroupId cannot be empty or whitespace only.",
+              );
+              return;
+            }
+            try {
+              updateProviderSettings(targetRaw, "minimax", {
+                groupId: trimmedGroupId,
+              });
+              await saveConfigFile(targetPath, targetRaw);
+              notify(
+                ctx,
+                "info",
+                `Minimax GroupId updated to: ${trimmedGroupId}`,
+              );
+
+              // Reload config to update in-memory providerSettings
+              const reloaded = await loadConfig(ctx, {
+                requireMappings: false,
+              });
+              if (reloaded) {
+                if (reloaded.providerSettings) {
+                  config.providerSettings = reloaded.providerSettings;
+                }
+                config.raw = reloaded.raw;
+              }
+
+              // Clear cached usages to force refresh with new GroupId
+              cachedUsages = null;
+            } catch (error: unknown) {
+              notify(
+                ctx,
+                "error",
+                `Failed to write ${targetPath}: ${String(error)}`,
+              );
+            }
+          }
+          return;
+        }
+
+        // Otherwise, it was the enable/disable choice
+        if (nextDisabled) {
+          disabledSet.add(selectedProvider);
+        } else {
+          disabledSet.delete(selectedProvider);
+        }
       } else {
-        disabledSet.delete(selectedProvider);
+        // Standard enable/disable for other providers
+        if (nextDisabled) {
+          disabledSet.add(selectedProvider);
+        } else {
+          disabledSet.delete(selectedProvider);
+        }
       }
 
       try {
@@ -1024,13 +1120,14 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
       const reloaded = await loadConfig(ctx, { requireMappings: false });
       if (reloaded) {
         config.disabledProviders = reloaded.disabledProviders;
+        if (reloaded.providerSettings) {
+          config.providerSettings = reloaded.providerSettings;
+        }
         config.raw = reloaded.raw;
       }
 
       cachedUsages = null;
 
-      const selectedProviderLabelFriendly =
-        PROVIDER_LABELS[selectedProvider as ProviderName];
       const isActuallyDisabled =
         config.disabledProviders.includes(selectedProvider);
       const scopeLabel = saveToProject ? "Project" : "Global";

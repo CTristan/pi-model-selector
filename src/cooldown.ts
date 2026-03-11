@@ -174,6 +174,37 @@ export class CooldownManager {
     this.modelCooldowns.clear();
   }
 
+  /**
+   * Removes all model-specific skip cooldowns (non-wildcard keys).
+   * This clears cooldowns added by /model-skip but preserves
+   * provider-wide 429 rate-limit cooldowns.
+   */
+  clearSkipCooldowns(): number {
+    // Collect keys first to avoid mutating the Map while iterating it,
+    // and accurately count all deleted entries (including legacy variants).
+    const allKeys = Array.from(this.modelCooldowns.keys());
+    const deleted = new Set<string>();
+
+    for (const key of allKeys) {
+      // Skip wildcard keys (provider/account cooldowns from 429s)
+      if (key.endsWith("|*")) {
+        continue;
+      }
+
+      // Normalize to a base key by stripping legacy suffixes if present.
+      const baseKey = key.replace(/\|(raw|synthetic)$/, "");
+      const variants = [baseKey, `${baseKey}|raw`, `${baseKey}|synthetic`];
+
+      for (const variant of variants) {
+        if (this.modelCooldowns.delete(variant)) {
+          deleted.add(variant);
+        }
+      }
+    }
+
+    return deleted.size;
+  }
+
   getLastSelectedKey(): string | null {
     return this.lastSelectedCandidateKey;
   }

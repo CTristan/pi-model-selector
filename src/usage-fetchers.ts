@@ -5,8 +5,9 @@ import { loadPiAuth, PROVIDER_DISPLAY_NAMES } from "./fetchers/common.js";
 import { fetchCopilotUsage } from "./fetchers/copilot.js";
 import { fetchGeminiUsage } from "./fetchers/gemini.js";
 import { fetchKiroUsage } from "./fetchers/kiro.js";
+import { fetchMinimaxUsage } from "./fetchers/minimax.js";
 import { fetchZaiUsage } from "./fetchers/zai.js";
-import type { UsageSnapshot } from "./types.js";
+import type { ProviderSettings, UsageSnapshot } from "./types.js";
 import { writeDebugLog } from "./types.js";
 
 /**
@@ -15,6 +16,7 @@ import { writeDebugLog } from "./types.js";
 export async function fetchAllUsages(
   modelRegistry: unknown,
   disabledProviders: string[] = [],
+  providerSettings?: ProviderSettings,
 ): Promise<UsageSnapshot[]> {
   const disabled = new Set(disabledProviders.map((p) => p.toLowerCase())),
     piAuth = await loadPiAuth(),
@@ -76,6 +78,11 @@ export async function fetchAllUsages(
       },
       { provider: "kiro", fetch: () => fetchKiroUsage() },
       { provider: "zai", fetch: () => fetchZaiUsage(piAuth) },
+      {
+        provider: "minimax",
+        fetch: () =>
+          fetchMinimaxUsage(piAuth, providerSettings?.minimax?.groupId),
+      },
     ],
     activeFetchers = fetchers.filter((f) => !disabled.has(f.provider)),
     results = await Promise.all(
@@ -99,4 +106,5 @@ export {
 export { fetchCopilotUsage } from "./fetchers/copilot.js";
 export { fetchGeminiUsage } from "./fetchers/gemini.js";
 export { fetchKiroUsage } from "./fetchers/kiro.js";
+export { fetchMinimaxUsage } from "./fetchers/minimax.js";
 export { fetchZaiUsage } from "./fetchers/zai.js";

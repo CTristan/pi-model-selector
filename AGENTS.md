@@ -16,7 +16,7 @@
 
 - **`src/types.ts`**: Core TypeScript interfaces and types (`UsageSnapshot`, `RateWindow`, `UsageCandidate`, `MappingEntry`, `LoadedConfig`, `WidgetConfig`). Also exports utility functions like `notify()` and default constants.
 - **`src/usage-fetchers.ts`**: Usage aggregation entry point. Exports `fetchAllUsages()` and re-exports fetcher utilities for compatibility.
-- **`src/fetchers/*.ts`**: Provider-specific usage fetchers and shared fetch utilities (`anthropic.ts`, `copilot.ts`, `gemini.ts`, `antigravity.ts`, `codex.ts`, `kiro.ts`, `zai.ts`, `common.ts`).
+- **`src/fetchers/*.ts`**: Provider-specific usage fetchers and shared fetch utilities (`anthropic.ts`, `copilot.ts`, `gemini.ts`, `antigravity.ts`, `codex.ts`, `kiro.ts`, `zai.ts`, `minimax.ts`, `common.ts`).
 - **`src/config.ts`**: Configuration loading, parsing, validation, saving, and cleanup. Handles merging global and project configs. Cleanup also prunes mappings that reference unavailable Pi provider/model IDs when a model resolver is provided. Exports `loadConfig()`, `saveConfigFile()`, `cleanupConfigRaw()`, `upsertMapping()`, `updateWidgetConfig()`.
 - **`src/candidates.ts`**: Candidate building and ranking logic. Exports `buildCandidates()`, `combineCandidates()`, `sortCandidates()`, `findModelMapping()`, `findIgnoreMapping()`, `selectionReason()`.
 - **`src/cooldown.ts`**: Cooldown state management. Handles loading/saving cooldown state to disk, checking if candidates are on cooldown, and managing provider-wide cooldowns for rate limiting (429 errors).

@@ -8,6 +8,7 @@ const PROVIDER_LABELS: Record<ProviderName, string> = {
   antigravity: "Antigravity",
   kiro: "Kiro",
   zai: "z.ai",
+  minimax: "Minimax",
 };
 
 export { PROVIDER_LABELS };
@@ -125,6 +126,11 @@ export async function hasProviderCredential(
     // Need to import resolveZaiApiKey
     const { resolveZaiApiKey } = await import("./fetchers/zai.js");
     if (resolveZaiApiKey(piAuth)) return true;
+  }
+
+  if (provider === "minimax") {
+    const { resolveMinimaxApiKey } = await import("./fetchers/minimax.js");
+    if (resolveMinimaxApiKey(piAuth)) return true;
   }
 
   if (provider === "codex") {

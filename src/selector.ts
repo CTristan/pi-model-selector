@@ -110,7 +110,11 @@ export async function runSelector(
       ],
       usages =
         options.preloadedUsages ||
-        (await fetchAllUsages(ctx.modelRegistry, effectiveDisabledProviders));
+        (await fetchAllUsages(
+          ctx.modelRegistry,
+          effectiveDisabledProviders,
+          config.providerSettings,
+        ));
 
     // Clean up stale cooldowns first so fresh 429s can always re-arm cooldowns.
     cooldownManager.pruneExpiredCooldowns();

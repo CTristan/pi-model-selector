@@ -78,12 +78,21 @@ export interface UsageCandidate {
   isSynthetic?: boolean;
 }
 
+export interface MinimaxSettings {
+  groupId?: string;
+}
+
+export interface ProviderSettings {
+  minimax?: MinimaxSettings;
+}
+
 export interface LoadedConfig {
   mappings: MappingEntry[];
   priority: PriorityRule[];
   widget: Required<WidgetConfig>;
   autoRun: boolean;
   disabledProviders: ProviderName[];
+  providerSettings?: ProviderSettings;
   debugLog?: {
     enabled: boolean;
     path: string;
@@ -101,12 +110,14 @@ export const ALL_PROVIDERS = [
   "antigravity",
   "kiro",
   "zai",
+  "minimax",
 ] as const;
 export type ProviderName = (typeof ALL_PROVIDERS)[number];
 
 export const DEFAULT_DISABLED_PROVIDERS: readonly ProviderName[] = [
   "kiro",
   "zai",
+  "minimax",
 ];
 
 // ============================================================================

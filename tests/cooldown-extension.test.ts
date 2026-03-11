@@ -399,4 +399,69 @@ describe("Cooldown Manager - Extension Branches", () => {
       expect(cooldownManager.getLastSelectedKey()).toBe("some-key"); // clear() doesn't affect this
     });
   });
+
+  describe("clearSkipCooldowns", () => {
+    it("removes model-specific cooldown keys but keeps wildcard keys", () => {
+      const now = Date.now();
+
+      // Set some model-specific cooldowns
+      cooldownManager.addCooldown("anthropic|Sonnet|raw");
+      cooldownManager.addCooldown("copilot|Chat|raw");
+
+      // Set some wildcard provider cooldowns (like 429 rate limits)
+      cooldownManager.setOrExtendProviderCooldown("gemini", undefined, now);
+
+      expect((cooldownManager as any).modelCooldowns.size).toBe(3);
+
+      // Clear skip cooldowns
+      const removed = cooldownManager.clearSkipCooldowns();
+
+      expect(removed).toBe(2);
+      // Wildcard should remain
+      expect((cooldownManager as any).modelCooldowns.size).toBe(1);
+      expect((cooldownManager as any).modelCooldowns.has("gemini||*")).toBe(
+        true,
+      );
+    });
+
+    it("also removes legacy migration keys (|raw, |synthetic)", () => {
+      const now = Date.now();
+
+      // Set cooldown with legacy migration key
+      cooldownManager.addCooldown("anthropic|Sonnet|raw");
+      (cooldownManager as any).modelCooldowns.set(
+        "anthropic|Sonnet|raw",
+        now + 3600000,
+      );
+
+      expect((cooldownManager as any).modelCooldowns.size).toBe(1);
+
+      const removed = cooldownManager.clearSkipCooldowns();
+
+      expect(removed).toBe(1);
+      expect((cooldownManager as any).modelCooldowns.size).toBe(0);
+    });
+
+    it("returns 0 when no skip cooldowns exist", () => {
+      const now = Date.now();
+
+      // Only wildcard cooldowns
+      cooldownManager.setOrExtendProviderCooldown("anthropic", undefined, now);
+
+      const removed = cooldownManager.clearSkipCooldowns();
+
+      expect(removed).toBe(0);
+      expect((cooldownManager as any).modelCooldowns.size).toBe(1);
+    });
+
+    it("returns count of removed cooldowns", () => {
+      cooldownManager.addCooldown("key1");
+      cooldownManager.addCooldown("key2");
+      cooldownManager.addCooldown("key3");
+
+      const removed = cooldownManager.clearSkipCooldowns();
+
+      expect(removed).toBe(3);
+    });
+  });
 });
