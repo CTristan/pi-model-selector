@@ -1,6 +1,6 @@
 # Instructions
 
-This file provides guidance when working with code in this repository.
+This file provides guidance when working with code in this repository. It is maintained by the project owner. If you notice outdated or missing information here, suggest updates to the user rather than editing this file directly.
 
 ## Project
 
