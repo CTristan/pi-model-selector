@@ -460,12 +460,16 @@ async function handleExhaustedCandidates(
 
   if (!isAlreadySelected) {
     // Mark this as self-initiated so model_select event handler doesn't pause auto-selection
+    let success: boolean;
     if (selfInitiatedModelChange) {
       selfInitiatedModelChange.current = true;
-    }
-    const success = await pi.setModel(fallbackModel);
-    if (selfInitiatedModelChange) {
-      selfInitiatedModelChange.current = false;
+      try {
+        success = await pi.setModel(fallbackModel);
+      } finally {
+        selfInitiatedModelChange.current = false;
+      }
+    } else {
+      success = await pi.setModel(fallbackModel);
     }
     if (!success) {
       notify(
@@ -844,12 +848,16 @@ async function finalizeSelection(
 
   if (!isAlreadySelected) {
     // Mark this as self-initiated so model_select event handler doesn't pause auto-selection
+    let success: boolean;
     if (selfInitiatedModelChange) {
       selfInitiatedModelChange.current = true;
-    }
-    const success = await pi.setModel(model);
-    if (selfInitiatedModelChange) {
-      selfInitiatedModelChange.current = false;
+      try {
+        success = await pi.setModel(model);
+      } finally {
+        selfInitiatedModelChange.current = false;
+      }
+    } else {
+      success = await pi.setModel(model);
     }
     if (!success) {
       notify(

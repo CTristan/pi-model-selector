@@ -109,6 +109,22 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
     if (process.argv.includes("--model")) {
       autoSelectionDisabled = true;
       writeDebugLog("Auto-selection disabled: --model CLI flag detected");
+      // Ensure any existing widget reflects that auto-selection is disabled
+      try {
+        const { getWidgetState } = await import("./src/widget.js");
+        const state = getWidgetState();
+        if (state) {
+          updateWidgetState({ ...state, autoSelectionDisabled: true });
+          renderUsageWidget(ctx);
+        }
+      } catch (err) {
+        // Widget updates are best-effort; log and continue
+        writeDebugLog(
+          `Failed to update widget state after disabling auto-selection: ${String(
+            err,
+          )}`,
+        );
+      }
       return;
     }
     // Skip model selection if auto-selection is disabled for this session
