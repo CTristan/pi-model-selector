@@ -16,7 +16,7 @@ import { writeDebugLog } from "./types.js";
 export async function fetchAllUsages(
   modelRegistry: unknown,
   disabledProviders: string[] = [],
-  providerSettings: ProviderSettings = {},
+  providerSettings?: ProviderSettings,
 ): Promise<UsageSnapshot[]> {
   const disabled = new Set(disabledProviders.map((p) => p.toLowerCase())),
     piAuth = await loadPiAuth(),

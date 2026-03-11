@@ -180,19 +180,29 @@ export class CooldownManager {
    * provider-wide 429 rate-limit cooldowns.
    */
   clearSkipCooldowns(): number {
-    let removed = 0;
-    for (const key of this.modelCooldowns.keys()) {
+    // Collect keys first to avoid mutating the Map while iterating it,
+    // and accurately count all deleted entries (including legacy variants).
+    const allKeys = Array.from(this.modelCooldowns.keys());
+    const deleted = new Set<string>();
+
+    for (const key of allKeys) {
       // Skip wildcard keys (provider/account cooldowns from 429s)
       if (key.endsWith("|*")) {
         continue;
       }
-      this.modelCooldowns.delete(key);
-      // Also remove legacy migration keys if present
-      this.modelCooldowns.delete(`${key}|raw`);
-      this.modelCooldowns.delete(`${key}|synthetic`);
-      removed++;
+
+      // Normalize to a base key by stripping legacy suffixes if present.
+      const baseKey = key.replace(/\|(raw|synthetic)$/, "");
+      const variants = [baseKey, `${baseKey}|raw`, `${baseKey}|synthetic`];
+
+      for (const variant of variants) {
+        if (this.modelCooldowns.delete(variant)) {
+          deleted.add(variant);
+        }
+      }
     }
-    return removed;
+
+    return deleted.size;
   }
 
   getLastSelectedKey(): string | null {

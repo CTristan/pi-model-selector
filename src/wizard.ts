@@ -1028,7 +1028,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 
       if (selectedProvider === "minimax") {
         const subMenuOptions = [
-          nextDisabled
+          currentlyDisabledInTarget
             ? `✅ Enable ${selectedProviderLabelFriendly}`
             : `⏸ Disable ${selectedProviderLabelFriendly}`,
           "Configure GroupId",
