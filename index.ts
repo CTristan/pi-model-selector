@@ -138,8 +138,9 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
   // Handle explicit model selection events - pause auto-selection when user or external extension chooses a model
   pi.on("model_select", async (event, ctx) => {
     // If this is our own model change, ignore it
+    // Don't clear the flag here - let the setModel caller (in selector.ts) handle it
+    // This prevents multiple model_select events from breaking the guard window
     if (selfInitiatedModelChange.current) {
-      selfInitiatedModelChange.current = false;
       return;
     }
     // Session restore is not an explicit choice

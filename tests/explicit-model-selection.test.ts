@@ -352,14 +352,19 @@ describe("Explicit Model Selection", () => {
       if (!sessionStart) throw new Error("Hook not found: session_start");
       await sessionStart({}, ctx);
 
-      // The self-initiated setModel call should NOT trigger auto-selection pause
-      // So we shouldn't see "Auto-selection paused" in the logs from the setModel call
-      // (Note: we may see it from the test's own model_select call, but not from runSelector)
-
+      // The self-initiated setModel call should NOT trigger auto-selection pause.
       // The key check is that after runSelector completes, auto-selection is NOT paused
-      // because the setModel call was self-initiated
-      // The selector's self-initiated setModel should not cause a pause
+      // because the setModel call was self-initiated.
+      // The selector's self-initiated setModel should not cause a pause.
+
+      // Ensure runSelector did invoke setModel
       expect(pi.setModel).toHaveBeenCalled();
+
+      // And verify that no "Auto-selection paused" log was emitted by this self-initiated change
+      const autoSelectionPausedLogged = capturedDebugLogs.some((msg) =>
+        msg.includes("Auto-selection paused"),
+      );
+      expect(autoSelectionPausedLogged).toBe(false);
     });
   });
 
