@@ -519,6 +519,110 @@ describe("mapping wizard actions", () => {
     expect(mapping).not.toHaveProperty("reserve");
   });
 
+  it("shows recommended aliases first and allows codex buckets to map to openai-codex", async () => {
+    const initialConfig: LoadedConfig = {
+        mappings: [],
+        priority: ["remainingPercent"],
+        widget: { enabled: true, placement: "belowEditor", showCount: 3 },
+        autoRun: false,
+        disabledProviders: [],
+        sources: { globalPath: "global.json", projectPath: "project.json" },
+        raw: { global: {}, project: {} },
+      },
+      reloadedConfig: LoadedConfig = {
+        ...initialConfig,
+        mappings: [
+          {
+            usage: { provider: "codex", account: "acc-codex", window: "1w" },
+            model: { provider: "openai-codex", id: "gpt-4o" },
+          },
+        ],
+        raw: {
+          global: {},
+          project: {
+            mappings: [
+              {
+                usage: {
+                  provider: "codex",
+                  account: "acc-codex",
+                  window: "1w",
+                },
+                model: { provider: "openai-codex", id: "gpt-4o" },
+              },
+            ],
+          },
+        },
+      };
+
+    vi.mocked(configMod.loadConfig)
+      .mockResolvedValueOnce(initialConfig)
+      .mockResolvedValueOnce(reloadedConfig);
+    vi.mocked(usageFetchers.fetchAllUsages).mockResolvedValueOnce([
+      {
+        provider: "codex",
+        displayName: "Codex",
+        account: "acc-codex",
+        windows: [{ label: "1w", usedPercent: 5, resetsAt: new Date() }],
+      },
+    ]);
+    ctx.modelRegistry.getAvailable = () =>
+      Promise.resolve([
+        { provider: "openai", id: "gpt-4.1" },
+        { provider: "anthropic", id: "claude-sonnet-4-5" },
+        { provider: "openai-codex", id: "gpt-4o" },
+      ]);
+
+    let menuVisits = 0;
+    let modelOptions: string[] = [];
+    ctx.ui.select = vi.fn((message: string, options: string[]) => {
+      if (message === "Model selector configuration") {
+        menuVisits += 1;
+        return Promise.resolve(menuVisits === 1 ? "Edit mappings" : "Done");
+      }
+      if (message === "Select a usage bucket to map") {
+        expect(options).toHaveLength(1);
+        return Promise.resolve(options[0]);
+      }
+      if (message === "Modify mapping in") {
+        return Promise.resolve("Project (project.json)");
+      }
+      if (message.startsWith("Select action for")) {
+        return Promise.resolve("Map to model");
+      }
+      if (message.startsWith("Select model for")) {
+        modelOptions = options;
+        return Promise.resolve("openai-codex/gpt-4o");
+      }
+      if (message.startsWith("Set a minimum reserve to preserve?")) {
+        return Promise.resolve("No reserve (0)");
+      }
+      return Promise.resolve(undefined);
+    });
+
+    ctx.ui.confirm = vi.fn(() => Promise.resolve(false));
+    ctx.ui.input = vi.fn(() => Promise.resolve(undefined));
+
+    const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
+    await runWizard({}, ctx as unknown as Record<string, unknown>);
+
+    expect(modelOptions).toEqual([
+      "openai-codex/gpt-4o",
+      "anthropic/claude-sonnet-4-5",
+      "openai/gpt-4.1",
+    ]);
+    expect(configMod.upsertMapping).toHaveBeenCalledTimes(1);
+    const [, mapping] = vi.mocked(configMod.upsertMapping).mock.calls[0] as [
+      Record<string, unknown>,
+      MappingEntry,
+    ];
+
+    expect(mapping).toEqual({
+      usage: { provider: "codex", account: "acc-codex", window: "1w" },
+      model: { provider: "openai-codex", id: "gpt-4o" },
+    });
+  });
+
   it("rejects whitespace-only reserve input", async () => {
     const mapping: MappingEntry = {
         usage: { provider: "p1", window: "w1" },
