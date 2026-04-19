@@ -10,3 +10,6 @@ coverage/
 .idea/
 .vs/
 .claude/
+
+# Local Pi config (project-level overrides may contain personal settings)
+.pi/model-selector.json

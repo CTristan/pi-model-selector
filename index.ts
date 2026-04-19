@@ -296,9 +296,10 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
         }
         notify(ctx, "info", "Auto model selection re-enabled.");
       }
-      await runSelectorWrapper(ctx, "command");
-      const lockingConfig = await loadConfig(ctx, { requireMappings: false });
-      if (lockingConfig && !lockingConfig.enableModelLocking) {
+      const config = await loadConfig(ctx);
+      if (!config) return;
+      await runSelectorWrapper(ctx, "command", { preloadedConfig: config });
+      if (!config.enableModelLocking) {
         notify(ctx, "info", "Model locking: disabled.");
       }
     },
