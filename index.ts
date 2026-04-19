@@ -195,6 +195,9 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
       writeDebugLog("Skipping model selection: auto-selection is disabled");
       const lockingConfig = await loadConfig(ctx, { requireMappings: false });
       if (lockingConfig && !lockingConfig.enableModelLocking) {
+        // Release any lock/heartbeat carried over from a prior run with locking
+        // enabled so the coordinator stops touching model-locks.json.
+        await releaseActiveModelLock();
         writeDebugLog(
           "Skipping cross-instance lock acquisition: enableModelLocking is false",
         );

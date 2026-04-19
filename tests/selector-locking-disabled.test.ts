@@ -133,6 +133,43 @@ describe("Selector with enableModelLocking: false", () => {
     expect(coordinator.refresh).not.toHaveBeenCalled();
   });
 
+  it("releases pre-existing active lock and clears heartbeat when enableModelLocking is false", async () => {
+    const coordinator = {
+      acquire: vi.fn().mockResolvedValue({ acquired: true }),
+      refresh: vi.fn().mockResolvedValue(true),
+      release: vi.fn().mockResolvedValue(true),
+      releaseAll: vi.fn().mockResolvedValue(0),
+    };
+
+    // Simulate a prior run that acquired a lock and started a heartbeat
+    // before the user flipped enableModelLocking to false.
+    const preexistingTimer = setInterval(() => {}, 1_000_000);
+    const lockHeartbeatTimer: { current: NodeJS.Timeout | null } = {
+      current: preexistingTimer,
+    };
+    const activeModelLockKey: { current: string | null } = {
+      current: "p1/prior-lock",
+    };
+
+    const result = await runSelector(
+      createContext(),
+      createCooldownManager(),
+      coordinator,
+      lockHeartbeatTimer,
+      activeModelLockKey,
+      false,
+      "command",
+      { acquireModelLock: true, waitForModelLock: false },
+      createPi(),
+    );
+
+    expect(result).toBe(true);
+    expect(coordinator.release).toHaveBeenCalledWith("p1/prior-lock");
+    expect(activeModelLockKey.current).toBeNull();
+    expect(lockHeartbeatTimer.current).toBeNull();
+    expect(coordinator.acquire).not.toHaveBeenCalled();
+  });
+
   describe("integration with real coordinator files", () => {
     let tmpDir: string;
     let statePath: string;

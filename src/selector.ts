@@ -296,6 +296,16 @@ export async function runSelector(
       lockKey: string | undefined,
       waitedForLockMs = 0;
 
+    // If enableModelLocking flipped off mid-session, release any lock/heartbeat
+    // left over from a prior run so the coordinator stops touching model-locks.json.
+    if (!config.enableModelLocking && activeModelLockKey.current) {
+      await releaseActiveModelLock(
+        modelLockCoordinator,
+        lockHeartbeatTimer,
+        activeModelLockKey,
+      );
+    }
+
     const shouldAcquireModelLock =
       !!options.acquireModelLock && config.enableModelLocking;
     if (shouldAcquireModelLock) {

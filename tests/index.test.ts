@@ -817,6 +817,71 @@ describe("Model Selector Extension", () => {
       expect(lockFileWrites).toEqual([]);
     });
 
+    it("releases active lock when enableModelLocking flips false between runs", async () => {
+      // Config starts with enableModelLocking=true so the first before_agent_start
+      // call (with auto-selection disabled) acquires a lock and starts a heartbeat.
+      modelSelectorExtension(pi);
+      const beforeAgentStart = events.before_agent_start;
+      if (!beforeAgentStart)
+        throw new Error("Hook not found: before_agent_start");
+
+      const toggleHandler = commands["model-auto-toggle"];
+      if (!toggleHandler)
+        throw new Error("Command not found: model-auto-toggle");
+      await toggleHandler({}, ctx);
+
+      ctx.model = { provider: "p1", id: "m1" };
+
+      await beforeAgentStart({}, ctx);
+
+      // Confirm the lock was acquired on the first run.
+      expect(
+        capturedDebugLogs.some((log) =>
+          log.includes("Acquired lock for current model p1/m1"),
+        ),
+      ).toBe(true);
+
+      // User flips enableModelLocking to false mid-session.
+      vi.mocked(configMod.loadConfig).mockResolvedValue({
+        mappings: [
+          {
+            usage: { provider: "p1", window: "w1" },
+            model: { provider: "p1", id: "m1" },
+          },
+        ],
+        priority: ["remainingPercent"],
+        widget: { enabled: true, placement: "belowEditor", showCount: 3 },
+        autoRun: false,
+        enableModelLocking: false,
+        disabledProviders: [],
+        sources: { globalPath: "", projectPath: "" },
+        raw: { global: {}, project: {} },
+      });
+
+      vi.mocked(fs.promises.writeFile).mockClear();
+      capturedDebugLogs.length = 0;
+
+      await beforeAgentStart({}, ctx);
+
+      // The previously-held lock should be released so the heartbeat stops
+      // touching model-locks.json.
+      const lockFileWritesAfterFlip = vi
+        .mocked(fs.promises.writeFile)
+        .mock.calls.filter(
+          ([filePath]) =>
+            typeof filePath === "string" &&
+            filePath.includes("model-selector-model-locks"),
+        );
+      // Exactly one write: the release that removes p1/m1 from the state file.
+      // No further acquisition or heartbeat writes after.
+      expect(lockFileWritesAfterFlip.length).toBeGreaterThan(0);
+      const lastWrite = lockFileWritesAfterFlip.at(-1)?.[1] as
+        | string
+        | undefined;
+      expect(lastWrite).toBeDefined();
+      expect(JSON.parse(lastWrite as string).locks).toEqual({});
+    });
+
     it("keeps existing lock when current model matches active lock", async () => {
       // Pre-populate lock file with existing lock for p1/m1
       const lockFileState = {
