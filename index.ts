@@ -103,10 +103,14 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
     }
   };
 
-  pi.on("session_start", async (_event, ctx) => {
-    void _event;
-    // Check for --model CLI flag - if passed, skip auto-selection entirely for this session
-    if (process.argv.includes("--model")) {
+  pi.on("session_start", async (event, ctx) => {
+    // SDK ≥0.58 fires session_start (reason "new"/"resume") for what used to be
+    // the session_switch event; reset the per-session disable flag in that case.
+    if (event.reason === "new" || event.reason === "resume") {
+      autoSelectionDisabled = false;
+      writeDebugLog("Auto-selection re-enabled on session switch");
+    } else if (event.reason === "startup" && process.argv.includes("--model")) {
+      // --model CLI flag only takes effect at process startup
       autoSelectionDisabled = true;
       writeDebugLog("Auto-selection disabled: --model CLI flag detected");
       // Ensure any existing widget reflects that auto-selection is disabled
@@ -168,20 +172,6 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
           "Auto model selection paused: model was explicitly selected. Use /model-select or start a new session to resume.",
         );
       }
-    }
-  });
-
-  pi.on("session_switch", async (event, ctx) => {
-    if (event.reason === "new" || event.reason === "resume") {
-      // Re-enable auto-selection on session switch (new/resume)
-      autoSelectionDisabled = false;
-      writeDebugLog("Auto-selection re-enabled on session switch");
-      // Skip model selection if auto-selection is disabled for this session
-      if (autoSelectionDisabled) {
-        writeDebugLog("Skipping model selection: auto-selection is disabled");
-        return;
-      }
-      await runSelectorWrapper(ctx, "startup");
     }
   });
 
