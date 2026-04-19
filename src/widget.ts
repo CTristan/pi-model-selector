@@ -182,15 +182,20 @@ export function renderUsageWidget(ctx: ExtensionContext): void {
 
         lines.push(theme.fg("dim", "─".repeat(safeWidth)));
 
-        // Build the content line
+        // Build the content line. LOCK OFF goes first so it stays visible
+        // even when the candidate list gets truncated on narrow widgets.
         let contentLine = "";
         if (autoSelectionDisabled) {
           contentLine = theme.fg("error", "AUTO OFF");
         } else {
-          contentLine = formattedCandidates.join(separator);
+          const parts: string[] = [];
           if (enableModelLocking === false) {
-            contentLine += separator + theme.fg("dim", "lock off");
+            parts.push(theme.fg("error", "LOCK OFF"));
           }
+          if (formattedCandidates.length > 0) {
+            parts.push(formattedCandidates.join(separator));
+          }
+          contentLine = parts.join(separator);
         }
 
         lines.push(

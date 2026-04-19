@@ -291,7 +291,7 @@ describe("Widget", () => {
       expect(output[1]).toContain("D3");
     });
 
-    it("should append lock off indicator when enableModelLocking is false", () => {
+    it("should prefix the content line with a red LOCK OFF entry when enableModelLocking is false", () => {
       const setWidgetMock = vi.fn();
       const mockCtx = {
         hasUI: true,
@@ -320,11 +320,17 @@ describe("Widget", () => {
       const renderFn = setWidgetMock.mock.calls![0]![1]!;
       const widget = renderFn(null, theme);
       const output = widget.render(500);
-      expect(output[1]).toContain("lock off");
+      // Layout: top separator, content line, bottom separator.
+      expect(output).toHaveLength(3);
+      expect(output[1]).toContain("[error]LOCK OFF[/error]");
       expect(output[1]).toContain("D1");
+      // LOCK OFF must precede the first candidate so it isn't truncated away.
+      expect(output[1].indexOf("LOCK OFF")).toBeLessThan(
+        output[1].indexOf("D1"),
+      );
     });
 
-    it("should not show lock off indicator when enableModelLocking is true", () => {
+    it("should not show LOCK OFF entry when enableModelLocking is true", () => {
       const setWidgetMock = vi.fn();
       const mockCtx = {
         hasUI: true,
@@ -353,10 +359,12 @@ describe("Widget", () => {
       const renderFn = setWidgetMock.mock.calls![0]![1]!;
       const widget = renderFn(null, theme);
       const output = widget.render(500);
-      expect(output[1]).not.toContain("lock off");
+      // Layout: top separator, candidates, bottom separator.
+      expect(output).toHaveLength(3);
+      expect(output.join("\n")).not.toContain("LOCK OFF");
     });
 
-    it("should not show lock off indicator when AUTO OFF is active", () => {
+    it("should not show LOCK OFF entry when AUTO OFF is active", () => {
       const setWidgetMock = vi.fn();
       const mockCtx = {
         hasUI: true,
@@ -385,8 +393,10 @@ describe("Widget", () => {
       const renderFn = setWidgetMock.mock.calls![0]![1]!;
       const widget = renderFn(null, theme);
       const output = widget.render(500);
+      // AUTO OFF supersedes; layout: top separator, AUTO OFF, bottom separator.
+      expect(output).toHaveLength(3);
       expect(output[1]).toContain("[error]AUTO OFF[/error]");
-      expect(output[1]).not.toContain("lock off");
+      expect(output.join("\n")).not.toContain("LOCK OFF");
     });
   });
 
