@@ -274,6 +274,28 @@ describe("Config Loading", () => {
     expect(config?.mappings[0]?.usage.provider).toBe("anthropic");
   });
 
+  it("should NOT seed global config when seedGlobal: false is passed", async () => {
+    vi.mocked(fs.promises.access).mockReset();
+    vi.mocked(fs.promises.readFile).mockReset();
+    vi.mocked(fs.promises.writeFile).mockReset();
+
+    vi.mocked(fs.promises.access).mockImplementation(() => {
+      const enoent = Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+      return Promise.reject(enoent);
+    });
+    vi.mocked(fs.promises.readFile).mockImplementation(() => {
+      return Promise.reject(new Error("ENOENT"));
+    });
+
+    const config = await loadConfig(mockCtx, {
+      requireMappings: false,
+      seedGlobal: false,
+    });
+
+    expect(config).not.toBeNull();
+    expect(fs.promises.writeFile).not.toHaveBeenCalled();
+  });
+
   it("should NOT seed global config if file exists but is invalid JSON", async () => {
     vi.mocked(fs.promises.access).mockResolvedValue(undefined); // File exists
     vi.mocked(fs.promises.readFile).mockResolvedValue("invalid { json"); // But is invalid

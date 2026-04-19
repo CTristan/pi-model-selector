@@ -527,10 +527,11 @@ function mergeWidgetConfig(
 
 export async function loadConfig(
   ctx: ExtensionContext,
-  options: { requireMappings?: boolean } = {},
+  options: { requireMappings?: boolean; seedGlobal?: boolean } = {},
 ): Promise<LoadedConfig | null> {
   const errors: string[] = [],
     requireMappings = options.requireMappings ?? true,
+    seedGlobal = options.seedGlobal ?? true,
     projectPath = path.join(ctx.cwd, ".pi", "model-selector.json"),
     globalConfigPath = await getGlobalConfigPath();
 
@@ -608,7 +609,7 @@ export async function loadConfig(
 
   // Final check: only seed the global config if everything is valid
   // and we actually reached this point without errors.
-  if (shouldSeedGlobal && globalRaw) {
+  if (seedGlobal && shouldSeedGlobal && globalRaw) {
     try {
       await saveConfigFile(globalConfigPath, globalRaw);
     } catch (err) {
