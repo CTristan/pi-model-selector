@@ -201,8 +201,11 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         return;
       }
 
-      config.priority = selectedPriority;
-      notify(ctx, "info", `Priority updated: ${selectedPriority.join(" → ")}.`);
+      const reloaded = await loadConfig(ctx, { requireMappings: false });
+      if (reloaded) {
+        config.priority = reloaded.priority;
+      }
+      notify(ctx, "info", `Priority updated: ${config.priority.join(" → ")}.`);
     },
     configureMappings = async (): Promise<void> => {
       const availableModels = await loadModels();
@@ -842,17 +845,17 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         return;
       }
 
-      // Update local config
-      config.widget = { ...config.widget, ...widgetUpdate };
+      const reloaded = await loadConfig(ctx, { requireMappings: false });
+      if (reloaded) {
+        config.widget = reloaded.widget;
+      }
       notify(ctx, "info", `Widget settings updated.`);
 
-      // Update widget state with new config if it exists
       const state = getWidgetState();
       if (state) {
         updateWidgetState({ ...state, config });
       }
 
-      // Refresh widget display
       renderUsageWidget(ctx);
     },
     configureDebugLog = async (): Promise<void> => {
@@ -953,8 +956,66 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         return;
       }
 
-      config.autoRun = newValue;
-      notify(ctx, "info", `Auto-run ${newValue ? "enabled" : "disabled"}.`);
+      const reloaded = await loadConfig(ctx, { requireMappings: false });
+      if (reloaded) {
+        config.autoRun = reloaded.autoRun;
+      }
+      notify(
+        ctx,
+        "info",
+        `Auto-run ${config.autoRun ? "enabled" : "disabled"}.`,
+      );
+    },
+    configureModelLocking = async (): Promise<void> => {
+      const currentStatus = config.enableModelLocking ? "enabled" : "disabled",
+        choice = await selectWrapped(
+          ctx,
+          `Cross-instance model locking (current: ${currentStatus})`,
+          [
+            config.enableModelLocking
+              ? "Disable model locking"
+              : "Enable model locking",
+          ],
+        );
+      if (!choice) return;
+
+      const newValue = choice === "Enable model locking",
+        locationChoice = await selectWrapped(
+          ctx,
+          "Save model-locking setting to",
+          locationLabels,
+        );
+      if (!locationChoice) return;
+
+      const saveToProject = locationChoice === locationLabels[1],
+        targetRaw = saveToProject ? config.raw.project : config.raw.global,
+        targetPath = saveToProject
+          ? config.sources.projectPath
+          : config.sources.globalPath;
+
+      try {
+        targetRaw.enableModelLocking = newValue;
+        await saveConfigFile(targetPath, targetRaw);
+      } catch (error: unknown) {
+        notify(ctx, "error", `Failed to write ${targetPath}: ${String(error)}`);
+        return;
+      }
+
+      const reloaded = await loadConfig(ctx, { requireMappings: false });
+      if (reloaded) {
+        config.enableModelLocking = reloaded.enableModelLocking;
+      }
+      notify(
+        ctx,
+        "info",
+        `Model locking ${config.enableModelLocking ? "enabled" : "disabled"}.`,
+      );
+
+      const state = getWidgetState();
+      if (state) {
+        updateWidgetState({ ...state, config });
+      }
+      renderUsageWidget(ctx);
     },
     configureProviders = async (): Promise<void> => {
       const piAuth = await loadAuth();
@@ -1428,6 +1489,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
       "Configure fallback",
       "Configure widget",
       "Configure auto-run",
+      "Configure model locking",
       "Configure debug log",
       "Clean up config",
       "Done",
@@ -1468,6 +1530,11 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 
     if (action === "Configure auto-run") {
       await configureAutoRun();
+      continue;
+    }
+
+    if (action === "Configure model locking") {
+      await configureModelLocking();
       continue;
     }
 

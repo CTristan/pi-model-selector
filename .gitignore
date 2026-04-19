@@ -8,11 +8,8 @@ coverage/
 # OS and IDEs
 .DS_Store
 .idea/
+.vs/
+.claude/
 
-# Tools
-.fix-die-repeat/
-.ralph/
-.pi/
-
-# Local Config
-config/model-selector.json
+# Local Pi config (project-level overrides may contain personal settings)
+.pi/model-selector.json

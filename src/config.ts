@@ -110,6 +110,7 @@ function asConfigShape(raw: Record<string, unknown>): {
   priority?: unknown;
   widget?: unknown;
   autoRun?: unknown;
+  enableModelLocking?: unknown;
   fallback?: unknown;
   debugLog?: unknown;
   disabledProviders?: unknown;
@@ -120,6 +121,7 @@ function asConfigShape(raw: Record<string, unknown>): {
     priority?: unknown;
     widget?: unknown;
     autoRun?: unknown;
+    enableModelLocking?: unknown;
     fallback?: unknown;
     debugLog?: unknown;
     disabledProviders?: unknown;
@@ -137,6 +139,9 @@ function asConfigShape(raw: Record<string, unknown>): {
   }
   if (Object.hasOwn(raw, "autoRun")) {
     shape.autoRun = raw.autoRun;
+  }
+  if (Object.hasOwn(raw, "enableModelLocking")) {
+    shape.enableModelLocking = raw.enableModelLocking;
   }
   if (Object.hasOwn(raw, "fallback")) {
     shape.fallback = raw.fallback;
@@ -273,6 +278,23 @@ function normalizeAutoRun(
     return raw.autoRun;
   }
   return undefined;
+}
+
+function normalizeEnableModelLocking(
+  raw: ReturnType<typeof asConfigShape>,
+  sourceLabel: string,
+  errors: string[],
+): boolean | undefined {
+  if (!Object.hasOwn(raw, "enableModelLocking")) {
+    return undefined;
+  }
+  if (typeof raw.enableModelLocking !== "boolean") {
+    errors.push(
+      `[${sourceLabel}] enableModelLocking must be a boolean if present`,
+    );
+    return undefined;
+  }
+  return raw.enableModelLocking;
 }
 
 function normalizeFallback(
@@ -505,10 +527,11 @@ function mergeWidgetConfig(
 
 export async function loadConfig(
   ctx: ExtensionContext,
-  options: { requireMappings?: boolean } = {},
+  options: { requireMappings?: boolean; seedGlobal?: boolean } = {},
 ): Promise<LoadedConfig | null> {
   const errors: string[] = [],
     requireMappings = options.requireMappings ?? true,
+    seedGlobal = options.seedGlobal ?? true,
     projectPath = path.join(ctx.cwd, ".pi", "model-selector.json"),
     globalConfigPath = await getGlobalConfigPath();
 
@@ -546,6 +569,16 @@ export async function loadConfig(
     projectWidget = normalizeWidget(projectConfig),
     globalAutoRun = normalizeAutoRun(globalConfig),
     projectAutoRun = normalizeAutoRun(projectConfig),
+    globalEnableModelLocking = normalizeEnableModelLocking(
+      globalConfig,
+      globalConfigPath,
+      errors,
+    ),
+    projectEnableModelLocking = normalizeEnableModelLocking(
+      projectConfig,
+      projectPath,
+      errors,
+    ),
     globalFallback = normalizeFallback(globalConfig, globalConfigPath, errors),
     projectFallback = normalizeFallback(projectConfig, projectPath, errors),
     globalDebugLog = normalizeDebugLog(
@@ -576,7 +609,7 @@ export async function loadConfig(
 
   // Final check: only seed the global config if everything is valid
   // and we actually reached this point without errors.
-  if (shouldSeedGlobal && globalRaw) {
+  if (seedGlobal && shouldSeedGlobal && globalRaw) {
     try {
       await saveConfigFile(globalConfigPath, globalRaw);
     } catch (err) {
@@ -605,6 +638,8 @@ export async function loadConfig(
     priority: projectPriority ?? globalPriority ?? DEFAULT_PRIORITY,
     widget: mergeWidgetConfig(globalWidget, projectWidget),
     autoRun: projectAutoRun ?? globalAutoRun ?? false,
+    enableModelLocking:
+      projectEnableModelLocking ?? globalEnableModelLocking ?? true,
     disabledProviders: [...new Set([...globalDisabled, ...projectDisabled])],
     providerSettings,
     ...(mergedFallback !== undefined ? { fallback: mergedFallback } : {}),

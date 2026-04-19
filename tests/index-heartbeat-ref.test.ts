@@ -38,6 +38,7 @@ describe("Model selector heartbeat reference", () => {
       modelRegistry: { find: vi.fn() },
       ui: { notify: vi.fn(), setStatus: vi.fn() },
       hasUI: true,
+      cwd: "/mock",
     };
 
     modelSelectorExtension(pi as any);

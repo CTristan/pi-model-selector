@@ -178,6 +178,61 @@ describe("Config Loading", () => {
     expect(config?.autoRun).toBe(true);
   });
 
+  it("should default enableModelLocking to true when absent", async () => {
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce("{}"); // Global
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce(
+      JSON.stringify({
+        mappings: [{ usage: { provider: "p1" }, ignore: true }],
+      }),
+    ); // Project
+    const config = await loadConfig(mockCtx);
+    expect(config?.enableModelLocking).toBe(true);
+  });
+
+  it("should let project enableModelLocking override global", async () => {
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce(
+      JSON.stringify({ enableModelLocking: true }),
+    ); // Global
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce(
+      JSON.stringify({
+        enableModelLocking: false,
+        mappings: [{ usage: { provider: "p1" }, ignore: true }],
+      }),
+    ); // Project
+    const config = await loadConfig(mockCtx);
+    expect(config?.enableModelLocking).toBe(false);
+  });
+
+  it("should fall back to global enableModelLocking when project omits it", async () => {
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce(
+      JSON.stringify({ enableModelLocking: false }),
+    ); // Global
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce(
+      JSON.stringify({
+        mappings: [{ usage: { provider: "p1" }, ignore: true }],
+      }),
+    ); // Project
+    const config = await loadConfig(mockCtx);
+    expect(config?.enableModelLocking).toBe(false);
+  });
+
+  it("should reject non-boolean enableModelLocking with an error notify", async () => {
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce("{}"); // Global
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce(
+      JSON.stringify({
+        enableModelLocking: "yes",
+        mappings: [{ usage: { provider: "p1" }, ignore: true }],
+      }),
+    ); // Project
+    const config = await loadConfig(mockCtx);
+    expect(config).toBeNull();
+    const notifyMock = vi.mocked(mockCtx.ui.notify);
+    const calls = notifyMock.mock.calls;
+    const errorCall = calls.find((call) => call[1] === "error");
+    expect(errorCall).toBeDefined();
+    expect(String(errorCall?.[0])).toMatch(/enableModelLocking/);
+  });
+
   it("should normalize debug log paths", async () => {
     const debugConfig = {
       debugLog: { enabled: true, path: "relative/path.log" },
@@ -217,6 +272,28 @@ describe("Config Loading", () => {
     // Default mappings length is 11
     expect(config?.mappings).toHaveLength(11);
     expect(config?.mappings[0]?.usage.provider).toBe("anthropic");
+  });
+
+  it("should NOT seed global config when seedGlobal: false is passed", async () => {
+    vi.mocked(fs.promises.access).mockReset();
+    vi.mocked(fs.promises.readFile).mockReset();
+    vi.mocked(fs.promises.writeFile).mockReset();
+
+    vi.mocked(fs.promises.access).mockImplementation(() => {
+      const enoent = Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+      return Promise.reject(enoent);
+    });
+    vi.mocked(fs.promises.readFile).mockImplementation(() => {
+      return Promise.reject(new Error("ENOENT"));
+    });
+
+    const config = await loadConfig(mockCtx, {
+      requireMappings: false,
+      seedGlobal: false,
+    });
+
+    expect(config).not.toBeNull();
+    expect(fs.promises.writeFile).not.toHaveBeenCalled();
   });
 
   it("should NOT seed global config if file exists but is invalid JSON", async () => {

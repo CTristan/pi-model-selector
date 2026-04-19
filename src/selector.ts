@@ -296,7 +296,19 @@ export async function runSelector(
       lockKey: string | undefined,
       waitedForLockMs = 0;
 
-    if (options.acquireModelLock) {
+    // If enableModelLocking flipped off mid-session, release any lock/heartbeat
+    // left over from a prior run so the coordinator stops touching model-locks.json.
+    if (!config.enableModelLocking && activeModelLockKey.current) {
+      await releaseActiveModelLock(
+        modelLockCoordinator,
+        lockHeartbeatTimer,
+        activeModelLockKey,
+      );
+    }
+
+    const shouldAcquireModelLock =
+      !!options.acquireModelLock && config.enableModelLocking;
+    if (shouldAcquireModelLock) {
       const lockResult = await acquireModelLock(
         ctx,
         config,
@@ -440,7 +452,7 @@ async function handleExhaustedCandidates(
   }
 
   let fallbackLockKey: string | undefined;
-  if (config.fallback.lock !== false) {
+  if (config.enableModelLocking && config.fallback.lock !== false) {
     const lockKey = modelLockKey(config.fallback.provider, config.fallback.id);
     const result = await modelLockCoordinator.acquire(lockKey, {
       timeoutMs: 0,

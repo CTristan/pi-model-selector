@@ -60,6 +60,7 @@ describe("Wizard Settings", () => {
     priority: ["remainingPercent"],
     widget: { enabled: true, placement: "belowEditor", showCount: 3 },
     autoRun: false,
+    enableModelLocking: true,
     disabledProviders: [],
     sources: { globalPath: "global.json", projectPath: "project.json" },
     raw: { global: {}, project: {} },
@@ -241,6 +242,10 @@ describe("Wizard Settings", () => {
       .mockResolvedValueOnce("Global (global.json)")
       .mockResolvedValueOnce("Done");
 
+    vi.mocked(configMod.loadConfig)
+      .mockResolvedValueOnce(baseConfig)
+      .mockResolvedValueOnce({ ...baseConfig, autoRun: true });
+
     const runWizard = commands["model-select-config"];
     if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
@@ -253,6 +258,38 @@ describe("Wizard Settings", () => {
       expect.stringContaining("Auto-run enabled"),
       "info",
     );
+  });
+
+  it("disables model locking via the wizard and refreshes the widget", async () => {
+    ctx.ui.select
+      .mockResolvedValueOnce("Configure model locking")
+      .mockResolvedValueOnce("Disable model locking")
+      .mockResolvedValueOnce("Project (project.json)")
+      .mockResolvedValueOnce("Done");
+
+    vi.mocked(widgetMod.getWidgetState).mockReturnValue({
+      candidates: [],
+      config: baseConfig,
+    });
+
+    vi.mocked(configMod.loadConfig)
+      .mockResolvedValueOnce(baseConfig)
+      .mockResolvedValueOnce({ ...baseConfig, enableModelLocking: false });
+
+    const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
+    await runWizard({}, ctx as unknown as Record<string, unknown>);
+
+    expect(configMod.saveConfigFile).toHaveBeenCalledWith(
+      "project.json",
+      expect.objectContaining({ enableModelLocking: false }),
+    );
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("Model locking disabled"),
+      "info",
+    );
+    expect(widgetMod.updateWidgetState).toHaveBeenCalled();
+    expect(widgetMod.renderUsageWidget).toHaveBeenCalledWith(ctx);
   });
 
   it("updates debug log path", async () => {

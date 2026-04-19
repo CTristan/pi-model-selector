@@ -58,6 +58,7 @@ export interface ModelSelectorConfig {
   priority?: PriorityRule[];
   widget?: WidgetConfig;
   autoRun?: boolean;
+  enableModelLocking?: boolean;
   fallback?: FallbackConfig;
 }
 
@@ -91,6 +92,7 @@ export interface LoadedConfig {
   priority: PriorityRule[];
   widget: Required<WidgetConfig>;
   autoRun: boolean;
+  enableModelLocking: boolean;
   disabledProviders: ProviderName[];
   providerSettings?: ProviderSettings;
   debugLog?: {
