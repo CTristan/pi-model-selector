@@ -242,6 +242,10 @@ describe("Wizard Settings", () => {
       .mockResolvedValueOnce("Global (global.json)")
       .mockResolvedValueOnce("Done");
 
+    vi.mocked(configMod.loadConfig)
+      .mockResolvedValueOnce(baseConfig)
+      .mockResolvedValueOnce({ ...baseConfig, autoRun: true });
+
     const runWizard = commands["model-select-config"];
     if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
@@ -267,6 +271,10 @@ describe("Wizard Settings", () => {
       candidates: [],
       config: baseConfig,
     });
+
+    vi.mocked(configMod.loadConfig)
+      .mockResolvedValueOnce(baseConfig)
+      .mockResolvedValueOnce({ ...baseConfig, enableModelLocking: false });
 
     const runWizard = commands["model-select-config"];
     if (!runWizard) throw new Error("Command not found: model-select-config");

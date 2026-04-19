@@ -201,8 +201,11 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         return;
       }
 
-      config.priority = selectedPriority;
-      notify(ctx, "info", `Priority updated: ${selectedPriority.join(" → ")}.`);
+      const reloaded = await loadConfig(ctx, { requireMappings: false });
+      if (reloaded) {
+        config.priority = reloaded.priority;
+      }
+      notify(ctx, "info", `Priority updated: ${config.priority.join(" → ")}.`);
     },
     configureMappings = async (): Promise<void> => {
       const availableModels = await loadModels();
@@ -842,17 +845,17 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         return;
       }
 
-      // Update local config
-      config.widget = { ...config.widget, ...widgetUpdate };
+      const reloaded = await loadConfig(ctx, { requireMappings: false });
+      if (reloaded) {
+        config.widget = reloaded.widget;
+      }
       notify(ctx, "info", `Widget settings updated.`);
 
-      // Update widget state with new config if it exists
       const state = getWidgetState();
       if (state) {
         updateWidgetState({ ...state, config });
       }
 
-      // Refresh widget display
       renderUsageWidget(ctx);
     },
     configureDebugLog = async (): Promise<void> => {
@@ -953,8 +956,15 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         return;
       }
 
-      config.autoRun = newValue;
-      notify(ctx, "info", `Auto-run ${newValue ? "enabled" : "disabled"}.`);
+      const reloaded = await loadConfig(ctx, { requireMappings: false });
+      if (reloaded) {
+        config.autoRun = reloaded.autoRun;
+      }
+      notify(
+        ctx,
+        "info",
+        `Auto-run ${config.autoRun ? "enabled" : "disabled"}.`,
+      );
     },
     configureModelLocking = async (): Promise<void> => {
       const currentStatus = config.enableModelLocking ? "enabled" : "disabled",
@@ -991,11 +1001,14 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         return;
       }
 
-      config.enableModelLocking = newValue;
+      const reloaded = await loadConfig(ctx, { requireMappings: false });
+      if (reloaded) {
+        config.enableModelLocking = reloaded.enableModelLocking;
+      }
       notify(
         ctx,
         "info",
-        `Model locking ${newValue ? "enabled" : "disabled"}.`,
+        `Model locking ${config.enableModelLocking ? "enabled" : "disabled"}.`,
       );
 
       const state = getWidgetState();
