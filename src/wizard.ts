@@ -956,6 +956,54 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
       config.autoRun = newValue;
       notify(ctx, "info", `Auto-run ${newValue ? "enabled" : "disabled"}.`);
     },
+    configureModelLocking = async (): Promise<void> => {
+      const currentStatus = config.enableModelLocking ? "enabled" : "disabled",
+        choice = await selectWrapped(
+          ctx,
+          `Cross-instance model locking (current: ${currentStatus})`,
+          [
+            config.enableModelLocking
+              ? "Disable model locking"
+              : "Enable model locking",
+          ],
+        );
+      if (!choice) return;
+
+      const newValue = choice === "Enable model locking",
+        locationChoice = await selectWrapped(
+          ctx,
+          "Save model-locking setting to",
+          locationLabels,
+        );
+      if (!locationChoice) return;
+
+      const saveToProject = locationChoice === locationLabels[1],
+        targetRaw = saveToProject ? config.raw.project : config.raw.global,
+        targetPath = saveToProject
+          ? config.sources.projectPath
+          : config.sources.globalPath;
+
+      try {
+        targetRaw.enableModelLocking = newValue;
+        await saveConfigFile(targetPath, targetRaw);
+      } catch (error: unknown) {
+        notify(ctx, "error", `Failed to write ${targetPath}: ${String(error)}`);
+        return;
+      }
+
+      config.enableModelLocking = newValue;
+      notify(
+        ctx,
+        "info",
+        `Model locking ${newValue ? "enabled" : "disabled"}.`,
+      );
+
+      const state = getWidgetState();
+      if (state) {
+        updateWidgetState({ ...state, config });
+      }
+      renderUsageWidget(ctx);
+    },
     configureProviders = async (): Promise<void> => {
       const piAuth = await loadAuth();
       const locationChoice = await selectWrapped(
@@ -1428,6 +1476,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
       "Configure fallback",
       "Configure widget",
       "Configure auto-run",
+      "Configure model locking",
       "Configure debug log",
       "Clean up config",
       "Done",
@@ -1468,6 +1517,11 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 
     if (action === "Configure auto-run") {
       await configureAutoRun();
+      continue;
+    }
+
+    if (action === "Configure model locking") {
+      await configureModelLocking();
       continue;
     }
 

@@ -184,6 +184,7 @@ describe("Model Selector Extension", () => {
       priority: ["remainingPercent"],
       widget: { enabled: true, placement: "belowEditor", showCount: 3 },
       autoRun: false,
+      enableModelLocking: true,
       disabledProviders: [],
       sources: { globalPath: "", projectPath: "" },
       raw: { global: {}, project: {} },
@@ -234,6 +235,7 @@ describe("Model Selector Extension", () => {
       priority: ["remainingPercent"],
       widget: { enabled: true, placement: "belowEditor", showCount: 3 },
       autoRun: false,
+      enableModelLocking: true,
       disabledProviders: [],
       sources: { globalPath: "", projectPath: "" },
       raw: { global: {}, project: {} },
@@ -273,6 +275,50 @@ describe("Model Selector Extension", () => {
       expect.stringContaining("Already using p1/m1"),
       "info",
     );
+  });
+
+  it("emits 'Model locking: disabled.' from /model-select when disabled", async () => {
+    vi.mocked(configMod.loadConfig).mockResolvedValue({
+      mappings: [
+        {
+          usage: { provider: "p1", window: "w1" },
+          model: { provider: "p1", id: "m1" },
+        },
+      ],
+      priority: ["remainingPercent"],
+      widget: { enabled: true, placement: "belowEditor", showCount: 3 },
+      autoRun: false,
+      enableModelLocking: false,
+      disabledProviders: [],
+      sources: { globalPath: "", projectPath: "" },
+      raw: { global: {}, project: {} },
+    });
+
+    modelSelectorExtension(pi);
+    const handler = commands["model-select"];
+    if (!handler) throw new Error("Command not found: model-select");
+
+    await handler({}, ctx);
+
+    expect(ctx.ui.notify).toHaveBeenCalledWith(
+      expect.stringContaining("Model locking: disabled."),
+      "info",
+    );
+  });
+
+  it("does not emit 'Model locking' from /model-select when enabled", async () => {
+    modelSelectorExtension(pi);
+    const handler = commands["model-select"];
+    if (!handler) throw new Error("Command not found: model-select");
+
+    await handler({}, ctx);
+
+    const notifyCalls = vi.mocked(ctx.ui.notify).mock.calls;
+    const lockingCall = notifyCalls.find(
+      ([msg]: [string, string]) =>
+        typeof msg === "string" && msg.includes("Model locking"),
+    );
+    expect(lockingCall).toBeUndefined();
   });
 
   it("should skip zero-availability candidates", async () => {
@@ -421,6 +467,7 @@ describe("Model Selector Extension", () => {
       priority: ["remainingPercent"],
       widget: { enabled: true, placement: "belowEditor", showCount: 3 },
       autoRun: false,
+      enableModelLocking: true,
       disabledProviders: [],
       debugLog: {
         enabled: true,
@@ -719,11 +766,55 @@ describe("Model Selector Extension", () => {
           priority: ["remainingPercent"],
           widget: { enabled: true, placement: "belowEditor", showCount: 3 },
           autoRun: false,
+          enableModelLocking: true,
           disabledProviders: [],
           sources: { globalPath: "", projectPath: "" },
           raw: { global: {}, project: {} },
         },
       });
+    });
+
+    it("skips lock acquisition when enableModelLocking is false", async () => {
+      vi.mocked(configMod.loadConfig).mockResolvedValue({
+        mappings: [
+          {
+            usage: { provider: "p1", window: "w1" },
+            model: { provider: "p1", id: "m1" },
+          },
+        ],
+        priority: ["remainingPercent"],
+        widget: { enabled: true, placement: "belowEditor", showCount: 3 },
+        autoRun: false,
+        enableModelLocking: false,
+        disabledProviders: [],
+        sources: { globalPath: "", projectPath: "" },
+        raw: { global: {}, project: {} },
+      });
+
+      modelSelectorExtension(pi);
+      const beforeAgentStart = events.before_agent_start;
+      if (!beforeAgentStart)
+        throw new Error("Hook not found: before_agent_start");
+
+      const toggleHandler = commands["model-auto-toggle"];
+      if (!toggleHandler)
+        throw new Error("Command not found: model-auto-toggle");
+      await toggleHandler({}, ctx);
+
+      ctx.model = { provider: "p1", id: "m1" };
+
+      vi.mocked(fs.promises.writeFile).mockClear();
+
+      await beforeAgentStart({}, ctx);
+
+      const lockFileWrites = vi
+        .mocked(fs.promises.writeFile)
+        .mock.calls.filter(
+          ([filePath]) =>
+            typeof filePath === "string" &&
+            filePath.includes("model-selector-model-locks"),
+        );
+      expect(lockFileWrites).toEqual([]);
     });
 
     it("keeps existing lock when current model matches active lock", async () => {
@@ -1150,6 +1241,7 @@ describe("Model Selector Extension", () => {
           priority: ["remainingPercent"],
           widget: { enabled: true, placement: "belowEditor", showCount: 3 },
           autoRun: false,
+          enableModelLocking: true,
           disabledProviders: [],
           sources: { globalPath: "", projectPath: "" },
           raw: { global: {}, project: {} },

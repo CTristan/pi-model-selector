@@ -8,11 +8,5 @@ coverage/
 # OS and IDEs
 .DS_Store
 .idea/
-
-# Tools
-.fix-die-repeat/
-.ralph/
-.pi/
-
-# Local Config
-config/model-selector.json
+.vs/
+.claude/

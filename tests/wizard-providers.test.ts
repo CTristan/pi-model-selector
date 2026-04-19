@@ -59,6 +59,7 @@ describe("mapping wizard provider configuration", () => {
     priority: ["remainingPercent"],
     widget: { enabled: true, placement: "belowEditor", showCount: 3 },
     autoRun: false,
+    enableModelLocking: true,
     disabledProviders: ["zai"],
     sources: { globalPath: "global.json", projectPath: "project.json" },
     raw: {
@@ -163,6 +164,7 @@ describe("mapping wizard provider configuration", () => {
       priority: ["remainingPercent"],
       widget: { enabled: true, placement: "belowEditor", showCount: 3 },
       autoRun: false,
+      enableModelLocking: true,
       disabledProviders: ["anthropic"], // Disabled in Global
       sources: { globalPath: "global.json", projectPath: "project.json" },
       raw: {
@@ -209,6 +211,7 @@ describe("mapping wizard provider configuration", () => {
       priority: ["remainingPercent"],
       widget: { enabled: true, placement: "belowEditor", showCount: 3 },
       autoRun: false,
+      enableModelLocking: true,
       disabledProviders: ["zai"],
       sources: { globalPath: "global.json", projectPath: "project.json" },
       raw: {

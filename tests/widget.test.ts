@@ -290,6 +290,104 @@ describe("Widget", () => {
       expect(output[1]).toContain("D2");
       expect(output[1]).toContain("D3");
     });
+
+    it("should append lock off indicator when enableModelLocking is false", () => {
+      const setWidgetMock = vi.fn();
+      const mockCtx = {
+        hasUI: true,
+        ui: { setWidget: setWidgetMock },
+      } as unknown as ExtensionContext;
+      const config = {
+        mappings: [],
+        widget: { enabled: true, showCount: 3, placement: "belowEditor" },
+        enableModelLocking: false,
+      } as unknown as LoadedConfig;
+      const candidates = [
+        {
+          provider: "p1",
+          displayName: "D1",
+          windowLabel: "W1",
+          usedPercent: 0,
+          remainingPercent: 100,
+        },
+      ] as unknown as UsageCandidate[];
+      updateWidgetState({
+        candidates,
+        config,
+        autoSelectionDisabled: false,
+      });
+      renderUsageWidget(mockCtx);
+      const renderFn = setWidgetMock.mock.calls![0]![1]!;
+      const widget = renderFn(null, theme);
+      const output = widget.render(500);
+      expect(output[1]).toContain("lock off");
+      expect(output[1]).toContain("D1");
+    });
+
+    it("should not show lock off indicator when enableModelLocking is true", () => {
+      const setWidgetMock = vi.fn();
+      const mockCtx = {
+        hasUI: true,
+        ui: { setWidget: setWidgetMock },
+      } as unknown as ExtensionContext;
+      const config = {
+        mappings: [],
+        widget: { enabled: true, showCount: 3, placement: "belowEditor" },
+        enableModelLocking: true,
+      } as unknown as LoadedConfig;
+      const candidates = [
+        {
+          provider: "p1",
+          displayName: "D1",
+          windowLabel: "W1",
+          usedPercent: 0,
+          remainingPercent: 100,
+        },
+      ] as unknown as UsageCandidate[];
+      updateWidgetState({
+        candidates,
+        config,
+        autoSelectionDisabled: false,
+      });
+      renderUsageWidget(mockCtx);
+      const renderFn = setWidgetMock.mock.calls![0]![1]!;
+      const widget = renderFn(null, theme);
+      const output = widget.render(500);
+      expect(output[1]).not.toContain("lock off");
+    });
+
+    it("should not show lock off indicator when AUTO OFF is active", () => {
+      const setWidgetMock = vi.fn();
+      const mockCtx = {
+        hasUI: true,
+        ui: { setWidget: setWidgetMock },
+      } as unknown as ExtensionContext;
+      const config = {
+        mappings: [],
+        widget: { enabled: true, showCount: 3, placement: "belowEditor" },
+        enableModelLocking: false,
+      } as unknown as LoadedConfig;
+      const candidates = [
+        {
+          provider: "p1",
+          displayName: "D1",
+          windowLabel: "W1",
+          usedPercent: 0,
+          remainingPercent: 100,
+        },
+      ] as unknown as UsageCandidate[];
+      updateWidgetState({
+        candidates,
+        config,
+        autoSelectionDisabled: true,
+      });
+      renderUsageWidget(mockCtx);
+      const renderFn = setWidgetMock.mock.calls![0]![1]!;
+      const widget = renderFn(null, theme);
+      const output = widget.render(500);
+      expect(output[1]).toContain("[error]AUTO OFF[/error]");
+      expect(output[1]).not.toContain("lock off");
+    });
   });
 
   describe("Reserve Indicator", () => {

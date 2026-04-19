@@ -30,6 +30,7 @@ describe("Selector Branch Coverage", () => {
     priority: ["remainingPercent"],
     widget: { enabled: true, placement: "belowEditor", showCount: 3 },
     autoRun: false,
+    enableModelLocking: true,
     disabledProviders: [],
     sources: { globalPath: "global.json", projectPath: "project.json" },
     raw: { global: {}, project: {} },

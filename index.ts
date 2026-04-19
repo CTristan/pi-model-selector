@@ -193,6 +193,13 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
     // a new lock if the model has changed.
     if (autoSelectionDisabled) {
       writeDebugLog("Skipping model selection: auto-selection is disabled");
+      const lockingConfig = await loadConfig(ctx, { requireMappings: false });
+      if (lockingConfig && !lockingConfig.enableModelLocking) {
+        writeDebugLog(
+          "Skipping cross-instance lock acquisition: enableModelLocking is false",
+        );
+        return;
+      }
       // If we have an active lock that matches the current model, keep it.
       // Otherwise, acquire a lock for the current model to maintain coordination.
       if (ctx.model) {
@@ -290,6 +297,10 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
         notify(ctx, "info", "Auto model selection re-enabled.");
       }
       await runSelectorWrapper(ctx, "command");
+      const lockingConfig = await loadConfig(ctx, { requireMappings: false });
+      if (lockingConfig && !lockingConfig.enableModelLocking) {
+        notify(ctx, "info", "Model locking: disabled.");
+      }
     },
   });
 

@@ -133,7 +133,8 @@ export function renderUsageWidget(ctx: ExtensionContext): void {
   }
 
   const { candidates, config, autoSelectionDisabled = false } = state,
-    { showCount } = config.widget;
+    { showCount } = config.widget,
+    enableModelLocking = config.enableModelLocking;
 
   if (candidates.length === 0 && !autoSelectionDisabled) {
     ui.setWidget("model-selector", undefined);
@@ -187,6 +188,9 @@ export function renderUsageWidget(ctx: ExtensionContext): void {
           contentLine = theme.fg("error", "AUTO OFF");
         } else {
           contentLine = formattedCandidates.join(separator);
+          if (enableModelLocking === false) {
+            contentLine += separator + theme.fg("dim", "lock off");
+          }
         }
 
         lines.push(
