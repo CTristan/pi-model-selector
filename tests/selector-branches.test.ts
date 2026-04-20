@@ -101,6 +101,7 @@ describe("Selector Branch Coverage", () => {
       hasUI: true,
       cwd: "/mock",
       sessionManager: {} as ExtensionContext["sessionManager"],
+      signal: undefined,
       isIdle: vi.fn().mockReturnValue(true),
       abort: vi.fn(),
       hasPendingMessages: vi.fn().mockReturnValue(false),

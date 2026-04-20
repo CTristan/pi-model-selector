@@ -170,7 +170,7 @@ describe("Explicit Model Selection", () => {
       const sessionStart = events.session_start;
       if (!sessionStart) throw new Error("Hook not found: session_start");
 
-      await sessionStart({}, ctx);
+      await sessionStart({ reason: "startup" }, ctx);
 
       // Should have detected --model flag and disabled auto-selection
       expect(capturedDebugLogs).toContainEqual(
@@ -445,8 +445,8 @@ describe("Explicit Model Selection", () => {
     });
   });
 
-  describe("session_switch re-enables auto-selection", () => {
-    it("re-enables auto-selection on session_switch with new or resume", async () => {
+  describe("session_start (new/resume) re-enables auto-selection", () => {
+    it("re-enables auto-selection on session_start with new or resume", async () => {
       // First, pause auto-selection via model_select event
       modelSelectorExtension(pi);
 
@@ -461,12 +461,12 @@ describe("Explicit Model Selection", () => {
       // Clear debug logs after pause
       capturedDebugLogs.length = 0;
 
-      // Now trigger session_switch
-      const sessionSwitchHandler = events.session_switch;
-      if (!sessionSwitchHandler)
-        throw new Error("Hook not found: session_switch");
+      // SDK ≥0.58 fires session_start (reason "new"/"resume") for switches
+      const sessionStartHandler = events.session_start;
+      if (!sessionStartHandler)
+        throw new Error("Hook not found: session_start");
 
-      // Mock config for session_switch selection
+      // Mock config for selection
       const { loadConfig } = await import("../src/config.js");
       vi.mocked(loadConfig).mockResolvedValue({
         mappings: [
@@ -496,7 +496,7 @@ describe("Explicit Model Selection", () => {
       ]);
 
       // Test with 'new' reason
-      await sessionSwitchHandler({ reason: "new" }, ctx);
+      await sessionStartHandler({ reason: "new" }, ctx);
 
       // Should have re-enabled auto-selection
       expect(capturedDebugLogs).toContainEqual(
@@ -504,7 +504,7 @@ describe("Explicit Model Selection", () => {
       );
     });
 
-    it("does not re-enable auto-selection on session_switch with other reasons", async () => {
+    it("does not re-enable auto-selection on session_start with other reasons", async () => {
       // First, pause auto-selection via model_select event
       modelSelectorExtension(pi);
 
@@ -519,12 +519,12 @@ describe("Explicit Model Selection", () => {
       // Clear debug logs after pause
       capturedDebugLogs.length = 0;
 
-      // Now trigger session_switch with a different reason
-      const sessionSwitchHandler = events.session_switch;
-      if (!sessionSwitchHandler)
-        throw new Error("Hook not found: session_switch");
+      // Trigger session_start with reason that should NOT re-enable
+      const sessionStartHandler = events.session_start;
+      if (!sessionStartHandler)
+        throw new Error("Hook not found: session_start");
 
-      await sessionSwitchHandler({ reason: "other" }, ctx);
+      await sessionStartHandler({ reason: "reload" }, ctx);
 
       // Should NOT have re-enabled auto-selection
       expect(capturedDebugLogs).not.toContainEqual(
