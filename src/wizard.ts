@@ -596,17 +596,15 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
           actionChoice === "Map by pattern"
         ) {
           // Filter models to only show those from the same provider as the usage bucket
-          const providerModels = availableModels.filter(
-            (model) => model.provider === selectedCandidate.provider,
+          let providerModels = availableModels.filter(
+            (model) =>
+              model.provider === selectedCandidate.provider ||
+              model.provider.includes(selectedCandidate.provider) ||
+              selectedCandidate.provider.includes(model.provider),
           );
 
           if (providerModels.length === 0) {
-            notify(
-              ctx,
-              "warning",
-              `No models found for provider ${selectedCandidate.provider}. Cannot map this bucket.`,
-            );
-            return;
+            providerModels = availableModels;
           }
 
           const providerModelLabels = providerModels.map(
