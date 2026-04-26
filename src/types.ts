@@ -45,7 +45,8 @@ export interface MappingEntry {
 export type PriorityRule =
   | "fullAvailability"
   | "remainingPercent"
-  | "earliestReset";
+  | "earliestReset"
+  | "ordered";
 
 export interface FallbackConfig {
   provider: string;
