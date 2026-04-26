@@ -498,8 +498,8 @@ describe("Usage Fetchers", () => {
               "claude-opus-4-6-thinking": {
                 quotaInfo: { remainingFraction: 0.3 },
               },
-              "gemini-3-pro-low": { quotaInfo: { remainingFraction: 0.1 } },
-              "gemini-3-pro-high": { quotaInfo: { remainingFraction: 0.2 } },
+              "gemini-3.1-pro-low": { quotaInfo: { remainingFraction: 0.1 } },
+              "gemini-3.1-pro-high": { quotaInfo: { remainingFraction: 0.2 } },
               "gemini-3-flash": { quotaInfo: { remainingFraction: 0.9 } },
             },
           }),
@@ -590,13 +590,13 @@ describe("Usage Fetchers", () => {
           ok: true,
           json: async () => ({
             models: {
-              "gemini-3-pro-high": {
+              "gemini-3.1-pro-high": {
                 quotaInfo: {
                   remainingFraction: 0.2,
                   resetTime: "2024-03-01T00:00:00Z",
                 },
               },
-              "gemini-3-pro-low": {
+              "gemini-3.1-pro-low": {
                 quotaInfo: {
                   remainingFraction: 0.1,
                   resetTime: "2024-04-01T00:00:00Z",

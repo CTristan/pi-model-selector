@@ -30,11 +30,37 @@ Windows are dynamically determined based on the `modelId` returned by the API:
 
 - **Pro**: Groups models with "pro" in their ID (e.g., `gemini-1.5-pro`).
 - **Flash**: Groups models with "flash" in their ID (e.g., `gemini-1.5-flash`).
+- **Flash Lite**: Groups models with "flash-lite" in their ID (e.g., `gemini-3.1-flash-lite-preview`).
 - **Other**: Default group for other model IDs.
 
 ## Reset Time
 
-Gemini API quotas reset daily at **midnight Pacific Time**. Since the API does not return reset timestamps, the extension computes the next midnight in `America/Los_Angeles` and sets `resetsAt` on each usage window. In environments where IANA timezone data (e.g., ICU) is unavailable, this calculation falls back to the next local midnight instead, so `resetsAt` may be based on local time in those cases. This allows Gemini candidates to participate in `earliestReset` priority ranking and display reset countdowns in the widget.
+Gemini API quotas typically reset daily. The extension determines the reset time using the following priority:
+
+1.  **API provided reset time**: If the Google API returns a specific `resetTime` for a quota bucket, it is used directly.
+2.  **Configured timezone**: If the API doesn't provide a time, the extension calculates the next midnight based on the `resetTimezone` provider setting.
+3.  **Default (Pacific Time)**: If no setting is provided, it defaults to **midnight Pacific Time** (`America/Los_Angeles`).
+
+### Configuration
+
+You can configure the fallback timezone in your `model-selector.json`:
+
+```json
+{
+  "providerSettings": {
+    "gemini": {
+      "resetTimezone": "local"
+    }
+  }
+}
+```
+
+Options for `resetTimezone`:
+- `"local"`: Uses your machine's local midnight.
+- IANA Timezone ID: e.g., `"America/New_York"`, `"Europe/London"`, `"Asia/Tokyo"`.
+- Defaults to `"America/Los_Angeles"`.
+
+In environments where IANA timezone data (e.g., ICU) is unavailable, the calculation falls back to the next local midnight.
 
 ## Logic Details
 

@@ -1,13 +1,73 @@
 import { DateTime } from "luxon";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import {
-  fetchGeminiUsage,
-  nextMidnightPacific,
-} from "../src/fetchers/gemini.js";
+import { fetchGeminiUsage, nextMidnight } from "../src/fetchers/gemini.js";
 
 describe("Gemini Usage Fetcher", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it("should respect resetTimezone setting", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            buckets: [{ modelId: "gemini-pro", remainingFraction: 1 }],
+          }),
+      }),
+    );
+
+    const modelRegistry = {
+      authStorage: {
+        get: () => ({ accessToken: "tok", projectId: "pid" }),
+      },
+    };
+
+    // Use UTC for predictable test result
+    const snapshots = await fetchGeminiUsage(
+      modelRegistry,
+      {},
+      {
+        resetTimezone: "UTC",
+      },
+    );
+    const resetTime = snapshots[0]!.windows[0]!.resetsAt!;
+
+    // In UTC, next midnight should be at 00:00:00 UTC
+    expect(resetTime.getUTCHours()).toBe(0);
+    expect(resetTime.getUTCMinutes()).toBe(0);
+  });
+
+  it("should respect resetTime from API response if present", async () => {
+    const mockResetTime = new Date(Date.now() + 5 * 3600 * 1000).toISOString();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            buckets: [
+              {
+                modelId: "gemini-pro",
+                remainingFraction: 0.5,
+                resetTime: mockResetTime,
+              },
+            ],
+          }),
+      }),
+    );
+
+    const modelRegistry = {
+      authStorage: {
+        get: () => ({ accessToken: "tok", projectId: "pid" }),
+      },
+    };
+
+    const snapshots = await fetchGeminiUsage(modelRegistry, {});
+    const window = snapshots[0]!.windows[0]!;
+    expect(window.resetsAt?.toISOString()).toBe(mockResetTime);
   });
 
   it("should handle expiresAt: 0 correctly in merging", async () => {
@@ -51,6 +111,7 @@ describe("Gemini Usage Fetcher", () => {
             buckets: [
               { modelId: "gemini-2.5-pro", remainingFraction: 0.8 },
               { modelId: "gemini-2.0-flash", remainingFraction: 0.5 },
+              { modelId: "gemini-2.0-flash-lite", remainingFraction: 0.7 },
             ],
           }),
       }),
@@ -74,7 +135,11 @@ describe("Gemini Usage Fetcher", () => {
     const snapshot = snapshots.find((s) => s.account === "test-project");
     expect(snapshot).toBeDefined();
     expect(snapshot!.error).toBeUndefined();
-    expect(snapshot!.windows.length).toBe(2);
+    expect(snapshot!.windows.length).toBe(3);
+
+    const flashLite = snapshot!.windows.find((w) => w.label === "Flash Lite");
+    expect(flashLite).toBeDefined();
+    expect(flashLite!.usedPercent).toBeCloseTo(30); // 1 - 0.7
 
     for (const w of snapshot!.windows) {
       expect(w.resetsAt).toBeInstanceOf(Date);
@@ -148,15 +213,15 @@ function hasPacificTimeZoneSupport(): boolean {
   }
 }
 
-describe("nextMidnightPacific", () => {
+describe("nextMidnight", () => {
   it("returns a Date in the future", () => {
-    const result = nextMidnightPacific();
+    const result = nextMidnight();
     expect(result).toBeInstanceOf(Date);
     expect(result.getTime()).toBeGreaterThan(Date.now());
   });
 
   it("returns a time at most ~24h in the future", () => {
-    const result = nextMidnightPacific();
+    const result = nextMidnight();
     const diffMs = result.getTime() - Date.now();
     // Should be within 25 hours (to account for DST fall-back) + small tolerance
     expect(diffMs).toBeLessThanOrEqual(25 * 60 * 60 * 1000 + 5000);
@@ -168,7 +233,7 @@ describe("nextMidnightPacific", () => {
     () => {
       // 2025-06-15 10:00:00 UTC = 2025-06-15 03:00:00 PDT
       const now = new Date("2025-06-15T10:00:00Z");
-      const result = nextMidnightPacific(now);
+      const result = nextMidnight(now, "America/Los_Angeles");
       expect(result).toBeInstanceOf(Date);
       // Next midnight Pacific is 2025-06-16 00:00:00 PDT = 2025-06-16 07:00:00 UTC
       expect(result.getTime()).toBeGreaterThan(now.getTime());
@@ -189,7 +254,7 @@ describe("nextMidnightPacific", () => {
       it("handles PST (winter) correctly", () => {
         // 2025-01-15 10:00:00 UTC = 2025-01-15 02:00:00 PST (UTC-8)
         const now = new Date("2025-01-15T10:00:00Z");
-        const result = nextMidnightPacific(now);
+        const result = nextMidnight(now, "America/Los_Angeles");
         // Next midnight PST = 2025-01-16 00:00:00 PST = 2025-01-16 08:00:00 UTC
         const expected = new Date("2025-01-16T08:00:00Z");
         expect(result.getTime()).toBe(expected.getTime());
@@ -198,7 +263,7 @@ describe("nextMidnightPacific", () => {
       it("handles PDT (summer) correctly", () => {
         // 2025-07-15 10:00:00 UTC = 2025-07-15 03:00:00 PDT (UTC-7)
         const now = new Date("2025-07-15T10:00:00Z");
-        const result = nextMidnightPacific(now);
+        const result = nextMidnight(now, "America/Los_Angeles");
         // Next midnight PDT = 2025-07-16 00:00:00 PDT = 2025-07-16 07:00:00 UTC
         const expected = new Date("2025-07-16T07:00:00Z");
         expect(result.getTime()).toBe(expected.getTime());
@@ -207,7 +272,7 @@ describe("nextMidnightPacific", () => {
       it("handles just before midnight Pacific", () => {
         // 2025-06-15 06:59:00 UTC = 2025-06-14 23:59:00 PDT
         const now = new Date("2025-06-15T06:59:00Z");
-        const result = nextMidnightPacific(now);
+        const result = nextMidnight(now, "America/Los_Angeles");
         // Next midnight PDT = 2025-06-15 00:00:00 PDT = 2025-06-15 07:00:00 UTC
         const expected = new Date("2025-06-15T07:00:00Z");
         expect(result.getTime()).toBe(expected.getTime());
@@ -216,7 +281,7 @@ describe("nextMidnightPacific", () => {
       it("handles just after midnight Pacific", () => {
         // 2025-06-15 07:01:00 UTC = 2025-06-15 00:01:00 PDT
         const now = new Date("2025-06-15T07:01:00Z");
-        const result = nextMidnightPacific(now);
+        const result = nextMidnight(now, "America/Los_Angeles");
         // Next midnight PDT = 2025-06-16 00:00:00 PDT = 2025-06-16 07:00:00 UTC
         const expected = new Date("2025-06-16T07:00:00Z");
         expect(result.getTime()).toBe(expected.getTime());
@@ -226,7 +291,7 @@ describe("nextMidnightPacific", () => {
         // 2025-03-09 09:30:00 UTC = 2025-03-09 01:30:00 PST (before spring forward at 2:00 AM)
         // At 2:00 AM, clocks jump to 3:00 AM PDT
         const now = new Date("2025-03-09T09:30:00Z");
-        const result = nextMidnightPacific(now);
+        const result = nextMidnight(now, "America/Los_Angeles");
         // Next midnight is 2025-03-10 00:00:00 PDT = 2025-03-10 07:00:00 UTC
         const expected = new Date("2025-03-10T07:00:00Z");
         expect(result.getTime()).toBe(expected.getTime());
@@ -235,7 +300,7 @@ describe("nextMidnightPacific", () => {
       it("handles spring-forward DST transition (after the gap)", () => {
         // 2025-03-09 10:30:00 UTC = 2025-03-09 03:30:00 PDT (after spring forward)
         const now = new Date("2025-03-09T10:30:00Z");
-        const result = nextMidnightPacific(now);
+        const result = nextMidnight(now, "America/Los_Angeles");
         // Next midnight is 2025-03-10 00:00:00 PDT = 2025-03-10 07:00:00 UTC
         const expected = new Date("2025-03-10T07:00:00Z");
         expect(result.getTime()).toBe(expected.getTime());
@@ -245,7 +310,7 @@ describe("nextMidnightPacific", () => {
         // 2025-11-02 07:30:00 UTC = 2025-11-02 00:30:00 PDT (before fall back at 2:00 AM)
         // At 2:00 AM PDT, clocks fall back to 1:00 AM PST
         const now = new Date("2025-11-02T07:30:00Z");
-        const result = nextMidnightPacific(now);
+        const result = nextMidnight(now, "America/Los_Angeles");
         // Next midnight is 2025-11-03 00:00:00 PST = 2025-11-03 08:00:00 UTC
         const expected = new Date("2025-11-03T08:00:00Z");
         expect(result.getTime()).toBe(expected.getTime());
@@ -254,7 +319,7 @@ describe("nextMidnightPacific", () => {
       it("handles fall-back DST transition (after the repeat hour)", () => {
         // 2025-11-02 10:30:00 UTC = 2025-11-02 02:30:00 PST (after fall back)
         const now = new Date("2025-11-02T10:30:00Z");
-        const result = nextMidnightPacific(now);
+        const result = nextMidnight(now, "America/Los_Angeles");
         // Next midnight is 2025-11-03 00:00:00 PST = 2025-11-03 08:00:00 UTC
         const expected = new Date("2025-11-03T08:00:00Z");
         expect(result.getTime()).toBe(expected.getTime());
@@ -263,7 +328,7 @@ describe("nextMidnightPacific", () => {
       it("handles first occurrence of repeated hour during fall-back", () => {
         // 2025-11-02 08:30:00 UTC = 2025-11-02 01:30:00 PDT (first 1:30 AM, PDT)
         const now = new Date("2025-11-02T08:30:00Z");
-        const result = nextMidnightPacific(now);
+        const result = nextMidnight(now, "America/Los_Angeles");
         // Next midnight is 2025-11-03 00:00:00 PST = 2025-11-03 08:00:00 UTC
         const expected = new Date("2025-11-03T08:00:00Z");
         expect(result.getTime()).toBe(expected.getTime());
@@ -272,7 +337,7 @@ describe("nextMidnightPacific", () => {
       it("handles second occurrence of repeated hour during fall-back", () => {
         // 2025-11-02 09:30:00 UTC = 2025-11-02 01:30:00 PST (second 1:30 AM, PST)
         const now = new Date("2025-11-02T09:30:00Z");
-        const result = nextMidnightPacific(now);
+        const result = nextMidnight(now, "America/Los_Angeles");
         // Next midnight is 2025-11-03 00:00:00 PST = 2025-11-03 08:00:00 UTC
         const expected = new Date("2025-11-03T08:00:00Z");
         expect(result.getTime()).toBe(expected.getTime());
@@ -282,7 +347,7 @@ describe("nextMidnightPacific", () => {
 
   describe("fallback behavior (no timezone support)", () => {
     it("returns next local midnight when Pacific timezone is unavailable", () => {
-      // Explicitly mock/stub the timezone/Luxon path so pacificNow.isValid becomes false.
+      // Explicitly mock/stub the timezone/Luxon path so zonedNow.isValid becomes false.
       const fromJSDateSpy = vi
         .spyOn(DateTime, "fromJSDate")
         .mockReturnValue({ isValid: false } as any);
@@ -291,7 +356,7 @@ describe("nextMidnightPacific", () => {
         // This test validates the fallback behavior when IANA timezone data is missing.
         // The fallback returns the next local midnight, which is a reasonable default.
         const now = new Date("2025-06-15T10:00:00Z");
-        const result = nextMidnightPacific(now);
+        const result = nextMidnight(now, "America/Los_Angeles");
         // Should return a Date in the future
         expect(result.getTime()).toBeGreaterThan(now.getTime());
         // Should be at most ~24 hours later (plus tolerance for DST)
@@ -314,7 +379,7 @@ describe("nextMidnightPacific", () => {
 
       try {
         const now = new Date("2025-06-15T23:59:00Z");
-        const result = nextMidnightPacific(now);
+        const result = nextMidnight(now, "America/Los_Angeles");
         // Should return midnight of the next day (local timezone)
         const expectedLocalMidnight = new Date(now);
         expectedLocalMidnight.setHours(24, 0, 0, 0);
@@ -331,7 +396,7 @@ describe("nextMidnightPacific", () => {
 
       try {
         const now = new Date("2025-06-15T00:01:00Z");
-        const result = nextMidnightPacific(now);
+        const result = nextMidnight(now, "America/Los_Angeles");
         // Should return midnight of the next day (local timezone)
         const expectedLocalMidnight = new Date(now);
         expectedLocalMidnight.setHours(24, 0, 0, 0);
@@ -339,6 +404,17 @@ describe("nextMidnightPacific", () => {
       } finally {
         fromJSDateSpy.mockRestore();
       }
+    });
+  });
+
+  describe("local midnight behavior", () => {
+    it("returns next local midnight when 'local' is specified", () => {
+      const now = new Date("2025-06-15T10:00:00Z");
+      const result = nextMidnight(now, "local");
+
+      const expectedLocalMidnight = new Date(now);
+      expectedLocalMidnight.setHours(24, 0, 0, 0);
+      expect(result.getTime()).toBe(expectedLocalMidnight.getTime());
     });
   });
 });
