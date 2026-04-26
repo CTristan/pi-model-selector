@@ -330,6 +330,44 @@ describe("Widget", () => {
       );
     });
 
+    it("should show different unmapped windows for the same provider if they have different labels", () => {
+      const setWidgetMock = vi.fn();
+      const mockCtx = {
+        hasUI: true,
+        ui: { setWidget: setWidgetMock },
+      } as unknown as ExtensionContext;
+      const config = {
+        mappings: [], // No mappings, all unmapped
+        widget: { enabled: true, showCount: 5, placement: "belowEditor" },
+      } as unknown as LoadedConfig;
+      const candidates = [
+        {
+          provider: "gemini",
+          displayName: "Gemini",
+          windowLabel: "Pro",
+          usedPercent: 0,
+          remainingPercent: 100,
+          account: "project-1",
+        },
+        {
+          provider: "gemini",
+          displayName: "Gemini",
+          windowLabel: "Flash",
+          usedPercent: 0,
+          remainingPercent: 100,
+          account: "project-1",
+        },
+      ] as unknown as UsageCandidate[];
+      updateWidgetState({ candidates, config });
+      renderUsageWidget(mockCtx);
+      const renderFn = setWidgetMock.mock.calls![0]![1]!;
+      const widget = renderFn(null, theme);
+      const output = widget.render(500);
+      expect(output[1]).toContain("Gemini");
+      expect(output[1]).toContain("Pro");
+      expect(output[1]).toContain("Flash");
+    });
+
     it("should not show LOCK OFF entry when enableModelLocking is true", () => {
       const setWidgetMock = vi.fn();
       const mockCtx = {

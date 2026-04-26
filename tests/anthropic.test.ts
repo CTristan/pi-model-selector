@@ -285,6 +285,44 @@ describe("Anthropic Usage Fetcher", () => {
       // Both have 0.8 utilization, so it should pick the LATEST reset (the 1 hour one from five_hour)
       expect(sonnet?.resetsAt?.getTime()).toBe(now + 3600 * 1000);
     });
+
+    it("should return model-specific windows and NOT return Shared window when model-specific ones are present", async () => {
+      const mockResponse = {
+        seven_day_sonnet: {
+          utilization: 0.3,
+          resets_at: new Date(Date.now() + 3600 * 1000).toISOString(),
+        },
+        seven_day_opus: {
+          utilization: 0.6,
+          resets_at: new Date(Date.now() + 7200 * 1000).toISOString(),
+        },
+      };
+
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve(mockResponse),
+        }),
+      );
+
+      const result = await fetchClaudeUsage(undefined, {
+        anthropic: { access: "fake-token" },
+      });
+
+      const labels = result.windows.map((w) => w.label);
+      expect(labels).toContain("Sonnet");
+      expect(labels).toContain("Opus");
+      expect(labels).not.toContain("Shared");
+
+      expect(
+        result.windows.find((w) => w.label === "Sonnet")?.usedPercent,
+      ).toBe(60);
+      expect(result.windows.find((w) => w.label === "Opus")?.usedPercent).toBe(
+        60,
+      );
+    });
   });
 
   describe("Error Handling", () => {

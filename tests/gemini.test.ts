@@ -51,6 +51,7 @@ describe("Gemini Usage Fetcher", () => {
             buckets: [
               { modelId: "gemini-2.5-pro", remainingFraction: 0.8 },
               { modelId: "gemini-2.0-flash", remainingFraction: 0.5 },
+              { modelId: "gemini-2.0-flash-lite", remainingFraction: 0.7 },
             ],
           }),
       }),
@@ -74,7 +75,11 @@ describe("Gemini Usage Fetcher", () => {
     const snapshot = snapshots.find((s) => s.account === "test-project");
     expect(snapshot).toBeDefined();
     expect(snapshot!.error).toBeUndefined();
-    expect(snapshot!.windows.length).toBe(2);
+    expect(snapshot!.windows.length).toBe(3);
+
+    const flashLite = snapshot!.windows.find((w) => w.label === "Flash Lite");
+    expect(flashLite).toBeDefined();
+    expect(flashLite!.usedPercent).toBeCloseTo(30); // 1 - 0.7
 
     for (const w of snapshot!.windows) {
       expect(w.resetsAt).toBeInstanceOf(Date);
