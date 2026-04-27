@@ -1,5 +1,5 @@
 import type { ExtensionContext, Theme } from "@mariozechner/pi-coding-agent";
-import { truncateToWidth } from "@mariozechner/pi-tui";
+import { truncateToWidth } from "./adapter.js";
 import { findIgnoreMapping, findModelMapping } from "./candidates.js";
 import type { LoadedConfig, MappingEntry, UsageCandidate } from "./types.js";
 import { formatReset } from "./usage-fetchers.js";

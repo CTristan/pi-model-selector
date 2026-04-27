@@ -29,7 +29,24 @@
     ]
   },
   "peerDependencies": {
-    "@mariozechner/pi-coding-agent": "*"
+    "@mariozechner/pi-coding-agent": "*",
+    "@mariozechner/pi-tui": "*",
+    "@oh-my-pi/pi-coding-agent": "*",
+    "@oh-my-pi/pi-tui": "*"
+  },
+  "peerDependenciesMeta": {
+    "@mariozechner/pi-coding-agent": {
+      "optional": true
+    },
+    "@mariozechner/pi-tui": {
+      "optional": true
+    },
+    "@oh-my-pi/pi-coding-agent": {
+      "optional": true
+    },
+    "@oh-my-pi/pi-tui": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.13",

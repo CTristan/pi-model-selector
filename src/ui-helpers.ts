@@ -1,16 +1,14 @@
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
-import {
-  DynamicBorder,
-  getSelectListTheme,
-} from "@mariozechner/pi-coding-agent";
+import type { SelectItem } from "@mariozechner/pi-tui";
 
 import {
   Container,
-  type SelectItem,
+  DynamicBorder,
   SelectList,
   Spacer,
   Text,
-} from "@mariozechner/pi-tui";
+  getSelectListTheme,
+} from "./adapter.js";
 
 import type { PriorityRule } from "./types.js";
 

@@ -67,6 +67,7 @@ describe("Selector with enableModelLocking: false", () => {
 
   const createContext = (): ExtensionContext =>
     ({
+      signal: new AbortController().signal,
       modelRegistry: {
         find: vi.fn(
           (provider: string, id: string) =>

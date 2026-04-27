@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import type { FileHandle } from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import { EXTENSION_DIR } from "./adapter.js";
 
 export interface ModelLockEntry {
   instanceId: string;
@@ -42,7 +43,7 @@ export interface ModelLockCoordinatorOptions {
 
 export const MODEL_LOCK_STATE_PATH = path.join(
   os.homedir(),
-  ".pi",
+  EXTENSION_DIR,
   "model-selector-model-locks.json",
 );
 

@@ -81,6 +81,7 @@ describe("Selector Branch Coverage", () => {
 
   const createContext = (): MockExtensionContext =>
     ({
+      signal: new AbortController().signal,
       modelRegistry: {
         find: vi.fn(
           (provider: string, id: string) =>

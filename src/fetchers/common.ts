@@ -3,6 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { promisify } from "node:util";
+import { EXTENSION_DIR } from "../adapter.js";
 
 export const execAsync = promisify(exec);
 
@@ -43,7 +44,12 @@ export const URLS = {
 };
 
 export async function loadPiAuth(): Promise<Record<string, unknown>> {
-  const piAuthPath = path.join(os.homedir(), ".pi", "agent", "auth.json");
+  const piAuthPath = path.join(
+    os.homedir(),
+    EXTENSION_DIR,
+    "agent",
+    "auth.json",
+  );
   try {
     const data = await fs.promises.readFile(piAuthPath, "utf-8");
     return JSON.parse(data) as Record<string, unknown>;

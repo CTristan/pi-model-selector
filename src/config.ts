@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { EXTENSION_DIR } from "./adapter.js";
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 
 import type {
@@ -33,7 +34,7 @@ function findGlobalConfigPath(): string {
   // to avoid conflicts with the extension source or project files.
   cachedGlobalConfigPath = path.join(
     os.homedir(),
-    ".pi",
+    EXTENSION_DIR,
     "model-selector.json",
   );
   return cachedGlobalConfigPath;
@@ -532,7 +533,7 @@ export async function loadConfig(
   const errors: string[] = [],
     requireMappings = options.requireMappings ?? true,
     seedGlobal = options.seedGlobal ?? true,
-    projectPath = path.join(ctx.cwd, ".pi", "model-selector.json"),
+    projectPath = path.join(ctx.cwd, EXTENSION_DIR, "model-selector.json"),
     globalConfigPath = await getGlobalConfigPath();
 
   let globalRaw = await readConfigFile(globalConfigPath, errors),
@@ -691,7 +692,10 @@ export function cleanupConfigRaw(
     const debug = raw.debugLog as Record<string, unknown>;
     if (options.scope === "global" && typeof debug.path === "string") {
       const originalPath = debug.path.trim(),
-        correctedPath = originalPath.replace(/^(?:\.\/)?\.pi\//, "");
+        correctedPath = originalPath.replace(
+          new RegExp(`^(?:\\.\\/)?${EXTENSION_DIR}\\/`),
+          "",
+        );
       if (correctedPath.length > 0 && correctedPath !== originalPath) {
         debug.path = correctedPath;
         fixedDebugLogPath = true;

@@ -171,7 +171,7 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
     }
   });
 
-  pi.on("session_switch", async (event, ctx) => {
+  pi.on("session_switch" as any, async (event: any, ctx: any) => {
     if (event.reason === "new" || event.reason === "resume") {
       // Re-enable auto-selection on session switch (new/resume)
       autoSelectionDisabled = false;

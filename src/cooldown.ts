@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { EXTENSION_DIR } from "./adapter.js";
 
 import { candidateKey } from "./candidates.js";
 import type { UsageCandidate } from "./types.js";
@@ -14,7 +15,7 @@ export const COOLDOWN_DURATION = 60 * 60 * 1000; // 1 hour
 
 const COOLDOWN_STATE_PATH = path.join(
   os.homedir(),
-  ".pi",
+  EXTENSION_DIR,
   "model-selector-cooldowns.json",
 );
 
