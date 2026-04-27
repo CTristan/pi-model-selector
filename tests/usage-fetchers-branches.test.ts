@@ -756,8 +756,51 @@ describe("Usage Fetchers Branch Coverage", () => {
       const result = await fetchAllCodexUsages({}, piAuth);
       expect(result).toHaveLength(1);
     });
-  });
 
+    it("should skip .codex file credential when account already covered by piAuth", async () => {
+      vi.mocked(fs.promises.stat).mockResolvedValue({
+        isDirectory: () => true,
+      } as any);
+
+      vi.mocked(fs.promises.readdir).mockResolvedValue(["auth.json"] as any);
+
+      vi.mocked(fs.promises.readFile).mockImplementation(async (p) => {
+        if (String(p).endsWith("auth.json"))
+          return JSON.stringify({
+            tokens: {
+              access_token: "stale-file-token",
+              account_id: "shared-account-123",
+            },
+          });
+        return "";
+      });
+
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          rate_limit: { primary_window: { used_percent: 30 } },
+        }),
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      // piAuth has fresh token for the same account_id as the file
+      const result = await fetchAllCodexUsages(
+        {},
+        {
+          "openai-codex": {
+            access: "fresh-pi-token",
+            accountId: "shared-account-123",
+          },
+        },
+      );
+
+      // Should only fetch once (piAuth), not twice (piAuth + stale file)
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.account).toBe("shared-account-123");
+      expect(result[0]!.error).toBeUndefined();
+    });
+  });
   // ========================================================================
   // Kiro
   // ========================================================================

@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { promisify } from "node:util";
-import { EXTENSION_DIR } from "../adapter.js";
+import { EXTENSION_DIR, isOmp } from "../adapter.js";
 
 export const execAsync = promisify(exec);
 
@@ -44,6 +44,7 @@ export const URLS = {
 };
 
 export async function loadPiAuth(): Promise<Record<string, unknown>> {
+  // Try JSON file first (legacy Pi and OMP < SQLite migration)
   const piAuthPath = path.join(
     os.homedir(),
     EXTENSION_DIR,
@@ -54,8 +55,31 @@ export async function loadPiAuth(): Promise<Record<string, unknown>> {
     const data = await fs.promises.readFile(piAuthPath, "utf-8");
     return JSON.parse(data) as Record<string, unknown>;
   } catch {
-    return {};
+    // JSON file missing — fall through
   }
+
+  // OMP stores auth in SQLite
+  if (isOmp) {
+    try {
+      const dbPath = path.join(os.homedir(), ".omp", "agent", "agent.db");
+      const { stdout } = await execAsync(
+        `sqlite3 -json "${dbPath}" "SELECT provider, data FROM auth_credentials"`,
+      );
+      const rows = JSON.parse(stdout) as { provider: string; data: string }[];
+      const auth: Record<string, unknown> = {};
+      for (const row of rows) {
+        try {
+          auth[row.provider] = JSON.parse(row.data);
+        } catch {
+          // Skip malformed entries
+        }
+      }
+      return auth;
+    } catch {
+      // sqlite3 CLI not available or DB doesn't exist
+    }
+  }
+  return {};
 }
 
 export function parseEpochMillis(value: unknown): number | undefined {

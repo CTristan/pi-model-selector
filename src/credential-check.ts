@@ -106,6 +106,16 @@ export async function hasProviderCredential(
         }
       }
 
+      if (provider === "codex") {
+        const codexKey =
+          await modelRegistry.authStorage.getApiKey?.("openai-codex");
+        const codexData = await modelRegistry.authStorage.get?.("openai-codex");
+
+        if (isNonEmptyString(codexKey) || hasTokenPayload(codexData)) {
+          return true;
+        }
+      }
+
       if (provider === "anthropic") {
         const anthropicKey =
           await modelRegistry.authStorage.getApiKey?.("anthropic");

@@ -93,6 +93,7 @@ async function discoverCodexCredentials(
 ): Promise<CodexCredential[]> {
   const credentials: CodexCredential[] = [],
     seenTokens = new Set<string>(),
+    seenAccounts = new Set<string>(),
     piAuths = getPiCodexAuths(piAuth);
   for (const p of piAuths) {
     if (!seenTokens.has(p.accessToken)) {
@@ -102,12 +103,12 @@ async function discoverCodexCredentials(
       };
       if (p.accountId !== undefined) {
         result.accountId = p.accountId;
+        seenAccounts.add(p.accountId);
       }
       credentials.push(result);
       seenTokens.add(p.accessToken);
     }
   }
-
   try {
     const mr = modelRegistry as {
       authStorage?: {
@@ -135,6 +136,7 @@ async function discoverCodexCredentials(
       };
       if (accountId !== undefined) {
         result.accountId = accountId;
+        seenAccounts.add(accountId);
       }
       credentials.push(result);
       seenTokens.add(registryToken);
@@ -157,6 +159,11 @@ async function discoverCodexCredentials(
           auth = await readCodexAuthFile(authPath);
 
         if (!auth.accessToken || seenTokens.has(auth.accessToken)) {
+          continue;
+        }
+
+        // Skip file credentials for accounts already covered by piAuth/registry
+        if (auth.accountId && seenAccounts.has(auth.accountId)) {
           continue;
         }
 
