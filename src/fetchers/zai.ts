@@ -27,10 +27,44 @@ export function resolveZaiApiKey(
   return undefined;
 }
 
+async function resolveZaiApiKeyWithRegistry(
+  modelRegistry: unknown,
+  piAuth: Record<string, unknown>,
+): Promise<string | undefined> {
+  // 1. Check env var
+  const envKey = process.env.Z_AI_API_KEY;
+  if (typeof envKey === "string" && envKey.trim().length > 0) {
+    return envKey.trim();
+  }
+
+  // 2. Check model registry authStorage (OMP uses SQLite, not auth.json)
+  try {
+    const mr = modelRegistry as {
+      authStorage?: {
+        getApiKey?: (
+          id: string,
+        ) => Promise<string | undefined> | string | undefined;
+      };
+    };
+    const registryKey = await Promise.resolve(
+      mr?.authStorage?.getApiKey?.("zai"),
+    );
+    if (typeof registryKey === "string" && registryKey.trim().length > 0) {
+      return registryKey.trim();
+    }
+  } catch {
+    // Auth storage not available, continue to piAuth
+  }
+
+  // 3. Check piAuth (auth.json file)
+  return resolveZaiApiKey(piAuth);
+}
+
 export async function fetchZaiUsage(
+  modelRegistry: unknown = {},
   piAuth: Record<string, unknown> = {},
 ): Promise<UsageSnapshot> {
-  const apiKey = resolveZaiApiKey(piAuth);
+  const apiKey = await resolveZaiApiKeyWithRegistry(modelRegistry, piAuth);
 
   if (!apiKey) {
     return {

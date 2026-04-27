@@ -77,7 +77,7 @@ export async function fetchAllUsages(
         fetch: () => fetchAntigravityUsage(modelRegistry, piAuth),
       },
       { provider: "kiro", fetch: () => fetchKiroUsage() },
-      { provider: "zai", fetch: () => fetchZaiUsage(piAuth) },
+      { provider: "zai", fetch: () => fetchZaiUsage(modelRegistry, piAuth) },
       {
         provider: "minimax",
         fetch: () =>

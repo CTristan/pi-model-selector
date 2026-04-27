@@ -267,12 +267,4 @@ export const DEFAULT_MAPPINGS: MappingEntry[] = [
     usage: { provider: "antigravity", window: "Claude" },
     model: { provider: "google", id: "claude-sonnet-4-5" },
   },
-  {
-    usage: { provider: "kiro" },
-    model: { provider: "google", id: "gemini-1.5-flash" },
-  },
-  {
-    usage: { provider: "zai" },
-    model: { provider: "openai", id: "gpt-4o" },
-  },
 ];

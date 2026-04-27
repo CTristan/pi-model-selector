@@ -269,8 +269,8 @@ describe("Config Loading", () => {
     const config = await loadConfig(mockCtx);
 
     expect(fs.promises.writeFile).toHaveBeenCalled();
-    // Default mappings length is 11
-    expect(config?.mappings).toHaveLength(11);
+    // Default mappings length is 9
+    expect(config?.mappings).toHaveLength(9);
     expect(config?.mappings[0]?.usage.provider).toBe("anthropic");
   });
 

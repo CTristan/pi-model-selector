@@ -1450,7 +1450,7 @@ describe("Usage Fetchers Branch Coverage", () => {
             }),
           }),
         );
-        const res = await fetchZaiUsage({ "z-ai": { access: "k" } });
+        const res = await fetchZaiUsage({}, { "z-ai": { access: "k" } });
         expect(res.windows[0]!.label).toBe("Tokens (10m)");
       });
 
@@ -1466,7 +1466,7 @@ describe("Usage Fetchers Branch Coverage", () => {
             }),
           }),
         );
-        const res = await fetchZaiUsage({ "z-ai": { access: "k" } });
+        const res = await fetchZaiUsage({}, { "z-ai": { access: "k" } });
         expect(res.windows).toHaveLength(0);
       });
 
@@ -1478,7 +1478,7 @@ describe("Usage Fetchers Branch Coverage", () => {
             json: async () => ({ success: false, msg: "failed" }),
           }),
         );
-        const res = await fetchZaiUsage({ "z-ai": { access: "k" } });
+        const res = await fetchZaiUsage({}, { "z-ai": { access: "k" } });
         expect(res.error).toBe("failed");
       });
     });

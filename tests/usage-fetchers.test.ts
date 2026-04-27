@@ -646,7 +646,7 @@ describe("Usage Fetchers", () => {
             }),
         }),
       );
-      const result = await fetchZaiUsage({ "z-ai": { access: "mock" } });
+      const result = await fetchZaiUsage({}, { "z-ai": { access: "mock" } });
       expect(result.windows).toHaveLength(4);
     });
 
@@ -672,7 +672,7 @@ describe("Usage Fetchers", () => {
         );
         vi.stubGlobal("fetch", fetchMock);
 
-        await fetchZaiUsage({ zai: { key: "zai-key" } });
+        await fetchZaiUsage({}, { zai: { key: "zai-key" } });
 
         expect(fetchMock).toHaveBeenCalledWith(
           expect.any(String),

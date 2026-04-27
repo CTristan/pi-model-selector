@@ -4,10 +4,10 @@ import type { SelectItem } from "@mariozechner/pi-tui";
 import {
   Container,
   DynamicBorder,
+  getSelectListTheme,
   SelectList,
   Spacer,
   Text,
-  getSelectListTheme,
 } from "./adapter.js";
 
 import type { PriorityRule } from "./types.js";
