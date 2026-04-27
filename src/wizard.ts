@@ -20,8 +20,8 @@ import {
   updateWidgetConfig,
   upsertMapping,
 } from "./config.js";
-
 import { hasProviderCredential, PROVIDER_LABELS } from "./credential-check.js";
+import { sortModelsForUsageProvider } from "./model-provider-affinity.js";
 
 import type {
   MappingEntry,
@@ -603,20 +603,20 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
           actionChoice === "Map to model" ||
           actionChoice === "Map by pattern"
         ) {
-          // Filter models to only show those from the same provider as the usage bucket
-          const providerModels = availableModels.filter(
-            (model) => model.provider === selectedCandidate.provider,
+          // Show recommended model providers first, but still allow mapping to
+          // any available Pi model provider/id combination.
+          const providerModels = sortModelsForUsageProvider(
+            availableModels,
+            selectedCandidate.provider,
           );
-
           if (providerModels.length === 0) {
             notify(
               ctx,
               "warning",
-              `No models found for provider ${selectedCandidate.provider}. Cannot map this bucket.`,
+              "No available models found. Cannot map this bucket.",
             );
             return;
           }
-
           const providerModelLabels = providerModels.map(
             (model) => `${model.provider}/${model.id}`,
           );
