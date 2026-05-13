@@ -17,7 +17,11 @@ import { runSelector, type SelectorReason } from "./src/selector.js";
 import type { LoadedConfig, UsageSnapshot } from "./src/types.js";
 import { notify, writeDebugLog } from "./src/types.js";
 import { fetchAllUsages } from "./src/usage-fetchers.js";
-import { renderUsageWidget, updateWidgetState } from "./src/widget.js";
+import {
+  getWidgetState,
+  renderUsageWidget,
+  updateWidgetState,
+} from "./src/widget.js";
 import { runMappingWizard } from "./src/wizard.js";
 
 // ============================================================================
@@ -111,7 +115,6 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
       writeDebugLog("Auto-selection disabled: --model CLI flag detected");
       // Ensure any existing widget reflects that auto-selection is disabled
       try {
-        const { getWidgetState } = await import("./src/widget.js");
         const state = getWidgetState();
         if (state) {
           updateWidgetState({ ...state, autoSelectionDisabled: true });
@@ -154,7 +157,6 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
         `Auto-selection paused: model explicitly selected (source: ${event.source})`,
       );
       // Update widget to reflect paused state
-      const { getWidgetState } = await import("./src/widget.js");
       const state = getWidgetState();
       if (state) {
         updateWidgetState({ ...state, autoSelectionDisabled: true });
@@ -294,7 +296,6 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
         autoSelectionDisabled = false;
         writeDebugLog("Auto-selection re-enabled via /model-select command");
         // Update widget to reflect resumed state
-        const { getWidgetState } = await import("./src/widget.js");
         const state = getWidgetState();
         if (state) {
           updateWidgetState({ ...state, autoSelectionDisabled: false });
@@ -388,7 +389,6 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
           preloadedUsages: usages,
         });
         // Explicitly refresh widget to show updated cooldown state
-        const { getWidgetState } = await import("./src/widget.js");
         const state = getWidgetState();
         if (state) {
           updateWidgetState({ ...state, config });
@@ -430,7 +430,6 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
             preloadedUsages: usages,
           });
           // Explicitly refresh widget to show updated cooldown state
-          const { getWidgetState } = await import("./src/widget.js");
           const state = getWidgetState();
           if (state) {
             updateWidgetState({ ...state, config });
@@ -442,7 +441,6 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
         // Still refresh widget to reflect current state
         const config = await loadConfig(ctx);
         if (config) {
-          const { getWidgetState } = await import("./src/widget.js");
           const state = getWidgetState();
           if (state) {
             updateWidgetState({ ...state, config });
@@ -469,7 +467,6 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
           "Auto model selection disabled for this session. Use Pi's built-in model selection to choose a model manually.",
         );
         // Refresh widget to show the disabled status
-        const { getWidgetState } = await import("./src/widget.js");
         const state = getWidgetState();
         if (state) {
           updateWidgetState({ ...state, autoSelectionDisabled: true });
@@ -482,7 +479,6 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
           "Auto model selection enabled for this session. The extension will now automatically select the best model.",
         );
         // Re-enable auto-selection and run it immediately
-        const { getWidgetState } = await import("./src/widget.js");
         const state = getWidgetState();
         if (state) {
           updateWidgetState({ ...state, autoSelectionDisabled: false });
