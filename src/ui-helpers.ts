@@ -4,7 +4,6 @@ import type { SelectItem } from "@mariozechner/pi-tui";
 import {
   Container,
   DynamicBorder,
-  getSelectListTheme,
   SelectList,
   Spacer,
   Text,
@@ -84,10 +83,26 @@ export async function selectWrapped(
     container.addChild(new Spacer(1));
 
     const items = options.map((o) => ({ value: o, label: o }));
+    // Build the select list theme from the callback's theme parameter instead of
+    // calling getSelectListTheme(), which captures the module-level theme singleton
+    // that may not be initialized in the extension's module context (e.g. when the
+    // host runtime mirrors the extension into a temp directory for compat).
+    const selectListTheme = {
+      selectedPrefix: (text: string) => theme.fg("accent", text),
+      selectedText: (text: string) => theme.fg("accent", text),
+      description: (text: string) => theme.fg("muted", text),
+      scrollInfo: (text: string) => theme.fg("muted", text),
+      noMatch: (text: string) => theme.fg("muted", text),
+      // OMP's SelectList requires symbols.cursor; legacy Pi's does not.
+      // Use a defensive check so both runtimes work.
+      symbols: {
+        cursor: "nav" in theme ? (theme as any).nav.cursor : ">",
+      },
+    };
     const selectList = new SelectList(
       items,
       Math.min(items.length, 15),
-      getSelectListTheme(),
+      selectListTheme as any,
     );
     selectList.onSelect = (item: SelectItem) => done(item.value);
     selectList.onCancel = () => done(undefined);

@@ -4,7 +4,6 @@ import type * as PiTui from "@mariozechner/pi-tui";
 export let Container: typeof PiTui.Container;
 export let DynamicBorder: typeof PiCodingAgent.DynamicBorder;
 export let truncateToWidth: typeof PiTui.truncateToWidth;
-export let getSelectListTheme: typeof PiCodingAgent.getSelectListTheme;
 export let SelectList: typeof PiTui.SelectList;
 export let Spacer: typeof PiTui.Spacer;
 export let Text: typeof PiTui.Text;
@@ -25,7 +24,7 @@ if (typeof process !== "undefined" && process.env.VITEST) {
   // Mock UI components — tests mock the UI layer anyway.
   debugLog("VITEST detected — using mock components");
   DynamicBorder = class {} as any;
-  getSelectListTheme = (() => ({})) as any;
+
   Container = class {
     addChild() {}
     render() {
@@ -65,7 +64,7 @@ if (typeof process !== "undefined" && process.env.VITEST) {
   debugLog(`detected runtime: ${isOmp ? "OMP" : "Pi"}`);
 
   DynamicBorder = agent.DynamicBorder;
-  getSelectListTheme = agent.getSelectListTheme;
+
   Container = tui.Container;
   truncateToWidth = tui.truncateToWidth;
   SelectList = tui.SelectList;
@@ -73,7 +72,6 @@ if (typeof process !== "undefined" && process.env.VITEST) {
   Text = tui.Text;
 
   debugLog(`DynamicBorder = ${agent.DynamicBorder ? "ok" : "MISSING"}`);
-  debugLog(`getSelectListTheme = ${typeof agent.getSelectListTheme}`);
   debugLog(`Container = ${tui.Container ? "ok" : "MISSING"}`);
   debugLog(`truncateToWidth = ${typeof tui.truncateToWidth}`);
   debugLog(`SelectList = ${tui.SelectList ? "ok" : "MISSING"}`);
