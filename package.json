@@ -32,13 +32,13 @@
     "@mariozechner/pi-coding-agent": "*"
   },
   "devDependencies": {
-    "@biomejs/biome": "2.4.12",
+    "@biomejs/biome": "2.4.15",
     "@mariozechner/pi-coding-agent": "0.67.68",
     "@types/luxon": "3.7.1",
-    "@types/node": "24.12.2",
-    "@vitest/coverage-v8": "4.1.4",
-    "typescript": "6.0.2",
-    "vitest": "4.1.4"
+    "@types/node": "24.12.3",
+    "@vitest/coverage-v8": "4.1.6",
+    "typescript": "6.0.3",
+    "vitest": "4.1.6"
   },
   "scripts": {
     "type-check": "tsc",
@@ -46,7 +46,7 @@
     "fix": "biome check --write .",
     "test": "vitest run --coverage",
     "test:watch": "vitest",
-    "ci": "./scripts/ci.sh",
+    "ci": "npm run type-check && npm run check && npm run test",
     "setup-hooks": "./scripts/setup-hooks.sh",
     "prepare": "node scripts/prepare.js"
   },
