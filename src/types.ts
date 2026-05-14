@@ -60,6 +60,7 @@ export interface ModelSelectorConfig {
   autoRun?: boolean;
   enableModelLocking?: boolean;
   fallback?: FallbackConfig;
+  preserveDefaultModel?: boolean;
 }
 
 export interface WidgetConfig {
@@ -93,6 +94,7 @@ export interface LoadedConfig {
   widget: Required<WidgetConfig>;
   autoRun: boolean;
   enableModelLocking: boolean;
+  preserveDefaultModel?: boolean;
   disabledProviders: ProviderName[];
   providerSettings?: ProviderSettings;
   debugLog?: {

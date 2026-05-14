@@ -10,6 +10,21 @@ export let Text: typeof PiTui.Text;
 
 export let isOmp = false;
 
+export interface OmpSettingsLike {
+  getModelRole(role: string): string | undefined;
+  setModelRole(role: string, modelId: string): void;
+  get?(path: "modelRoles"): unknown;
+  set?(path: "modelRoles", value: Record<string, unknown>): void;
+  flush?(): Promise<void> | void;
+}
+
+interface CapturedDefaultModelRole {
+  hadDefaultRole: boolean;
+  value: unknown;
+}
+
+let ompSettings: OmpSettingsLike | undefined;
+
 const DEBUG =
   typeof process !== "undefined" && process.env.MODEL_SELECTOR_DEBUG === "1";
 
@@ -51,6 +66,7 @@ if (typeof process !== "undefined" && process.env.VITEST) {
     const ompTui = "@oh-my-pi/pi-tui";
     tui = (await import(ompTui)) as any;
     isOmp = true;
+    ompSettings = agent.settings as OmpSettingsLike | undefined;
     debugLog("OMP packages resolved successfully");
   } catch (e: any) {
     debugLog(`OMP probe failed: ${e.message}`);
@@ -79,3 +95,86 @@ if (typeof process !== "undefined" && process.env.VITEST) {
 }
 
 export const EXTENSION_DIR = isOmp ? ".omp" : ".pi";
+
+function readModelRoles(settings: OmpSettingsLike): Record<string, unknown> {
+  if (typeof settings.get !== "function") {
+    const fallback = settings.getModelRole("default");
+    return fallback === undefined ? {} : { default: fallback };
+  }
+  const roles = settings.get("modelRoles");
+  return roles && typeof roles === "object" && !Array.isArray(roles)
+    ? { ...(roles as Record<string, unknown>) }
+    : {};
+}
+
+function captureDefaultModelRole(
+  settings: OmpSettingsLike,
+): CapturedDefaultModelRole {
+  const roles = readModelRoles(settings);
+  if (Object.hasOwn(roles, "default")) {
+    return { hadDefaultRole: true, value: roles.default };
+  }
+  return { hadDefaultRole: false, value: undefined };
+}
+
+async function restoreDefaultModelRole(
+  settings: OmpSettingsLike,
+  captured: CapturedDefaultModelRole,
+): Promise<void> {
+  if (captured.hadDefaultRole && typeof captured.value === "string") {
+    settings.setModelRole("default", captured.value);
+  } else {
+    if (typeof settings.set !== "function") {
+      throw new Error(
+        "OMP settings API cannot restore an absent default model role",
+      );
+    }
+    const roles = readModelRoles(settings);
+    if (captured.hadDefaultRole) {
+      roles.default = captured.value;
+    } else {
+      delete roles.default;
+    }
+    settings.set("modelRoles", roles);
+  }
+
+  await settings.flush?.();
+}
+
+export async function withPreservedOmpDefaultModelRole<T>(
+  preserveDefaultModel: boolean | undefined,
+  action: () => Promise<T>,
+  settings: OmpSettingsLike | undefined = ompSettings,
+): Promise<T> {
+  if (preserveDefaultModel === false || !settings) {
+    return await action();
+  }
+
+  const captured = captureDefaultModelRole(settings);
+  let actionError: unknown, result: T | undefined;
+
+  try {
+    result = await action();
+  } catch (error) {
+    actionError = error;
+  }
+
+  try {
+    await restoreDefaultModelRole(settings, captured);
+  } catch (error) {
+    if (actionError === undefined) {
+      throw error;
+    }
+    debugLog(
+      `failed to restore OMP default model role after failed setModel: ${String(
+        error,
+      )}`,
+    );
+  }
+
+  if (actionError !== undefined) {
+    throw actionError;
+  }
+
+  return result as T;
+}

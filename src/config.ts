@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { EXTENSION_DIR } from "./adapter.js";
+import { EXTENSION_DIR, isOmp } from "./adapter.js";
 
 import type {
   FallbackConfig,
@@ -116,6 +116,7 @@ function asConfigShape(raw: Record<string, unknown>): {
   debugLog?: unknown;
   disabledProviders?: unknown;
   providerSettings?: unknown;
+  preserveDefaultModel?: unknown;
 } {
   const shape: {
     mappings?: unknown[];
@@ -127,6 +128,7 @@ function asConfigShape(raw: Record<string, unknown>): {
     debugLog?: unknown;
     disabledProviders?: unknown;
     providerSettings?: unknown;
+    preserveDefaultModel?: unknown;
   } = {};
 
   if (Array.isArray(raw.mappings)) {
@@ -143,6 +145,9 @@ function asConfigShape(raw: Record<string, unknown>): {
   }
   if (Object.hasOwn(raw, "enableModelLocking")) {
     shape.enableModelLocking = raw.enableModelLocking;
+  }
+  if (Object.hasOwn(raw, "preserveDefaultModel")) {
+    shape.preserveDefaultModel = raw.preserveDefaultModel;
   }
   if (Object.hasOwn(raw, "fallback")) {
     shape.fallback = raw.fallback;
@@ -296,6 +301,23 @@ function normalizeEnableModelLocking(
     return undefined;
   }
   return raw.enableModelLocking;
+}
+
+function normalizePreserveDefaultModel(
+  raw: ReturnType<typeof asConfigShape>,
+  sourceLabel: string,
+  errors: string[],
+): boolean | undefined {
+  if (!Object.hasOwn(raw, "preserveDefaultModel")) {
+    return undefined;
+  }
+  if (typeof raw.preserveDefaultModel !== "boolean") {
+    errors.push(
+      `[${sourceLabel}] preserveDefaultModel must be a boolean if present`,
+    );
+    return undefined;
+  }
+  return raw.preserveDefaultModel;
 }
 
 function normalizeFallback(
@@ -580,6 +602,16 @@ export async function loadConfig(
       projectPath,
       errors,
     ),
+    globalPreserveDefaultModel = normalizePreserveDefaultModel(
+      globalConfig,
+      globalConfigPath,
+      errors,
+    ),
+    projectPreserveDefaultModel = normalizePreserveDefaultModel(
+      projectConfig,
+      projectPath,
+      errors,
+    ),
     globalFallback = normalizeFallback(globalConfig, globalConfigPath, errors),
     projectFallback = normalizeFallback(projectConfig, projectPath, errors),
     globalDebugLog = normalizeDebugLog(
@@ -641,6 +673,8 @@ export async function loadConfig(
     autoRun: projectAutoRun ?? globalAutoRun ?? false,
     enableModelLocking:
       projectEnableModelLocking ?? globalEnableModelLocking ?? true,
+    preserveDefaultModel:
+      projectPreserveDefaultModel ?? globalPreserveDefaultModel ?? isOmp,
     disabledProviders: [...new Set([...globalDisabled, ...projectDisabled])],
     providerSettings,
     ...(mergedFallback !== undefined ? { fallback: mergedFallback } : {}),
