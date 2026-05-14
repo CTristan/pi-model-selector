@@ -220,7 +220,7 @@ describe("Explicit Model Selection", () => {
       const sessionStart = events.session_start;
       if (!sessionStart) throw new Error("Hook not found: session_start");
 
-      await sessionStart({}, ctx);
+      await sessionStart({ reason: "startup" }, ctx);
 
       // Should NOT have skipped selection due to --model
       expect(capturedDebugLogs).not.toContainEqual(
@@ -357,7 +357,7 @@ describe("Explicit Model Selection", () => {
       // Trigger session_start which will call runSelector, which will call setModel
       const sessionStart = events.session_start;
       if (!sessionStart) throw new Error("Hook not found: session_start");
-      await sessionStart({}, ctx);
+      await sessionStart({ reason: "startup" }, ctx);
 
       // The self-initiated setModel call should NOT trigger auto-selection pause.
       // The key check is that after runSelector completes, auto-selection is NOT paused
