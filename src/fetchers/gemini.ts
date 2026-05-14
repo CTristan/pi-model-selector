@@ -13,36 +13,45 @@ import {
 } from "./common.js";
 
 /**
- * Compute the next midnight in the America/Los_Angeles (Pacific) timezone.
+ * Compute the next midnight in the specified timezone (default: America/Los_Angeles).
  * Gemini API quotas reset daily at midnight Pacific Time.
  */
-export function nextMidnightPacific(now: Date = new Date()): Date {
-  // Interpret "now" in the Pacific time zone
-  const pacificNow = DateTime.fromJSDate(now, {
-    zone: "America/Los_Angeles",
+export function nextMidnight(
+  now: Date = new Date(),
+  timezone: string = "America/Los_Angeles",
+): Date {
+  // If "local" is requested, return the next local midnight
+  if (timezone.toLowerCase() === "local") {
+    const localMidnight = new Date(now);
+    localMidnight.setHours(24, 0, 0, 0);
+    return localMidnight;
+  }
+
+  // Interpret "now" in the specified time zone
+  const zonedNow = DateTime.fromJSDate(now, {
+    zone: timezone,
   });
 
-  // If the Pacific time zone isn't available (e.g., missing ICU data),
+  // If the time zone isn't available (e.g., missing ICU data or invalid ID),
   // fall back to the next local midnight using native Date APIs.
-  if (!pacificNow.isValid) {
+  if (!zonedNow.isValid) {
     const localMidnight = new Date(now);
     // Set to the start of the next local day
     localMidnight.setHours(24, 0, 0, 0);
     return localMidnight;
   }
 
-  // Next midnight Pacific = start of the next calendar day in Pacific
-  const nextPacificMidnight = pacificNow.plus({ days: 1 }).startOf("day");
+  // Next midnight in zone = start of the next calendar day in zone
+  const nextZonedMidnight = zonedNow.plus({ days: 1 }).startOf("day");
 
   // Convert back to a UTC Date; luxon handles DST transitions correctly.
-  // If for some reason this DateTime is invalid, also fall back to next local midnight.
-  if (!nextPacificMidnight.isValid) {
+  if (!nextZonedMidnight.isValid) {
     const localMidnight = new Date(now);
     localMidnight.setHours(24, 0, 0, 0);
     return localMidnight;
   }
 
-  return nextPacificMidnight.toJSDate();
+  return nextZonedMidnight.toJSDate();
 }
 
 interface GeminiTokenInfo {
@@ -58,6 +67,7 @@ interface GeminiTokenInfo {
 export async function fetchGeminiUsage(
   modelRegistry: unknown,
   piAuth: Record<string, unknown> = {},
+  settings?: { resetTimezone?: string },
 ): Promise<UsageSnapshot[]> {
   try {
     writeDebugLog("fetchGeminiUsage: starting");
@@ -452,16 +462,23 @@ export async function fetchGeminiUsage(
                 buckets?: Array<{
                   modelId?: string;
                   remainingFraction?: number;
+                  resetTime?: string;
                 }>;
               };
-              const families: Record<string, number> = {};
+              const families: Record<
+                string,
+                { frac: number; resetTime?: string | undefined }
+              > = {};
 
               for (const bucket of dataTyped.buckets || []) {
                 const modelId = bucket.modelId || "unknown",
-                  frac = bucket.remainingFraction ?? 1;
+                  frac = bucket.remainingFraction ?? 1,
+                  resetTime = bucket.resetTime;
 
                 let family = "Other";
-                if (modelId.toLowerCase().includes("pro")) family = "Pro";
+                if (modelId.toLowerCase().includes("flash-lite"))
+                  family = "Flash Lite";
+                else if (modelId.toLowerCase().includes("pro")) family = "Pro";
                 else if (modelId.toLowerCase().includes("flash")) {
                   family = "Flash";
                 } else {
@@ -474,19 +491,30 @@ export async function fetchGeminiUsage(
 
                 if (!family) family = "Other";
 
-                const existingFamily = families[family];
-                if (existingFamily === undefined || frac < existingFamily) {
-                  families[family] = frac;
+                const existing = families[family];
+                if (existing === undefined || frac < existing.frac) {
+                  families[family] = { frac, resetTime };
                 }
               }
 
               const windows: RateWindow[] = [];
-              const resetTime = nextMidnightPacific();
-              const resetDesc = formatReset(resetTime);
-              for (const [label, frac] of Object.entries(families)) {
+              const defaultResetTime = nextMidnight(
+                new Date(),
+                settings?.resetTimezone,
+              );
+              const defaultResetDesc = formatReset(defaultResetTime);
+
+              for (const [label, info] of Object.entries(families)) {
+                const resetTime = info.resetTime
+                  ? new Date(info.resetTime)
+                  : defaultResetTime;
+                const resetDesc = info.resetTime
+                  ? formatReset(resetTime)
+                  : defaultResetDesc;
+
                 windows.push({
                   label,
-                  usedPercent: (1 - frac) * 100,
+                  usedPercent: (1 - info.frac) * 100,
                   resetsAt: resetTime,
                   resetDescription: resetDesc,
                 });

@@ -66,7 +66,8 @@ export async function fetchAllUsages(
       },
       {
         provider: "gemini",
-        fetch: () => fetchGeminiUsage(modelRegistry, piAuth),
+        fetch: () =>
+          fetchGeminiUsage(modelRegistry, piAuth, providerSettings?.gemini),
       },
       {
         provider: "codex",

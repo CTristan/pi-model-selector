@@ -116,6 +116,18 @@ export async function selectWrapped(
 export const priorityOptions: Array<{ label: string; value: PriorityRule[] }> =
   [
     {
+      label: "ordered → remainingPercent → earliestReset",
+      value: ["ordered", "remainingPercent", "earliestReset"],
+    },
+    {
+      label: "ordered → fullAvailability → earliestReset",
+      value: ["ordered", "fullAvailability", "earliestReset"],
+    },
+    {
+      label: "remainingPercent → ordered → earliestReset",
+      value: ["remainingPercent", "ordered", "earliestReset"],
+    },
+    {
       label: "fullAvailability → remainingPercent → earliestReset",
       value: ["fullAvailability", "remainingPercent", "earliestReset"],
     },

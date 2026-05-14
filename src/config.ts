@@ -224,6 +224,7 @@ function normalizePriority(
       "fullAvailability",
       "remainingPercent",
       "earliestReset",
+      "ordered",
     ]),
     priority: PriorityRule[] = [];
 
@@ -236,10 +237,12 @@ function normalizePriority(
   }
 
   const hasTieBreaker =
-    priority.includes("remainingPercent") || priority.includes("earliestReset");
+    priority.includes("remainingPercent") ||
+    priority.includes("earliestReset") ||
+    priority.includes("ordered");
   if (!hasTieBreaker) {
     errors.push(
-      `[${sourceLabel}] priority must include at least one of remainingPercent or earliestReset`,
+      `[${sourceLabel}] priority must include at least one of remainingPercent, earliestReset or ordered`,
     );
     return undefined;
   }

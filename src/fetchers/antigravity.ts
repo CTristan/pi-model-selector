@@ -364,7 +364,8 @@ export async function fetchAntigravityUsage(
       windows: RateWindow[] = [],
       claudeOrGptOss = getQuotaInfo([
         "claude-sonnet-4-5",
-        "claude-sonnet-4-5-thinking",
+        "claude-sonnet-4-6",
+        "claude-opus-4-5-thinking",
         "claude-opus-4-6-thinking",
         "gpt-oss-120b-medium",
       ]);
@@ -383,8 +384,8 @@ export async function fetchAntigravityUsage(
     }
 
     const gemini3Pro = getQuotaInfo([
-      "gemini-3-pro-high",
-      "gemini-3-pro-low",
+      "gemini-3.1-pro-high",
+      "gemini-3.1-pro-low",
       "gemini-3-pro-preview",
     ]);
     if (gemini3Pro) {

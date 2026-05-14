@@ -1,8 +1,9 @@
-import type {
-  MappingEntry,
-  PriorityRule,
-  UsageCandidate,
-  UsageSnapshot,
+import {
+  type MappingEntry,
+  mappingKey,
+  type PriorityRule,
+  type UsageCandidate,
+  type UsageSnapshot,
 } from "./types.js";
 import { formatReset } from "./usage-fetchers.js";
 
@@ -81,6 +82,19 @@ export function compareCandidates(
       if (diff !== 0) return { diff, rule };
       continue;
     }
+    if (rule === "ordered") {
+      const aMapping = findModelMapping(a, mappings),
+        bMapping = findModelMapping(b, mappings);
+      if (aMapping && bMapping) {
+        const aKey = mappingKey(aMapping),
+          bKey = mappingKey(bMapping);
+        const aIndex = mappings.findIndex((m) => mappingKey(m) === aKey),
+          bIndex = mappings.findIndex((m) => mappingKey(m) === bKey);
+        const diff = bIndex - aIndex; // Lower index is higher priority
+        if (diff !== 0) return { diff, rule };
+      }
+      continue;
+    }
     if (rule === "earliestReset") {
       const aReset = a.resetsAt?.getTime(),
         bReset = b.resetsAt?.getTime();
@@ -129,6 +143,10 @@ export function selectionReason(
 
   if (result.rule === "isMapped") {
     return "has model mapping";
+  }
+
+  if (result.rule === "ordered") {
+    return "preferred order in configuration";
   }
 
   if (result.rule === "fullAvailability") {

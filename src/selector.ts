@@ -794,7 +794,7 @@ async function finalizeSelection(
   reason: SelectorReason,
   selfInitiatedModelChange?: { current: boolean },
 ): Promise<boolean> {
-  if (!mapping || !mapping.model) {
+  if (!mapping?.model) {
     const usage = { provider: best.provider } as {
       provider: string;
       account?: string;

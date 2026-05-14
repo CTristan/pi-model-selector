@@ -19,6 +19,9 @@
   "providerSettings": {
     "minimax": {
       "groupId": "1234567890"
+    },
+    "gemini": {
+      "resetTimezone": "local"
     }
   },
   "mappings": [

@@ -230,6 +230,40 @@ describe("Candidate Logic", () => {
     expect(mapping?.model?.id).toBe("claude-3-5-sonnet-work");
   });
 
+  it("should respect 'ordered' priority rule", () => {
+    const a: UsageCandidate = {
+      provider: "p1",
+      windowLabel: "w1",
+      remainingPercent: 50,
+    } as UsageCandidate;
+    const b: UsageCandidate = {
+      provider: "p1",
+      windowLabel: "w2",
+      remainingPercent: 100,
+    } as UsageCandidate;
+
+    const mappings: MappingEntry[] = [
+      {
+        usage: { provider: "p1", window: "w1" },
+        model: { provider: "m1", id: "i1" },
+      },
+      {
+        usage: { provider: "p1", window: "w2" },
+        model: { provider: "m1", id: "i2" },
+      },
+    ];
+
+    // With remainingPercent first, b should win
+    expect(
+      compareCandidates(a, b, ["remainingPercent"], mappings).diff,
+    ).toBeLessThan(0);
+
+    // With ordered first, a should win because it appears first in mappings
+    const result = compareCandidates(a, b, ["ordered"], mappings);
+    expect(result.rule).toBe("ordered");
+    expect(result.diff).toBeGreaterThan(0);
+  });
+
   it("should handle mapping logic branches and invalid regex", () => {
     const candidate = {
       provider: "p1",

@@ -101,3 +101,24 @@ Example `model-selector.json`:
 ```
 
 In this example, the Copilot Chat mapping has a reserve of 20%. This means the model selector will only use that model when more than 20% quota remains, preserving at least 20% for other purposes.
+
+### Provider Settings
+
+Some providers support additional settings:
+
+#### Gemini
+
+- `resetTimezone`: The fallback timezone used to calculate daily reset times if the API doesn't provide them. 
+  - `"local"`: Uses your machine's local time.
+  - IANA Timezone ID: e.g., `"America/New_York"`, `"Europe/London"`.
+  - Default: `"America/Los_Angeles"`.
+
+```json
+{
+  "providerSettings": {
+    "gemini": {
+      "resetTimezone": "local"
+    }
+  }
+}
+```

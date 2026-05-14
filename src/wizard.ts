@@ -427,11 +427,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
                 const normalizedEntry = getRawMappings({
                   mappings: [entry],
                 })[0];
-                if (
-                  !normalizedEntry ||
-                  !normalizedEntry.model ||
-                  normalizedEntry.ignore
-                ) {
+                if (!normalizedEntry?.model || normalizedEntry.ignore) {
                   continue;
                 }
                 if (mappingKey(normalizedEntry) === targetKey) {
@@ -441,11 +437,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
               }
             }
 
-            if (
-              !normalizedMatch ||
-              !normalizedMatch.model ||
-              !rawMappingToUpdate
-            ) {
+            if (!normalizedMatch?.model || !rawMappingToUpdate) {
               notify(
                 ctx,
                 "warning",
@@ -604,17 +596,15 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
           actionChoice === "Map by pattern"
         ) {
           // Filter models to only show those from the same provider as the usage bucket
-          const providerModels = availableModels.filter(
-            (model) => model.provider === selectedCandidate.provider,
+          let providerModels = availableModels.filter(
+            (model) =>
+              model.provider === selectedCandidate.provider ||
+              model.provider.includes(selectedCandidate.provider) ||
+              selectedCandidate.provider.includes(model.provider),
           );
 
           if (providerModels.length === 0) {
-            notify(
-              ctx,
-              "warning",
-              `No models found for provider ${selectedCandidate.provider}. Cannot map this bucket.`,
-            );
-            return;
+            providerModels = availableModels;
           }
 
           const providerModelLabels = providerModels.map(
