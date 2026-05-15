@@ -23,6 +23,9 @@ fi
 echo "Running type check..."
 npm run type-check
 
+echo "Running TypeDoc..."
+npx typedoc --emit none --treatWarningsAsErrors
+
 if [ "$CHECK_ONLY" = "true" ]; then
   echo "Running linting and formatting (check only)..."
   npm run check

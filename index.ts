@@ -516,4 +516,8 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
 }
 
 // Re-export cooldown functions for backward compatibility with tests
-export { loadCooldownState, saveCooldownState } from "./src/cooldown.js";
+export {
+  type CooldownState,
+  loadCooldownState,
+  saveCooldownState,
+} from "./src/cooldown.js";
