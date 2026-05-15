@@ -1,3 +1,5 @@
+import { resolveMinimaxApiKey } from "./fetchers/minimax.js";
+import { resolveZaiApiKey } from "./fetchers/zai.js";
 import type { ProviderName } from "./types.js";
 
 const PROVIDER_LABELS: Record<ProviderName, string> = {
@@ -132,15 +134,12 @@ export async function hasProviderCredential(
   }
 
   // Check piAuth for applicable providers
-  if (provider === "zai") {
-    // Need to import resolveZaiApiKey
-    const { resolveZaiApiKey } = await import("./fetchers/zai.js");
-    if (resolveZaiApiKey(piAuth)) return true;
+  if (provider === "zai" && resolveZaiApiKey(piAuth)) {
+    return true;
   }
 
-  if (provider === "minimax") {
-    const { resolveMinimaxApiKey } = await import("./fetchers/minimax.js");
-    if (resolveMinimaxApiKey(piAuth)) return true;
+  if (provider === "minimax" && resolveMinimaxApiKey(piAuth)) {
+    return true;
   }
 
   if (provider === "codex") {

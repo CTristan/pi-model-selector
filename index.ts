@@ -5,6 +5,7 @@ import type {
 
 import {
   buildCandidates,
+  candidateKey,
   combineCandidates,
   findIgnoreMapping,
   sortCandidates,
@@ -12,7 +13,7 @@ import {
 import { loadConfig } from "./src/config.js";
 import { CooldownManager } from "./src/cooldown.js";
 
-import { createModelLockCoordinator } from "./src/model-locks.js";
+import { createModelLockCoordinator, modelLockKey } from "./src/model-locks.js";
 import { runSelector, type SelectorReason } from "./src/selector.js";
 import type { LoadedConfig, UsageSnapshot } from "./src/types.js";
 import { notify, writeDebugLog } from "./src/types.js";
@@ -201,7 +202,6 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
       // If we have an active lock that matches the current model, keep it.
       // Otherwise, acquire a lock for the current model to maintain coordination.
       if (ctx.model) {
-        const { modelLockKey } = await import("./src/model-locks.js");
         const currentModelKey = modelLockKey(ctx.model.provider, ctx.model.id);
         if (activeModelLockKey.current !== currentModelKey) {
           // Try to acquire the new lock first, then release the old lock.
@@ -326,8 +326,6 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
         config.disabledProviders,
         config.providerSettings,
       );
-
-      const { candidateKey } = await import("./src/candidates.js");
 
       let lastSelectedCandidateKey = cooldownManager.getLastSelectedKey();
 
