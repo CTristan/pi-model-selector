@@ -427,11 +427,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
                 const normalizedEntry = getRawMappings({
                   mappings: [entry],
                 })[0];
-                if (
-                  !normalizedEntry ||
-                  !normalizedEntry.model ||
-                  normalizedEntry.ignore
-                ) {
+                if (!normalizedEntry?.model || normalizedEntry.ignore) {
                   continue;
                 }
                 if (mappingKey(normalizedEntry) === targetKey) {
@@ -441,11 +437,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
               }
             }
 
-            if (
-              !normalizedMatch ||
-              !normalizedMatch.model ||
-              !rawMappingToUpdate
-            ) {
+            if (!normalizedMatch?.model || !rawMappingToUpdate) {
               notify(
                 ctx,
                 "warning",

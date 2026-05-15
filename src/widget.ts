@@ -126,7 +126,7 @@ export function renderUsageWidget(ctx: ExtensionContext): void {
   if (typeof ui?.setWidget !== "function") return;
 
   const state = currentWidgetState;
-  if (!state || !state.config.widget.enabled) {
+  if (!state?.config.widget.enabled) {
     // Clear widget if disabled or no state
     ui.setWidget("model-selector", undefined);
     return;
