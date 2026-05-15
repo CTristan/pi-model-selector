@@ -51,31 +51,19 @@ if (typeof process !== "undefined" && process.env.VITEST) {
   Spacer = class {} as any;
   Text = class {} as any;
 } else {
-  // Detection: try importing @oh-my-pi first.
-  // Bun's createRequire.resolve does NOT walk far enough up the directory tree
-  // to find globally-installed packages, so we use dynamic import() instead,
-  // which uses Bun's native ESM resolver that handles this correctly.
-  let agent: any;
-  let tui: any;
+  // Always import the legacy Pi package names. OMP's extension loader rewrites
+  // these literal specifiers to @oh-my-pi while mirroring the extension; probing
+  // @oh-my-pi directly re-enters OMP's SDK import during extension resolution.
+  debugLog("loading Pi compatibility packages...");
+  const agent = (await import(
+    "@mariozechner/pi-coding-agent"
+  )) as typeof import("@mariozechner/pi-coding-agent") & {
+    settings?: OmpSettingsLike;
+  };
+  const tui = await import("@mariozechner/pi-tui");
 
-  try {
-    debugLog("probing @oh-my-pi/pi-coding-agent...");
-    const ompAgent = "@oh-my-pi/pi-coding-agent";
-    agent = (await import(ompAgent)) as any;
-    debugLog("probing @oh-my-pi/pi-tui...");
-    const ompTui = "@oh-my-pi/pi-tui";
-    tui = (await import(ompTui)) as any;
-    isOmp = true;
-    ompSettings = agent.settings as OmpSettingsLike | undefined;
-    debugLog("OMP packages resolved successfully");
-  } catch (e: any) {
-    debugLog(`OMP probe failed: ${e.message}`);
-    debugLog("falling back to @mariozechner packages");
-    const piAgent = "@mariozechner/pi-coding-agent";
-    agent = await import(piAgent);
-    const piTui = "@mariozechner/pi-tui";
-    tui = await import(piTui);
-  }
+  ompSettings = agent.settings as OmpSettingsLike | undefined;
+  isOmp = ompSettings !== undefined;
 
   debugLog(`detected runtime: ${isOmp ? "OMP" : "Pi"}`);
 
