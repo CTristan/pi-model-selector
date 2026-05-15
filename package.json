@@ -29,7 +29,7 @@
     ]
   },
   "peerDependencies": {
-    "@mariozechner/pi-coding-agent": "*"
+    "@mariozechner/pi-coding-agent": "^0.67.68"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.15",
@@ -46,7 +46,7 @@
     "fix": "biome check --write .",
     "test": "vitest run --coverage",
     "test:watch": "vitest",
-    "ci": "npm run type-check && npm run check && npm run test",
+    "ci": "./scripts/ci.sh",
     "setup-hooks": "./scripts/setup-hooks.sh",
     "prepare": "node scripts/prepare.js"
   },

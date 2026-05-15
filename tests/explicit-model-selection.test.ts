@@ -227,6 +227,45 @@ describe("Explicit Model Selection", () => {
         expect.stringContaining("--model CLI flag detected"),
       );
     });
+
+    it("does not disable auto-selection on session_start with reason='resume' even if --model flag is present", async () => {
+      // Simulate --model CLI flag
+      Object.defineProperty(process, "argv", {
+        value: ["node", "pi", "--model", "claude-sonnet-4-5"],
+        writable: true,
+      });
+
+      const { fetchAllUsages } = await import("../src/usage-fetchers.js");
+      vi.mocked(fetchAllUsages).mockResolvedValue([]);
+
+      const { loadConfig } = await import("../src/config.js");
+      vi.mocked(loadConfig).mockResolvedValue({
+        mappings: [],
+        priority: ["remainingPercent"],
+        widget: { enabled: false, placement: "belowEditor", showCount: 3 },
+        autoRun: true,
+        enableModelLocking: false,
+        disabledProviders: [],
+        providerSettings: {},
+        sources: { globalPath: "", projectPath: "" },
+        raw: { global: {}, project: {} },
+      });
+
+      modelSelectorExtension(pi);
+      const sessionStart = events.session_start;
+      if (!sessionStart) throw new Error("Hook not found: session_start");
+
+      // Trigger session_start with reason: "resume"
+      await sessionStart({ reason: "resume" }, ctx);
+
+      // Should not have disabled auto-selection, should see re-enabled log instead
+      expect(capturedDebugLogs).not.toContainEqual(
+        expect.stringContaining("--model CLI flag detected"),
+      );
+      expect(capturedDebugLogs).toContainEqual(
+        expect.stringContaining("Auto-selection re-enabled on session switch"),
+      );
+    });
   });
 
   describe("model_select event handling", () => {
@@ -499,6 +538,15 @@ describe("Explicit Model Selection", () => {
       await sessionStartHandler({ reason: "new" }, ctx);
 
       // Should have re-enabled auto-selection
+      expect(capturedDebugLogs).toContainEqual(
+        expect.stringContaining("Auto-selection re-enabled on session switch"),
+      );
+
+      // Clear debug logs again and test with 'resume' reason
+      capturedDebugLogs.length = 0;
+      await sessionStartHandler({ reason: "resume" }, ctx);
+
+      // Should have re-enabled auto-selection again
       expect(capturedDebugLogs).toContainEqual(
         expect.stringContaining("Auto-selection re-enabled on session switch"),
       );
