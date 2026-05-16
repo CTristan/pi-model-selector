@@ -91,6 +91,7 @@ export async function selectWrapped(
     // calling getSelectListTheme(), which captures the module-level theme singleton
     // that may not be initialized in the extension's module context (e.g. when the
     // host runtime mirrors the extension into a temp directory for compat).
+    const nav = "nav" in theme ? theme.nav : undefined;
     const selectListTheme = {
       selectedPrefix: (text: string) => theme.fg("accent", text),
       selectedText: (text: string) => theme.fg("accent", text),
@@ -101,8 +102,8 @@ export async function selectWrapped(
       // Use a defensive check so both runtimes work.
       symbols: {
         cursor:
-          "nav" in theme
-            ? (theme as unknown as { nav: { cursor: string } }).nav.cursor
+          nav && typeof nav === "object" && "cursor" in nav
+            ? (nav as { cursor: string }).cursor
             : ">",
       },
     };

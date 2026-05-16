@@ -762,7 +762,7 @@ describe("Usage Fetchers Branch Coverage", () => {
       expect(result).toHaveLength(1);
     });
 
-    it("should skip .codex file credential when account already covered by piAuth", async () => {
+    it("should fetch distinct .codex and piAuth credentials then deduplicate by account", async () => {
       vi.mocked(fs.promises.stat).mockResolvedValue({
         isDirectory: () => true,
       } as any);
@@ -806,7 +806,7 @@ describe("Usage Fetchers Branch Coverage", () => {
       expect(result[0]!.error).toBeUndefined();
     });
 
-    it("should skip duplicate Codex account credentials before fetching usage", async () => {
+    it("should fetch all distinct Codex tokens then deduplicate by account", async () => {
       vi.mocked(fs.promises.stat).mockResolvedValue({
         isDirectory: () => true,
       } as any);
