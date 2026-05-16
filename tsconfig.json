@@ -21,7 +21,19 @@
   },
   "include": ["index.ts", "src/**/*.ts", "tests/**/*.ts", "vitest.config.ts"],
   "typedocOptions": {
+    "entryPoints": ["index.ts", "src/**/*.ts"],
+    "entryPointStrategy": "expand",
     "plugin": ["typedoc-plugin-coverage"],
+    "requiredToBeDocumented": [
+      "Enum",
+      "EnumMember",
+      "Variable",
+      "Function",
+      "Class",
+      "Interface",
+      "Accessor",
+      "TypeAlias"
+    ],
     "treatWarningsAsErrors": true
   }
 }

@@ -36,18 +36,17 @@ const OMP_PROVIDER_MAP: Record<string, string> = {
 // ============================================================================
 
 /**
- * Structural types for OMP UsageReport data (typed inline to avoid hard
- * dependency on @oh-my-pi/pi-ai). These match the interfaces defined in
- * pi-ai/src/usage.ts and the provider implementations.
+ * Minimal OMP usage window shape consumed by this extension.
  */
-interface OmpUsageWindow {
+export interface OmpUsageWindow {
   id?: string;
   label?: string;
   durationMs?: number;
   resetsAt?: number;
 }
 
-interface OmpUsageAmount {
+/** Numeric OMP quota values for one usage limit. */
+export interface OmpUsageAmount {
   used?: number;
   limit?: number;
   remaining?: number;
@@ -56,7 +55,8 @@ interface OmpUsageAmount {
   unit?: string;
 }
 
-interface OmpUsageScope {
+/** OMP provider/account/model scope metadata for one usage limit. */
+export interface OmpUsageScope {
   provider?: string;
   accountId?: string;
   tier?: string;
@@ -65,7 +65,8 @@ interface OmpUsageScope {
   shared?: boolean;
 }
 
-interface OmpUsageLimit {
+/** Single OMP quota limit with its scope, window, and amount. */
+export interface OmpUsageLimit {
   id: string;
   label: string;
   scope?: OmpUsageScope;
@@ -74,7 +75,8 @@ interface OmpUsageLimit {
   notes?: string[];
 }
 
-interface OmpUsageReport {
+/** OMP usage report returned by provider auth storage. */
+export interface OmpUsageReport {
   provider: string;
   fetchedAt: number;
   limits: OmpUsageLimit[];

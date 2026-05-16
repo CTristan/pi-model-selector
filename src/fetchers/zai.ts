@@ -1,6 +1,11 @@
 import type { RateWindow, UsageSnapshot } from "../types.js";
 import { fetchWithTimeout, formatReset, safeDate, URLS } from "./common.js";
 
+/**
+ * Resolves the z.ai API key from environment variables or configuration.
+ * @param piAuth The user's Pi authentication configuration.
+ * @returns The resolved API key or undefined.
+ */
 export function resolveZaiApiKey(
   piAuth: Record<string, unknown>,
 ): string | undefined {
@@ -60,6 +65,12 @@ async function resolveZaiApiKeyWithRegistry(
   return resolveZaiApiKey(piAuth);
 }
 
+/**
+ * Fetches usage snapshots for z.ai by calling the quota API.
+ * @param modelRegistry The registry containing authentication storage.
+ * @param piAuth The user's Pi authentication configuration.
+ * @returns A promise resolving to the usage snapshot.
+ */
 export async function fetchZaiUsage(
   modelRegistry: unknown = {},
   piAuth: Record<string, unknown> = {},

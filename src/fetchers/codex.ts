@@ -368,6 +368,7 @@ async function fetchCodexUsageForCredential(
   }
 }
 
+/** Fetches usage information for all available Codex credentials. */
 export async function fetchAllCodexUsages(
   modelRegistry: unknown,
   piAuth: Record<string, unknown> = {},

@@ -41,6 +41,9 @@ import { clearWidget, renderUsageWidget, updateWidgetState } from "./widget.js";
 const MODEL_LOCK_WAIT_TIMEOUT_MS = 10 * 60 * 1000;
 const MODEL_LOCK_POLL_MS = 1250;
 
+/**
+ * Optional inputs and lock behavior overrides for a selector run.
+ */
 export interface SelectorOptions {
   preloadedConfig?: LoadedConfig;
   preloadedUsages?: UsageSnapshot[];
@@ -48,12 +51,21 @@ export interface SelectorOptions {
   waitForModelLock?: boolean;
 }
 
+/**
+ * Result of an explicit model selection attempt.
+ */
 export interface SelectorResult {
   success: boolean;
   model?: { provider: string; id: string };
 }
 
+/**
+ * Coordinates cross-instance model locks for shared provider models.
+ */
 export interface ModelLockCoordinator {
+  /**
+   * Attempts to acquire a lock for the provided model key.
+   */
   acquire(
     key: string,
     options?: { timeoutMs?: number },
@@ -66,17 +78,35 @@ export interface ModelLockCoordinator {
       heartbeatAt: number;
     };
   }>;
+  /**
+   * Extends the lease for a held model lock.
+   */
   refresh(key: string): Promise<boolean>;
+  /**
+   * Releases a held model lock.
+   */
   release(key: string): Promise<boolean>;
+  /**
+   * Releases all locks owned by this coordinator.
+   */
   releaseAll(): Promise<number>;
 }
 
+/**
+ * Caller context that explains why selection is running.
+ */
 export type SelectorReason = "startup" | "command" | "auto" | "request";
 
+/**
+ * Creates the default file-backed coordinator used for model locks.
+ */
 export function createModelLockCoordinator(): ModelLockCoordinator {
   return createModelLockCoordinatorImpl();
 }
 
+/**
+ * Selects the best available model, updates Pi state, and refreshes selector UI.
+ */
 export async function runSelector(
   ctx: ExtensionContext,
   cooldownManager: CooldownManager,

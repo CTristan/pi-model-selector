@@ -13,6 +13,9 @@ function normalizeProvider(provider: string): string {
   return provider.trim();
 }
 
+/**
+ * Returns recommended model providers for a specific usage provider.
+ */
 export function getRecommendedModelProvidersForUsageProvider(
   usageProvider: string,
 ): string[] {
@@ -33,6 +36,9 @@ export function getRecommendedModelProvidersForUsageProvider(
   );
 }
 
+/**
+ * Sorts a list of models to prefer those with the given usage provider.
+ */
 export function sortModelsForUsageProvider<
   T extends { provider: string; id: string },
 >(models: readonly T[], usageProvider: string): T[] {

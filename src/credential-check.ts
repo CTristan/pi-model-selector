@@ -13,6 +13,9 @@ const PROVIDER_LABELS: Record<ProviderName, string> = {
   minimax: "Minimax",
 };
 
+/**
+ * A map of provider names to their human-readable display labels.
+ */
 export { PROVIDER_LABELS };
 
 function isNonEmptyString(value: unknown): value is string {
@@ -31,6 +34,14 @@ function hasTokenPayload(value: unknown): boolean {
   ].some(isNonEmptyString);
 }
 
+/**
+ * Checks if a provider has valid credentials available via environment variables,
+ * model registry storage, or user authentication configuration.
+ * @param provider The name of the provider.
+ * @param piAuth The user's Pi authentication configuration.
+ * @param modelRegistry The optional registry containing authentication storage.
+ * @returns A promise resolving to true if credentials exist, false otherwise.
+ */
 export async function hasProviderCredential(
   provider: ProviderName,
   piAuth: Record<string, unknown>,

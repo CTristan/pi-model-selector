@@ -4,10 +4,17 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { EXTENSION_DIR } from "./adapter.js";
 
+/**
+ * Persisted owner record for a locked provider/model pair.
+ */
 export interface ModelLockEntry {
+  /** Unique coordinator instance that owns the lock. */
   instanceId: string;
+  /** Process id for the owning coordinator. */
   pid: number;
+  /** Timestamp when the lock was first acquired. */
   acquiredAt: number;
+  /** Timestamp of the owner's latest heartbeat. */
   heartbeatAt: number;
 }
 
@@ -16,31 +23,57 @@ interface ModelLockState {
   locks: Record<string, ModelLockEntry>;
 }
 
+/**
+ * Timing controls for waiting on a model lock.
+ */
 export interface AcquireModelLockOptions {
+  /** Maximum time to wait for an existing holder before giving up. */
   timeoutMs?: number;
+  /** Delay between acquisition attempts while waiting. */
   pollMs?: number;
 }
 
+/**
+ * Result of a model-lock acquisition attempt.
+ */
 export interface AcquireModelLockResult {
+  /** Whether this coordinator now owns the requested lock. */
   acquired: boolean;
+  /** Elapsed time spent attempting to acquire the lock. */
   waitedMs: number;
+  /** Current owner when acquisition failed because another instance holds it. */
   heldBy?: ModelLockEntry;
 }
 
+/**
+ * Dependency and timing overrides for model lock coordination.
+ */
 export interface ModelLockCoordinatorOptions {
+  /** Path to the shared model-lock state file. */
   statePath?: string;
+  /** Stable id for this coordinator instance. */
   instanceId?: string;
+  /** Process id recorded for locks owned by this coordinator. */
   pid?: number;
+  /** Heartbeat age allowed before a lock can be considered stale. */
   leaseMs?: number;
+  /** Maximum heartbeat age before a live owner is forcefully reclaimed. */
   hardStaleMs?: number;
+  /** Maximum time to wait for exclusive access to the state file. */
   stateLockTimeoutMs?: number;
+  /** Delay between state-file lock acquisition attempts. */
   stateLockPollMs?: number;
+  /** Age after which a stale state-file lock can be removed. */
   stateLockStaleMs?: number;
+  /** Process liveness probe used to reclaim locks from exited owners. */
   isPidAlive?: (pid: number) => boolean;
+  /** Clock source used for timestamps and elapsed-time calculations. */
   now?: () => number;
+  /** Sleep function used while polling for locks. */
   sleep?: (ms: number) => Promise<void>;
 }
 
+/** Default path for persisted cross-instance model lock state. */
 export const MODEL_LOCK_STATE_PATH = path.join(
   os.homedir(),
   EXTENSION_DIR,
@@ -111,10 +144,16 @@ function sanitizeState(raw: unknown): ModelLockState {
   return { version: 1, locks };
 }
 
+/**
+ * Builds the stable key used to coordinate exclusive access to a provider/model.
+ */
 export function modelLockKey(provider: string, modelId: string): string {
   return `${provider}/${modelId}`;
 }
 
+/**
+ * Coordinates file-backed model locks across concurrent Pi instances.
+ */
 export class ModelLockCoordinator {
   private readonly statePath: string;
   private readonly stateLockPath: string;
@@ -129,6 +168,9 @@ export class ModelLockCoordinator {
   private readonly now: () => number;
   private readonly sleep: (ms: number) => Promise<void>;
 
+  /**
+   * Creates a coordinator with production defaults or test overrides.
+   */
   constructor(options: ModelLockCoordinatorOptions = {}) {
     this.statePath = options.statePath ?? MODEL_LOCK_STATE_PATH;
     this.stateLockPath = `${this.statePath}.lock`;
@@ -149,6 +191,9 @@ export class ModelLockCoordinator {
     this.sleep = options.sleep ?? defaultSleep;
   }
 
+  /**
+   * Attempts to acquire exclusive ownership of a model lock.
+   */
   async acquire(
     key: string,
     options: AcquireModelLockOptions = {},
@@ -199,6 +244,9 @@ export class ModelLockCoordinator {
     }
   }
 
+  /**
+   * Updates this coordinator's heartbeat for a lock it already owns.
+   */
   async refresh(key: string): Promise<boolean> {
     return this.withStateMutation((state) => {
       const existing = state.locks[key];
@@ -211,6 +259,9 @@ export class ModelLockCoordinator {
     });
   }
 
+  /**
+   * Releases a lock only when it is owned by this coordinator.
+   */
   async release(key: string): Promise<boolean> {
     return this.withStateMutation((state) => {
       const existing = state.locks[key];
@@ -222,6 +273,9 @@ export class ModelLockCoordinator {
     });
   }
 
+  /**
+   * Releases every lock owned by this coordinator and returns the count.
+   */
   async releaseAll(): Promise<number> {
     return this.withStateMutation((state) => {
       let released = 0;
@@ -358,6 +412,9 @@ export class ModelLockCoordinator {
   }
 }
 
+/**
+ * Creates a model-lock coordinator using the supplied overrides.
+ */
 export function createModelLockCoordinator(
   options: ModelLockCoordinatorOptions = {},
 ): ModelLockCoordinator {

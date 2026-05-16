@@ -1,20 +1,35 @@
 import type * as PiCodingAgent from "@mariozechner/pi-coding-agent";
 import type * as PiTui from "@mariozechner/pi-tui";
 
+/** Pi TUI container component constructor for runtime-compatible UI rendering. */
 export let Container: typeof PiTui.Container;
+/** Dynamic border component constructor from the active Pi SDK runtime. */
 export let DynamicBorder: typeof PiCodingAgent.DynamicBorder;
+/** Width-aware text truncation helper from the active TUI package. */
 export let truncateToWidth: typeof PiTui.truncateToWidth;
+/** Select-list component constructor from the active TUI package. */
 export let SelectList: typeof PiTui.SelectList;
+/** Spacer component constructor from the active TUI package. */
 export let Spacer: typeof PiTui.Spacer;
+/** Text component constructor from the active TUI package. */
 export let Text: typeof PiTui.Text;
 
+/** Whether the extension is running under Oh My Pi compatibility mode. */
 export let isOmp = false;
 
+/**
+ * Minimal OMP settings API used to preserve model role state across selection.
+ */
 export interface OmpSettingsLike {
+  /** Returns the model id currently assigned to a role, when present. */
   getModelRole(role: string): string | undefined;
+  /** Assigns a model id to a named role. */
   setModelRole(role: string, modelId: string): void;
+  /** Reads structured settings values exposed by OMP. */
   get?(path: "modelRoles"): unknown;
+  /** Writes structured settings values exposed by OMP. */
   set?(path: "modelRoles", value: Record<string, unknown>): void;
+  /** Persists pending settings changes when the runtime requires flushing. */
   flush?(): Promise<void> | void;
 }
 
@@ -82,6 +97,7 @@ if (typeof process !== "undefined" && process.env.VITEST) {
   debugLog(`EXTENSION_DIR = ${isOmp ? ".omp" : ".pi"}`);
 }
 
+/** Per-runtime directory name used for model-selector state files. */
 export const EXTENSION_DIR = isOmp ? ".omp" : ".pi";
 
 function readModelRoles(settings: OmpSettingsLike): Record<string, unknown> {
@@ -129,6 +145,9 @@ async function restoreDefaultModelRole(
   await settings.flush?.();
 }
 
+/**
+ * Runs an action while restoring OMP's default model role afterward when enabled.
+ */
 export async function withPreservedOmpDefaultModelRole<T>(
   preserveDefaultModel: boolean | undefined,
   action: () => Promise<T>,

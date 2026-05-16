@@ -6,6 +6,9 @@ import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 // Core Types
 // ============================================================================
 
+/**
+ * Reset window reported by a provider usage endpoint.
+ */
 export interface RateWindow {
   label: string;
   usedPercent: number;
@@ -13,6 +16,9 @@ export interface RateWindow {
   resetsAt?: Date;
 }
 
+/**
+ * Provider usage payload normalized for candidate selection.
+ */
 export interface UsageSnapshot {
   provider: string;
   displayName: string;
@@ -22,6 +28,9 @@ export interface UsageSnapshot {
   account?: string;
 }
 
+/**
+ * Configured selector key that matches a provider usage window.
+ */
 export interface UsageMappingKey {
   provider: string;
   account?: string;
@@ -29,11 +38,17 @@ export interface UsageMappingKey {
   windowPattern?: string;
 }
 
+/**
+ * Pi model identifier selected when a usage mapping wins.
+ */
 export interface ModelMappingTarget {
   provider: string;
   id: string;
 }
 
+/**
+ * Configuration rule connecting usage windows to model targets or ignores.
+ */
 export interface MappingEntry {
   usage: UsageMappingKey;
   model?: ModelMappingTarget;
@@ -42,17 +57,26 @@ export interface MappingEntry {
   reserve?: number; // Minimum remaining percentage (0-99) to preserve; candidate excluded if remainingPercent <= reserve
 }
 
+/**
+ * Candidate sorting rule used to rank available usage windows.
+ */
 export type PriorityRule =
   | "fullAvailability"
   | "remainingPercent"
   | "earliestReset";
 
+/**
+ * Model to select when all mapped candidates are exhausted.
+ */
 export interface FallbackConfig {
   provider: string;
   id: string;
   lock?: boolean; // default: true
 }
 
+/**
+ * User-facing model selector configuration loaded from global and project files.
+ */
 export interface ModelSelectorConfig {
   mappings: MappingEntry[];
   priority?: PriorityRule[];
@@ -63,12 +87,18 @@ export interface ModelSelectorConfig {
   preserveDefaultModel?: boolean;
 }
 
+/**
+ * Widget display options for usage candidates in the Pi UI.
+ */
 export interface WidgetConfig {
   enabled?: boolean;
   placement?: "aboveEditor" | "belowEditor";
   showCount?: number; // How many top candidates to show (default: 3)
 }
 
+/**
+ * Selectable usage bucket after applying mappings and derived availability.
+ */
 export interface UsageCandidate {
   provider: string;
   displayName: string;
@@ -80,14 +110,23 @@ export interface UsageCandidate {
   isSynthetic?: boolean;
 }
 
+/**
+ * Provider-specific Minimax credentials and account settings.
+ */
 export interface MinimaxSettings {
   groupId?: string;
 }
 
+/**
+ * Per-provider settings consumed by usage fetchers.
+ */
 export interface ProviderSettings {
   minimax?: MinimaxSettings;
 }
 
+/**
+ * Fully resolved selector configuration used at runtime.
+ */
 export interface LoadedConfig {
   mappings: MappingEntry[];
   priority: PriorityRule[];
@@ -106,6 +145,9 @@ export interface LoadedConfig {
   raw: { global: Record<string, unknown>; project: Record<string, unknown> };
 }
 
+/**
+ * Provider names known to the selector.
+ */
 export const ALL_PROVIDERS = [
   "anthropic",
   "copilot",
@@ -116,8 +158,14 @@ export const ALL_PROVIDERS = [
   "zai",
   "minimax",
 ] as const;
+/**
+ * Union of provider names supported by selector configuration.
+ */
 export type ProviderName = (typeof ALL_PROVIDERS)[number];
 
+/**
+ * Providers skipped unless the user explicitly maps them.
+ */
 export const DEFAULT_DISABLED_PROVIDERS: readonly ProviderName[] = [
   "kiro",
   "zai",
@@ -132,10 +180,16 @@ let currentConfig: LoadedConfig | undefined,
   isWriting = false;
 const logQueue: string[] = [];
 
+/**
+ * Stores the loaded config for shared utilities such as debug logging.
+ */
 export function setGlobalConfig(config: LoadedConfig | undefined): void {
   currentConfig = config;
 }
 
+/**
+ * Clears process-local selector state between extension runs or tests.
+ */
 export function resetGlobalState(): void {
   currentConfig = undefined;
   isWriting = false;
@@ -182,6 +236,9 @@ function processLogQueue(): void {
   });
 }
 
+/**
+ * Appends a timestamped line to the configured debug log when enabled.
+ */
 export function writeDebugLog(message: string): void {
   if (!currentConfig?.debugLog?.enabled) return;
   try {
@@ -195,6 +252,9 @@ export function writeDebugLog(message: string): void {
   }
 }
 
+/**
+ * Sends a model-selector message through the Pi UI or console fallback.
+ */
 export function notify(
   ctx: ExtensionContext,
   level: "info" | "warning" | "error",
@@ -214,24 +274,36 @@ export function notify(
   }
 }
 
+/**
+ * Builds the stable identity key used to group compatible mapping entries.
+ */
 export function mappingKey(entry: MappingEntry): string {
   const esc = (s: string | undefined) =>
     (s ?? "").replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
   return `${esc(entry.usage.provider)}|${esc(entry.usage.account)}|${esc(entry.usage.window)}|${esc(entry.usage.windowPattern)}`;
 }
 
+/**
+ * Default priority order for selecting between eligible candidates.
+ */
 export const DEFAULT_PRIORITY: PriorityRule[] = [
   "fullAvailability",
   "earliestReset",
   "remainingPercent",
 ];
 
+/**
+ * Default widget settings used when config omits widget options.
+ */
 export const DEFAULT_WIDGET_CONFIG: Required<WidgetConfig> = {
   enabled: true,
   placement: "belowEditor",
   showCount: 3,
 };
 
+/**
+ * Built-in mappings for common provider usage windows and models.
+ */
 export const DEFAULT_MAPPINGS: MappingEntry[] = [
   {
     usage: { provider: "anthropic", window: "Sonnet" },

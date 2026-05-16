@@ -180,6 +180,7 @@ async function loadAntigravityAuth(
   return result;
 }
 
+/** Fetches usage information for Antigravity models. */
 export async function fetchAntigravityUsage(
   modelRegistry: unknown,
   piAuth: Record<string, unknown> = {},

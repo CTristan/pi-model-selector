@@ -97,6 +97,7 @@ function formatCandidate(
 // Widget Rendering
 // ============================================================================
 
+/** Cached inputs needed to render the model selector status widget. */
 export interface WidgetState {
   candidates: UsageCandidate[];
   config: LoadedConfig;
@@ -105,14 +106,17 @@ export interface WidgetState {
 
 let currentWidgetState: WidgetState | null = null;
 
+/** Replaces the cached widget state used by the next render. */
 export function updateWidgetState(state: WidgetState | null): void {
   currentWidgetState = state;
 }
 
+/** Returns the last widget state stored by the selector. */
 export function getWidgetState(): WidgetState | null {
   return currentWidgetState;
 }
 
+/** Renders the current usage candidates in Pi's widget area. */
 export function renderUsageWidget(ctx: ExtensionContext): void {
   if (!ctx.hasUI) return;
 
@@ -211,6 +215,7 @@ export function renderUsageWidget(ctx: ExtensionContext): void {
   );
 }
 
+/** Removes the model selector widget and clears its cached state. */
 export function clearWidget(ctx: ExtensionContext): void {
   if (!ctx.hasUI) return;
   const ui = ctx.ui as {

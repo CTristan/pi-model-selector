@@ -13,6 +13,7 @@ import type { PriorityRule } from "./types.js";
 
 const CATCH_ALL_PATTERNS = ["*", ".*", "^.*$", "^.*", ".*$", ".+", "^.+$"];
 
+/** Returns whether an ignore mapping covers every window for a provider. */
 export function isCatchAllIgnoreMapping(usage: {
   window?: string | null;
   windowPattern?: string | null;
@@ -37,6 +38,7 @@ export function isCatchAllIgnoreMapping(usage: {
   return false;
 }
 
+/** Returns whether provider/account usage is suppressed by catch-all ignore mapping. */
 export function isProviderIgnored(
   provider: string,
   account: string | undefined,
@@ -59,6 +61,7 @@ export function isProviderIgnored(
   );
 }
 
+/** Shows a selectable list using Pi UI, falling back to standard select when needed. */
 export async function selectWrapped(
   ctx: ExtensionContext,
   title: string,
@@ -126,6 +129,7 @@ export async function selectWrapped(
   });
 }
 
+/** Preset priority-rule orderings offered by the configuration wizard. */
 export const priorityOptions: Array<{ label: string; value: PriorityRule[] }> =
   [
     {

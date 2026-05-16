@@ -65,6 +65,7 @@ function parseReserveInput(input: string): number | undefined {
   return reserveValue;
 }
 
+/** Runs the interactive configuration wizard for model selector mappings and options. */
 async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
   if (!ctx.hasUI) {
     notify(

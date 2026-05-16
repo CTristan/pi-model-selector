@@ -55,6 +55,12 @@ interface GeminiTokenInfo {
   sources: string[];
 }
 
+/**
+ * Fetches usage snapshots for discovered Google Gemini accounts.
+ * @param modelRegistry The registry containing authentication storage.
+ * @param piAuth The user's Pi authentication configuration.
+ * @returns A promise resolving to an array of usage snapshots for each identified account.
+ */
 export async function fetchGeminiUsage(
   modelRegistry: unknown,
   piAuth: Record<string, unknown> = {},

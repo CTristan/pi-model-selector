@@ -5,18 +5,26 @@ import * as path from "node:path";
 import { promisify } from "node:util";
 import { EXTENSION_DIR, isOmp } from "../adapter.js";
 
+/** Executes a shell command asynchronously. */
 export const execAsync = promisify(exec);
 
+/** Editor version string for Copilot. */
 export const COPILOT_EDITOR_VERSION = "vscode/1.97.2";
+/** Plugin version string for Copilot. */
 export const COPILOT_PLUGIN_VERSION = "copilot/1.254.0";
+/** User agent string for Copilot. */
 export const COPILOT_USER_AGENT = "GitHubCopilot/1.254.0";
+/** User agent string for Antigravity. */
 export const ANTIGRAVITY_USER_AGENT = "antigravity/1.12.5";
+/** API client identifier for Antigravity. */
 export const ANTIGRAVITY_API_CLIENT =
   "google-cloud-sdk vscode_cloudshelleditor/0.1";
 
+/** Google Cloud Shell client ID for authentication. */
 export const GOOGLE_CLOUD_SHELL_CLIENT_ID =
   "947318989803-6bn6qk8qdgf4n4g3pfee6491hc0brc4i.apps.googleusercontent.com";
 
+/** Display names for supported AI providers. */
 export const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   anthropic: "Claude",
   copilot: "Copilot",
@@ -28,6 +36,7 @@ export const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   minimax: "Minimax",
 };
 
+/** URLs for various provider APIs and resources. */
 export const URLS = {
   ANTHROPIC_USAGE: "https://api.anthropic.com/api/oauth/usage",
   COPILOT_USER: "https://api.github.com/copilot_internal/user",
@@ -43,6 +52,7 @@ export const URLS = {
     "https://platform.minimax.io/v1/api/openplatform/coding_plan/remains",
 };
 
+/** Loads Pi platform authentication credentials. */
 export async function loadPiAuth(): Promise<Record<string, unknown>> {
   // Try JSON file first (legacy Pi and OMP < SQLite migration)
   const piAuthPath = path.join(
@@ -82,6 +92,7 @@ export async function loadPiAuth(): Promise<Record<string, unknown>> {
   return {};
 }
 
+/** Parses a value (usually epoch milliseconds) into a number. */
 export function parseEpochMillis(value: unknown): number | undefined {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
@@ -97,6 +108,7 @@ export function parseEpochMillis(value: unknown): number | undefined {
   return undefined;
 }
 
+/** Safely converts a value to a Date object. */
 export function safeDate(value: unknown): Date | undefined {
   // Fix safeDate Epoch Issue: returns undefined for value = 0, ignoring the valid Epoch timestamp.
   if (value === 0 || value === "0") return new Date(0);
@@ -105,6 +117,7 @@ export function safeDate(value: unknown): Date | undefined {
   return Number.isNaN(d.getTime()) ? undefined : d;
 }
 
+/** Formats a Date object as a reset string for usage windows. */
 export function formatReset(date: Date): string {
   if (Number.isNaN(date.getTime())) return "";
   const diffMs = date.getTime() - Date.now();
@@ -133,6 +146,7 @@ export function formatReset(date: Date): string {
   }
 }
 
+/** Fetches a URL with a specified timeout. */
 export async function fetchWithTimeout(
   url: string,
   options: RequestInit & { timeout?: number },
@@ -155,6 +169,7 @@ export async function fetchWithTimeout(
   }
 }
 
+/** Refreshes a Google OAuth2 token. */
 export async function refreshGoogleToken(
   refreshToken: string,
   clientId?: string,

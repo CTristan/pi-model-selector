@@ -16,6 +16,7 @@ export interface CooldownState {
   lastSelected: string | null;
 }
 
+/** Default duration for manual skips and provider cooldowns, in milliseconds. */
 export const COOLDOWN_DURATION = 60 * 60 * 1000; // 1 hour
 
 const COOLDOWN_STATE_PATH = path.join(
@@ -66,6 +67,9 @@ export async function saveCooldownState(state: CooldownState): Promise<void> {
   }
 }
 
+/**
+ * Builds the provider/account wildcard key used for provider-wide cooldowns.
+ */
 export function getWildcardKey(
   provider: string,
   account?: string | null,
@@ -73,11 +77,17 @@ export function getWildcardKey(
   return `${provider}|${account ?? ""}|*`;
 }
 
+/**
+ * Tracks manual skip and provider-wide cooldowns for model candidates.
+ */
 export class CooldownManager {
   private modelCooldowns = new Map<string, number>();
   private cooldownsLoaded = false;
   private lastSelectedCandidateKey: string | null = null;
 
+  /**
+   * Loads persisted non-expired cooldowns once into memory.
+   */
   async loadPersistedCooldowns(): Promise<void> {
     if (this.cooldownsLoaded) return;
     const state = await loadCooldownState();
@@ -115,6 +125,9 @@ export class CooldownManager {
     this.cooldownsLoaded = true;
   }
 
+  /**
+   * Writes the current non-expired cooldown set and last selection to disk.
+   */
   async persistCooldowns(): Promise<void> {
     const cooldowns: Record<string, number> = {};
     const now = Date.now();
@@ -131,6 +144,9 @@ export class CooldownManager {
     });
   }
 
+  /**
+   * Removes expired cooldown entries and reports whether anything changed.
+   */
   pruneExpiredCooldowns(now = Date.now()): boolean {
     let removed = false;
     for (const [key, expiry] of this.modelCooldowns) {
@@ -142,6 +158,9 @@ export class CooldownManager {
     return removed;
   }
 
+  /**
+   * Applies or extends a provider-wide cooldown after a rate-limit response.
+   */
   setOrExtendProviderCooldown(
     provider: string,
     account: string | undefined,
@@ -157,6 +176,9 @@ export class CooldownManager {
     return true;
   }
 
+  /**
+   * Reports whether a candidate is blocked by model-specific or provider cooldowns.
+   */
   isOnCooldown(c: UsageCandidate, now = Date.now()): boolean {
     const key = candidateKey(c);
     const wildcardKey = getWildcardKey(c.provider, c.account);
@@ -170,10 +192,16 @@ export class CooldownManager {
     );
   }
 
+  /**
+   * Adds a model-specific cooldown for a candidate key.
+   */
   addCooldown(key: string): void {
     this.modelCooldowns.set(key, Date.now() + COOLDOWN_DURATION);
   }
 
+  /**
+   * Returns the provider-wide cooldown expiry for a provider/account pair.
+   */
   getWildcardExpiry(
     provider: string,
     account: string | undefined,
@@ -182,6 +210,9 @@ export class CooldownManager {
     return this.modelCooldowns.get(wildcardKey);
   }
 
+  /**
+   * Removes all in-memory cooldowns without persisting the change.
+   */
   clear(): void {
     this.modelCooldowns.clear();
   }
@@ -217,10 +248,16 @@ export class CooldownManager {
     return deleted.size;
   }
 
+  /**
+   * Returns the last selected candidate key used by manual skip commands.
+   */
   getLastSelectedKey(): string | null {
     return this.lastSelectedCandidateKey;
   }
 
+  /**
+   * Stores the last selected candidate key for later manual skip commands.
+   */
   setLastSelectedKey(key: string | null): void {
     this.lastSelectedCandidateKey = key;
   }

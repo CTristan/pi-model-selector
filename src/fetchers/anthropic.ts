@@ -255,6 +255,7 @@ async function loadClaudeCredentials(
   });
 }
 
+/** Fetches usage information for Claude models from Anthropic. */
 export async function fetchClaudeUsage(
   modelRegistry?: unknown,
   piAuth: Record<string, unknown> = {},

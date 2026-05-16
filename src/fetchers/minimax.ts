@@ -30,6 +30,11 @@ interface MinimaxResponse {
   };
 }
 
+/**
+ * Resolves the Minimax API key from environment variables or configuration.
+ * @param piAuth The user's Pi authentication configuration.
+ * @returns The resolved API key or undefined.
+ */
 export function resolveMinimaxApiKey(
   piAuth: Record<string, unknown>,
 ): string | undefined {
@@ -51,6 +56,11 @@ export function resolveMinimaxApiKey(
   return undefined;
 }
 
+/**
+ * Resolves the Minimax Group ID from environment variables or configuration.
+ * @param configGroupId The group ID from the provider configuration.
+ * @returns The resolved Group ID or undefined.
+ */
 export function resolveMinimaxGroupId(
   configGroupId?: string,
 ): string | undefined {
@@ -72,6 +82,12 @@ export function resolveMinimaxGroupId(
   return undefined;
 }
 
+/**
+ * Fetches usage snapshots for Minimax by calling the coding plan API.
+ * @param piAuth The user's Pi authentication configuration.
+ * @param configGroupId The group ID from the provider configuration.
+ * @returns A promise resolving to the usage snapshot.
+ */
 export async function fetchMinimaxUsage(
   piAuth: Record<string, unknown>,
   configGroupId?: string,

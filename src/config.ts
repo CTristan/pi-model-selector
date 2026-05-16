@@ -40,6 +40,9 @@ function findGlobalConfigPath(): string {
   return cachedGlobalConfigPath;
 }
 
+/**
+ * Resolves the path to the global configuration file.
+ */
 export function getGlobalConfigPath(): Promise<string> {
   return Promise.resolve(findGlobalConfigPath());
 }
@@ -48,6 +51,9 @@ export function getGlobalConfigPath(): Promise<string> {
 // Config File I/O
 // ============================================================================
 
+/**
+ * Reads and parses a JSON configuration file from disk.
+ */
 export async function readConfigFile(
   filePath: string,
   errors: string[],
@@ -78,6 +84,9 @@ export async function readConfigFile(
   }
 }
 
+/**
+ * Saves a configuration object to disk as formatted JSON.
+ */
 export async function saveConfigFile(
   filePath: string,
   raw: Record<string, unknown>,
@@ -548,6 +557,9 @@ function mergeWidgetConfig(
 // Config Loading
 // ============================================================================
 
+/**
+ * Loads and merges the global and project configurations.
+ */
 export async function loadConfig(
   ctx: ExtensionContext,
   options: { requireMappings?: boolean; seedGlobal?: boolean } = {},
@@ -688,6 +700,9 @@ export async function loadConfig(
 // Config Cleanup
 // ============================================================================
 
+/**
+ * The result of a configuration cleanup operation.
+ */
 export interface CleanupConfigResult {
   changed: boolean;
   summary: string[];
@@ -698,11 +713,18 @@ export interface CleanupConfigResult {
   removedUnavailableModelMappings: number;
 }
 
+/**
+ * Options for the configuration cleanup operation.
+ */
 export interface CleanupConfigOptions {
   scope?: "global" | "project";
+  /** Optional predicate used to drop mappings whose target model is unavailable. */
   modelExists?: (provider: string, id: string) => boolean;
 }
 
+/**
+ * Cleans up raw configuration by removing unreferenced mappings and preserving valid state.
+ */
 export function cleanupConfigRaw(
   raw: Record<string, unknown>,
   options: CleanupConfigOptions = {},
@@ -848,12 +870,18 @@ export function cleanupConfigRaw(
 // Config Mutation
 // ============================================================================
 
+/**
+ * Options for clearing bucket mappings.
+ */
 export interface ClearBucketMappingsOptions {
   provider: string;
   account?: string;
   window: string;
 }
 
+/**
+ * Clears mapping entries for specific buckets.
+ */
 export function clearBucketMappings(
   raw: Record<string, unknown>,
   options: ClearBucketMappingsOptions,
@@ -896,6 +924,9 @@ export function clearBucketMappings(
   return removed;
 }
 
+/**
+ * Inserts or updates a mapping entry in the configuration.
+ */
 export function upsertMapping(
   raw: Record<string, unknown>,
   mapping: MappingEntry,
@@ -914,6 +945,9 @@ export function upsertMapping(
   raw.mappings = [...filtered, mapping];
 }
 
+/**
+ * Removes a specific mapping entry from the configuration.
+ */
 export function removeMapping(
   raw: Record<string, unknown>,
   mapping: MappingEntry,
@@ -942,6 +976,9 @@ export function removeMapping(
   return { removed: filtered.length !== existing.length };
 }
 
+/**
+ * Updates the widget configuration settings.
+ */
 export function updateWidgetConfig(
   raw: Record<string, unknown>,
   widgetUpdate: Partial<WidgetConfig>,
@@ -953,6 +990,9 @@ export function updateWidgetConfig(
   raw.widget = { ...existing, ...widgetUpdate };
 }
 
+/**
+ * Updates provider-specific settings in the configuration.
+ */
 export function updateProviderSettings(
   raw: Record<string, unknown>,
   provider: string,
@@ -974,6 +1014,9 @@ export function updateProviderSettings(
 }
 
 // Utility: return normalized mapping entries from a raw config object
+/**
+ * Extracts and normalizes mapping entries from a raw configuration object.
+ */
 export function getRawMappings(raw: Record<string, unknown>): MappingEntry[] {
   try {
     const errors: string[] = [];
