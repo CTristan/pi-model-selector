@@ -29,6 +29,9 @@ import { runMappingWizard } from "./src/wizard.js";
 // Extension Hook
 // ============================================================================
 
+/**
+ * Registers the model selector extension hooks and slash commands with Pi.
+ */
 export default function modelSelectorExtension(pi: ExtensionAPI) {
   const cooldownManager = new CooldownManager();
   const modelLockCoordinator = createModelLockCoordinator();

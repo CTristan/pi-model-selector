@@ -6,8 +6,13 @@ import { EXTENSION_DIR } from "./adapter.js";
 import { candidateKey } from "./candidates.js";
 import type { UsageCandidate } from "./types.js";
 
+/**
+ * Persisted skip and provider cooldown data shared across Pi sessions.
+ */
 export interface CooldownState {
-  cooldowns: Record<string, number>; // CandidateKey -> expiry timestamp
+  /** Expiry timestamp by candidate or provider wildcard key. */
+  cooldowns: Record<string, number>;
+  /** Last selected candidate key used by manual skip commands. */
   lastSelected: string | null;
 }
 
@@ -19,6 +24,9 @@ const COOLDOWN_STATE_PATH = path.join(
   "model-selector-cooldowns.json",
 );
 
+/**
+ * Loads persisted cooldown state, returning an empty state when unavailable.
+ */
 export async function loadCooldownState(): Promise<CooldownState> {
   try {
     await fs.promises.access(COOLDOWN_STATE_PATH);
@@ -37,6 +45,9 @@ export async function loadCooldownState(): Promise<CooldownState> {
   return { cooldowns: {}, lastSelected: null };
 }
 
+/**
+ * Persists cooldown state with an atomic write when possible.
+ */
 export async function saveCooldownState(state: CooldownState): Promise<void> {
   const dir = path.dirname(COOLDOWN_STATE_PATH);
   try {

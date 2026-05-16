@@ -19,5 +19,9 @@
     // Disabled due to conflict with Biome's `useLiteralKeys` rule (part of recommended preset)
     "noPropertyAccessFromIndexSignature": false
   },
-  "include": ["index.ts", "src/**/*.ts", "tests/**/*.ts", "vitest.config.ts"]
+  "include": ["index.ts", "src/**/*.ts", "tests/**/*.ts", "vitest.config.ts"],
+  "typedocOptions": {
+    "plugin": ["typedoc-plugin-coverage"],
+    "treatWarningsAsErrors": true
+  }
 }
