@@ -1,3 +1,4 @@
+import { DateTime } from "luxon";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock node:fs and node:os so that common.ts doesn't fail on missing auth files
@@ -60,7 +61,7 @@ vi.mock("node:child_process", async () => {
 function makeOmpReport(provider: string, usedFraction: number, email?: string) {
   return {
     provider,
-    fetchedAt: Date.now(),
+    fetchedAt: DateTime.now().toMillis(),
     limits: [
       {
         id: `${provider}:test`,
@@ -80,6 +81,7 @@ describe("fetchAllUsages — OMP path", () => {
 
   afterEach(() => {
     vi.resetModules();
+    vi.unstubAllGlobals();
   });
 
   it("calls authStorage.fetchUsageReports and converts results when isOmp=true", async () => {

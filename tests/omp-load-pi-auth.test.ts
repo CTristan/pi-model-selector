@@ -37,6 +37,18 @@ vi.mock("node:child_process", async () => {
     return {} as ReturnType<typeof import("node:child_process").exec>;
   });
 
+  const execFileMock = vi.fn((...args: unknown[]) => {
+    const callback = args.find((arg) => typeof arg === "function") as (
+      err: null,
+      stdout: string,
+      stderr: string,
+    ) => void;
+    if (callback) {
+      callback(null, "", "");
+    }
+    return {} as ReturnType<typeof import("node:child_process").execFile>;
+  });
+
   Object.defineProperty(execMock, util.promisify.custom, {
     value: (cmd: string, options: unknown) => {
       return new Promise((resolve, reject) => {
@@ -52,7 +64,23 @@ vi.mock("node:child_process", async () => {
     },
   });
 
-  return { exec: execMock, execFile: execMock };
+  Object.defineProperty(execFileMock, util.promisify.custom, {
+    value: (file: string, args: unknown, options: unknown) => {
+      return new Promise((resolve, reject) => {
+        execFileMock(
+          file,
+          args,
+          options,
+          (err: Error | null, stdout: string, stderr: string) => {
+            if (err) reject(err);
+            else resolve({ stdout, stderr });
+          },
+        );
+      });
+    },
+  });
+
+  return { exec: execMock, execFile: execFileMock };
 });
 
 describe("loadPiAuth OMP SQLite fallback", () => {
@@ -100,9 +128,14 @@ describe("loadPiAuth OMP SQLite fallback", () => {
     }));
 
     const child_process = await import("node:child_process");
-    vi.mocked(child_process.exec).mockImplementation(
-      (_cmd: string, _opts: unknown, cb: unknown) => {
-        const callback = typeof _opts === "function" ? _opts : cb;
+    vi.mocked(child_process.execFile).mockImplementation(
+      (_file: string, args: unknown, opts: unknown, cb: unknown) => {
+        const callback =
+          typeof opts === "function"
+            ? opts
+            : typeof args === "function"
+              ? args
+              : cb;
         if (typeof callback === "function") {
           (callback as (err: null, stdout: string, stderr: string) => void)(
             null,
@@ -116,7 +149,7 @@ describe("loadPiAuth OMP SQLite fallback", () => {
             "",
           );
         }
-        return {} as ReturnType<typeof import("node:child_process").exec>;
+        return {} as ReturnType<typeof import("node:child_process").execFile>;
       },
     );
 
@@ -135,9 +168,14 @@ describe("loadPiAuth OMP SQLite fallback", () => {
     }));
 
     const child_process = await import("node:child_process");
-    vi.mocked(child_process.exec).mockImplementation(
-      (_cmd: string, _opts: unknown, cb: unknown) => {
-        const callback = typeof _opts === "function" ? _opts : cb;
+    vi.mocked(child_process.execFile).mockImplementation(
+      (_file: string, args: unknown, opts: unknown, cb: unknown) => {
+        const callback =
+          typeof opts === "function"
+            ? opts
+            : typeof args === "function"
+              ? args
+              : cb;
         if (typeof callback === "function") {
           (callback as (err: null, stdout: string, stderr: string) => void)(
             null,
@@ -151,7 +189,7 @@ describe("loadPiAuth OMP SQLite fallback", () => {
             "",
           );
         }
-        return {} as ReturnType<typeof import("node:child_process").exec>;
+        return {} as ReturnType<typeof import("node:child_process").execFile>;
       },
     );
 
@@ -168,9 +206,14 @@ describe("loadPiAuth OMP SQLite fallback", () => {
     }));
 
     const child_process = await import("node:child_process");
-    vi.mocked(child_process.exec).mockImplementation(
-      (_cmd: string, _opts: unknown, cb: unknown) => {
-        const callback = typeof _opts === "function" ? _opts : cb;
+    vi.mocked(child_process.execFile).mockImplementation(
+      (_file: string, args: unknown, opts: unknown, cb: unknown) => {
+        const callback =
+          typeof opts === "function"
+            ? opts
+            : typeof args === "function"
+              ? args
+              : cb;
         if (typeof callback === "function") {
           (callback as (err: Error, stdout: string, stderr: string) => void)(
             new Error("sqlite3: command not found"),
@@ -178,7 +221,7 @@ describe("loadPiAuth OMP SQLite fallback", () => {
             "",
           );
         }
-        return {} as ReturnType<typeof import("node:child_process").exec>;
+        return {} as ReturnType<typeof import("node:child_process").execFile>;
       },
     );
 

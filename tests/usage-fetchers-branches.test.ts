@@ -799,8 +799,8 @@ describe("Usage Fetchers Branch Coverage", () => {
         },
       );
 
-      // Should only fetch once (piAuth), not twice (piAuth + stale file)
-      expect(fetchMock).toHaveBeenCalledTimes(1);
+      // Both credentials should be tried (token dedup only), then final dedup merges by account
+      expect(fetchMock).toHaveBeenCalledTimes(2);
       expect(result).toHaveLength(1);
       expect(result[0]!.account).toBe("shared-account-123");
       expect(result[0]!.error).toBeUndefined();
@@ -861,7 +861,8 @@ describe("Usage Fetchers Branch Coverage", () => {
         },
       });
 
-      expect(fetchMock).toHaveBeenCalledTimes(1);
+      // All distinct tokens are tried; final dedup merges by account
+      expect(fetchMock).toHaveBeenCalledTimes(5);
       expect(result).toHaveLength(1);
       expect(result[0]!.account).toBe("shared-account");
     });

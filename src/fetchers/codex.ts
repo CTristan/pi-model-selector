@@ -93,22 +93,12 @@ async function discoverCodexCredentials(
 ): Promise<CodexCredential[]> {
   const credentials: CodexCredential[] = [],
     seenTokens = new Set<string>(),
-    seenAccounts = new Set<string>(),
     piAuths = getPiCodexAuths(piAuth);
   const addCredential = (credential: CodexCredential): void => {
     if (seenTokens.has(credential.accessToken)) return;
-    if (
-      credential.accountId !== undefined &&
-      seenAccounts.has(credential.accountId)
-    ) {
-      return;
-    }
 
     credentials.push(credential);
     seenTokens.add(credential.accessToken);
-    if (credential.accountId !== undefined) {
-      seenAccounts.add(credential.accountId);
-    }
   };
 
   for (const p of piAuths) {
