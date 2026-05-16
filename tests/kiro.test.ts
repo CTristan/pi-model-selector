@@ -37,6 +37,7 @@ vi.mock("node:child_process", async () => {
 
   return {
     exec: execMock,
+    execFile: execMock,
   };
 });
 

@@ -53,18 +53,19 @@ if (typeof process !== "undefined" && process.env.VITEST) {
   // Vitest can't evaluate the full package source (ENOENT on dist/package.json).
   // Mock UI components — tests mock the UI layer anyway.
   debugLog("VITEST detected — using mock components");
-  DynamicBorder = class {} as any;
+  DynamicBorder = class {} as unknown as typeof PiCodingAgent.DynamicBorder;
 
   Container = class {
     addChild() {}
     render() {
       return [];
     }
-  } as any;
-  truncateToWidth = ((s: string) => s) as any;
-  SelectList = class {} as any;
-  Spacer = class {} as any;
-  Text = class {} as any;
+  } as unknown as typeof PiTui.Container;
+  truncateToWidth = ((s: string) =>
+    s) as unknown as typeof PiTui.truncateToWidth;
+  SelectList = class {} as unknown as typeof PiTui.SelectList;
+  Spacer = class {} as unknown as typeof PiTui.Spacer;
+  Text = class {} as unknown as typeof PiTui.Text;
 } else {
   // Always import the legacy Pi package names. OMP's extension loader rewrites
   // these literal specifiers to @oh-my-pi while mirroring the extension; probing

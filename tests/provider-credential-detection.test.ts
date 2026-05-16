@@ -377,6 +377,45 @@ describe("Provider Credential Detection", () => {
       const zaiOption = options.find((o) => o.includes("z.ai"));
       expect(zaiOption).toContain("credentials: detected");
     });
+
+    it("detects credentials from registry authStorage", async () => {
+      ctx.modelRegistry.authStorage = {
+        getApiKey: vi.fn(async (id: string) =>
+          id === "zai" ? "zai-registry-key" : undefined,
+        ),
+      };
+      vi.mocked(usageFetchers.loadPiAuth).mockResolvedValue({});
+
+      let menuVisits = 0;
+      ctx.ui.select = vi.fn((message: string, options: string[]) => {
+        if (message === "Model selector configuration") {
+          menuVisits++;
+          return Promise.resolve(
+            menuVisits === 1 ? "Configure providers" : "Done",
+          );
+        }
+        if (message === "Select configuration scope") {
+          return Promise.resolve("Global (global.json)");
+        }
+        if (message.includes("Configure providers in Global")) {
+          const zaiOption = options.find((option) =>
+            option.includes("z.ai (zai)"),
+          );
+          expect(zaiOption).toBeDefined();
+          expect(zaiOption).toContain("credentials: detected");
+          return Promise.resolve(zaiOption);
+        }
+        return Promise.resolve(undefined);
+      });
+
+      const runWizard = commands["model-select-config"];
+      if (!runWizard) throw new Error("Command not found: model-select-config");
+      await runWizard({}, ctx as unknown as Record<string, unknown>);
+
+      expect(ctx.modelRegistry.authStorage.getApiKey).toHaveBeenCalledWith(
+        "zai",
+      );
+    });
   });
 
   describe("Missing credentials", () => {

@@ -41,39 +41,44 @@ vi.mock("node:os", async () => {
 
 vi.mock("node:child_process", async () => {
   const util = await import("node:util");
-  const execMock = vi.fn(
-    (
-      _cmd: string,
-      options: unknown,
-      cb?: (err: Error | null, stdout: string, stderr: string) => void,
-    ) => {
-      if (typeof options === "function")
-        cb = options as (
-          err: Error | null,
-          stdout: string,
-          stderr: string,
-        ) => void;
-      if (cb) cb(null, "{}", "");
-    },
-  );
+  const makeChildProcessMock = () => {
+    const mock = vi.fn(
+      (
+        _cmd: string,
+        options: unknown,
+        cb?: (err: Error | null, stdout: string, stderr: string) => void,
+      ) => {
+        if (typeof options === "function")
+          cb = options as (
+            err: Error | null,
+            stdout: string,
+            stderr: string,
+          ) => void;
+        if (cb) cb(null, "{}", "");
+      },
+    );
 
-  Object.defineProperty(execMock, util.promisify.custom, {
-    value: (cmd: string, options: any) => {
-      return new Promise((resolve, reject) => {
-        execMock(
-          cmd,
-          options,
-          (err: Error | null, stdout: string, stderr: string) => {
-            if (err) reject(err);
-            else resolve({ stdout, stderr });
-          },
-        );
-      });
-    },
-  });
+    Object.defineProperty(mock, util.promisify.custom, {
+      value: (cmd: string, options: any) => {
+        return new Promise((resolve, reject) => {
+          mock(
+            cmd,
+            options,
+            (err: Error | null, stdout: string, stderr: string) => {
+              if (err) reject(err);
+              else resolve({ stdout, stderr });
+            },
+          );
+        });
+      },
+    });
+
+    return mock;
+  };
 
   return {
-    exec: execMock,
+    exec: makeChildProcessMock(),
+    execFile: makeChildProcessMock(),
   };
 });
 

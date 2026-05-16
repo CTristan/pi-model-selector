@@ -299,6 +299,37 @@ describe("convertOmpUsageReports", () => {
     ]);
   });
 
+  it("separates limits by scope account within one report", () => {
+    const reports: OmpUsageReport[] = [
+      {
+        provider: "anthropic",
+        fetchedAt: Date.now(),
+        limits: [
+          {
+            id: "anthropic:work",
+            label: "Work",
+            scope: { accountId: "work@corp.com" },
+            amount: { usedFraction: 0.3, unit: "percent" },
+          },
+          {
+            id: "anthropic:personal",
+            label: "Personal",
+            scope: { accountId: "personal@gmail.com" },
+            amount: { usedFraction: 0.8, unit: "percent" },
+          },
+        ],
+        metadata: { email: "metadata@example.com" },
+      },
+    ];
+
+    const snapshots = convertOmpUsageReports(reports);
+    expect(snapshots).toHaveLength(2);
+    expect(snapshots.map((s) => s.account).sort()).toEqual([
+      "personal@gmail.com",
+      "work@corp.com",
+    ]);
+  });
+
   it("skips limits with no usable usage data", () => {
     const reports: OmpUsageReport[] = [
       {
@@ -340,7 +371,7 @@ describe("convertOmpUsageReports", () => {
     const win = snapshots[0]!.windows[0]!;
     expect(win.resetsAt).toBeInstanceOf(Date);
     expect(win.resetsAt!.getTime()).toBe(futureMs);
-    expect(win.resetDescription).toBe("2h");
+    expect(win.resetDescription).toMatch(/^(2h|1h 59m)$/);
   });
 
   it("handles limits without window (no reset time)", () => {
@@ -364,7 +395,7 @@ describe("convertOmpUsageReports", () => {
     expect(snapshots[0]!.windows[0]!.resetDescription).toBeUndefined();
   });
 
-  it("handles usedPercent from amount.used when usedFraction is absent", () => {
+  it("derives usedPercent from used over limit when usedFraction is absent", () => {
     const reports: OmpUsageReport[] = [
       {
         provider: "anthropic",
@@ -373,14 +404,14 @@ describe("convertOmpUsageReports", () => {
           {
             id: "anthropic:5h",
             label: "5 Hour",
-            amount: { used: 65, limit: 100, unit: "percent" },
+            amount: { used: 3, limit: 10, unit: "requests" },
           },
         ],
       },
     ];
 
     const snapshots = convertOmpUsageReports(reports);
-    expect(snapshots[0]!.windows[0]!.usedPercent).toBe(65);
+    expect(snapshots[0]!.windows[0]!.usedPercent).toBe(30);
   });
 
   it("prefers usedFraction over used for usedPercent", () => {

@@ -10,11 +10,15 @@ const SCRIPT_PATH = path.resolve(
 );
 
 function writeTempCoverageFile(
-  content: Record<string, unknown>,
+  content: Record<string, unknown> | string,
   dir: string,
 ): string {
   const filePath = path.join(dir, "coverage.json");
-  fs.writeFileSync(filePath, JSON.stringify(content), "utf-8");
+  fs.writeFileSync(
+    filePath,
+    typeof content === "string" ? content : JSON.stringify(content),
+    "utf-8",
+  );
   return filePath;
 }
 
@@ -47,6 +51,25 @@ describe("typedoc-check.cjs", () => {
     const result = runScript(["/nonexistent/path/coverage.json", "80"]);
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("Coverage file not found");
+  });
+
+  it("exits with code 1 when threshold is not finite", () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "typedoc-check-test-"));
+    const file = writeTempCoverageFile(
+      { percent: 100, actual: 10, expected: 10 },
+      tmpDir,
+    );
+    const result = runScript([file, "not-a-number"]);
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("Invalid threshold");
+  });
+
+  it("exits with code 1 when coverage JSON is malformed", () => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "typedoc-check-test-"));
+    const file = writeTempCoverageFile("not json", tmpDir);
+    const result = runScript([file, "80"]);
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("Malformed coverage JSON");
   });
 
   it("exits with code 1 when percent is not a finite number", () => {
@@ -112,7 +135,7 @@ describe("typedoc-check.cjs", () => {
     expect(result.exitCode).toBe(0);
   });
 
-  it("handles null percent (NaN conversion) as invalid", () => {
+  it("handles null percent as invalid", () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "typedoc-check-test-"));
     const file = writeTempCoverageFile(
       { percent: null, actual: 0, expected: 10 },

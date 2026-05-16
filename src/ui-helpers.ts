@@ -1,4 +1,5 @@
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type * as PiTui from "@mariozechner/pi-tui";
 import type { SelectItem } from "@mariozechner/pi-tui";
 
 import {
@@ -99,13 +100,16 @@ export async function selectWrapped(
       // OMP's SelectList requires symbols.cursor; legacy Pi's does not.
       // Use a defensive check so both runtimes work.
       symbols: {
-        cursor: "nav" in theme ? (theme as any).nav.cursor : ">",
+        cursor:
+          "nav" in theme
+            ? (theme as unknown as { nav: { cursor: string } }).nav.cursor
+            : ">",
       },
     };
     const selectList = new SelectList(
       items,
       Math.min(items.length, 15),
-      selectListTheme as any,
+      selectListTheme as unknown as PiTui.SelectListTheme,
     );
     selectList.onSelect = (item: SelectItem) => done(item.value);
     selectList.onCancel = () => done(undefined);

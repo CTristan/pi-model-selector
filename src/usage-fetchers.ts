@@ -6,6 +6,7 @@ import {
   formatReset,
   loadPiAuth,
   PROVIDER_DISPLAY_NAMES,
+  safeDate,
 } from "./fetchers/common.js";
 import { fetchCopilotUsage } from "./fetchers/copilot.js";
 import { fetchGeminiUsage } from "./fetchers/gemini.js";
@@ -106,20 +107,22 @@ export function convertOmpUsageReports(
     const displayName = PROVIDER_DISPLAY_NAMES[provider] ?? provider;
 
     // Extract account identifier from metadata
-    const account =
+    const metadataAccount =
       (report.metadata?.email as string) ??
       (report.metadata?.accountId as string) ??
       (report.metadata?.account as string) ??
-      (report.metadata?.username as string) ??
-      report.limits[0]?.scope?.accountId;
+      (report.metadata?.username as string);
 
-    const key = `${provider}|${account ?? ""}`;
-    let group = groups.get(key);
-    if (!group) {
-      group = { provider, displayName, account, limits: [] };
-      groups.set(key, group);
+    for (const limit of report.limits) {
+      const account = limit.scope?.accountId ?? metadataAccount;
+      const key = `${provider}|${account ?? ""}`;
+      let group = groups.get(key);
+      if (!group) {
+        group = { provider, displayName, account, limits: [] };
+        groups.set(key, group);
+      }
+      group.limits.push(limit);
     }
-    group.limits.push(...report.limits);
   }
 
   const snapshots: UsageSnapshot[] = [];
@@ -154,7 +157,11 @@ function convertLimitsToWindows(
     const usedPercent =
       limit.amount.usedFraction !== undefined
         ? limit.amount.usedFraction * 100
-        : limit.amount.used;
+        : limit.amount.used !== undefined &&
+            limit.amount.limit !== undefined &&
+            limit.amount.limit > 0
+          ? (limit.amount.used / limit.amount.limit) * 100
+          : undefined;
 
     if (usedPercent === undefined || !Number.isFinite(usedPercent)) continue;
 
@@ -163,12 +170,9 @@ function convertLimitsToWindows(
       usedPercent: Math.max(0, Math.min(100, usedPercent)),
     };
 
-    if (
-      limit.window?.resetsAt !== undefined &&
-      Number.isFinite(limit.window.resetsAt)
-    ) {
-      const resetsAtDate = new Date(limit.window.resetsAt);
-      if (!Number.isNaN(resetsAtDate.getTime())) {
+    if (limit.window?.resetsAt !== undefined) {
+      const resetsAtDate = safeDate(limit.window.resetsAt);
+      if (resetsAtDate) {
         window.resetsAt = resetsAtDate;
         window.resetDescription = formatReset(resetsAtDate);
       }

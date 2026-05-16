@@ -1,4 +1,3 @@
-import * as fs from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Mock node:fs and node:os so that common.ts doesn't fail on missing auth files
@@ -27,19 +26,17 @@ vi.mock("node:os", async () => {
 
 vi.mock("node:child_process", async () => {
   const util = await import("node:util");
-  const execMock = vi.fn(
-    (_cmd: string, _options: unknown, cb: unknown) => {
-      const callback = typeof _options === "function" ? _options : cb;
-      if (typeof callback === "function") {
-        (callback as (err: null, stdout: string, stderr: string) => void)(
-          null,
-          "",
-          "",
-        );
-      }
-      return {} as ReturnType<typeof import("node:child_process").exec>;
-    },
-  );
+  const execMock = vi.fn((_cmd: string, _options: unknown, cb: unknown) => {
+    const callback = typeof _options === "function" ? _options : cb;
+    if (typeof callback === "function") {
+      (callback as (err: null, stdout: string, stderr: string) => void)(
+        null,
+        "",
+        "",
+      );
+    }
+    return {} as ReturnType<typeof import("node:child_process").exec>;
+  });
 
   Object.defineProperty(execMock, util.promisify.custom, {
     value: (cmd: string, opts: unknown) => {
@@ -56,15 +53,11 @@ vi.mock("node:child_process", async () => {
     },
   });
 
-  return { exec: execMock };
+  return { exec: execMock, execFile: execMock };
 });
 
 // Helper to build a minimal OMP usage report
-function makeOmpReport(
-  provider: string,
-  usedFraction: number,
-  email?: string,
-) {
+function makeOmpReport(provider: string, usedFraction: number, email?: string) {
   return {
     provider,
     fetchedAt: Date.now(),
@@ -95,10 +88,12 @@ describe("fetchAllUsages — OMP path", () => {
       EXTENSION_DIR: ".omp",
     }));
 
-    const fetchUsageReports = vi.fn().mockResolvedValue([
-      makeOmpReport("anthropic", 0.5, "user@example.com"),
-      makeOmpReport("github-copilot", 0.3),
-    ]);
+    const fetchUsageReports = vi
+      .fn()
+      .mockResolvedValue([
+        makeOmpReport("anthropic", 0.5, "user@example.com"),
+        makeOmpReport("github-copilot", 0.3),
+      ]);
 
     const { fetchAllUsages } = await import("../src/usage-fetchers.js");
     const modelRegistry = { authStorage: { fetchUsageReports } };
@@ -119,11 +114,13 @@ describe("fetchAllUsages — OMP path", () => {
       EXTENSION_DIR: ".omp",
     }));
 
-    const fetchUsageReports = vi.fn().mockResolvedValue([
-      makeOmpReport("anthropic", 0.5),
-      makeOmpReport("github-copilot", 0.3),
-      makeOmpReport("zai", 0.6),
-    ]);
+    const fetchUsageReports = vi
+      .fn()
+      .mockResolvedValue([
+        makeOmpReport("anthropic", 0.5),
+        makeOmpReport("github-copilot", 0.3),
+        makeOmpReport("zai", 0.6),
+      ]);
 
     const { fetchAllUsages } = await import("../src/usage-fetchers.js");
     const modelRegistry = { authStorage: { fetchUsageReports } };
@@ -288,9 +285,9 @@ describe("fetchAllUsages — OMP kiro fallback", () => {
     }));
 
     // OMP covers anthropic but not kiro
-    const fetchUsageReports = vi.fn().mockResolvedValue([
-      makeOmpReport("anthropic", 0.5),
-    ]);
+    const fetchUsageReports = vi
+      .fn()
+      .mockResolvedValue([makeOmpReport("anthropic", 0.5)]);
 
     const child_process = await import("node:child_process");
     vi.mocked(child_process.exec).mockImplementation(
@@ -327,9 +324,9 @@ describe("fetchAllUsages — OMP kiro fallback", () => {
       EXTENSION_DIR: ".omp",
     }));
 
-    const fetchUsageReports = vi.fn().mockResolvedValue([
-      makeOmpReport("anthropic", 0.5),
-    ]);
+    const fetchUsageReports = vi
+      .fn()
+      .mockResolvedValue([makeOmpReport("anthropic", 0.5)]);
 
     const { fetchAllUsages } = await import("../src/usage-fetchers.js");
     const modelRegistry = { authStorage: { fetchUsageReports } };
@@ -346,9 +343,9 @@ describe("fetchAllUsages — OMP kiro fallback", () => {
     }));
 
     // OMP covers kiro (provider name is already "kiro" in snapshot)
-    const fetchUsageReports = vi.fn().mockResolvedValue([
-      makeOmpReport("kiro", 0.4),
-    ]);
+    const fetchUsageReports = vi
+      .fn()
+      .mockResolvedValue([makeOmpReport("kiro", 0.4)]);
 
     const { fetchAllUsages } = await import("../src/usage-fetchers.js");
     const modelRegistry = { authStorage: { fetchUsageReports } };

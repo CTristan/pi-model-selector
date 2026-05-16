@@ -26,22 +26,23 @@ vi.mock("node:os", async () => {
 vi.mock("node:child_process", async () => {
   const util = await import("node:util");
   const execMock = vi.fn((_cmd: string, options: unknown, cb: unknown) => {
-    if (typeof options === "function") cb = options;
-    if (typeof cb === "function")
-      (cb as (err: null, stdout: string, stderr: string) => void)(
+    const callback = typeof options === "function" ? options : cb;
+    if (typeof callback === "function") {
+      (callback as (err: null, stdout: string, stderr: string) => void)(
         null,
         "",
         "",
       );
+    }
     return {} as ReturnType<typeof import("node:child_process").exec>;
   });
 
   Object.defineProperty(execMock, util.promisify.custom, {
-    value: (cmd: string, _options: unknown) => {
+    value: (cmd: string, options: unknown) => {
       return new Promise((resolve, reject) => {
         execMock(
           cmd,
-          _options,
+          options,
           (err: Error | null, stdout: string, stderr: string) => {
             if (err) reject(err);
             else resolve({ stdout, stderr });
@@ -51,7 +52,7 @@ vi.mock("node:child_process", async () => {
     },
   });
 
-  return { exec: execMock };
+  return { exec: execMock, execFile: execMock };
 });
 
 describe("loadPiAuth OMP SQLite fallback", () => {
@@ -106,7 +107,10 @@ describe("loadPiAuth OMP SQLite fallback", () => {
           (callback as (err: null, stdout: string, stderr: string) => void)(
             null,
             JSON.stringify([
-              { provider: "anthropic", data: JSON.stringify({ access: "tok-anthropic" }) },
+              {
+                provider: "anthropic",
+                data: JSON.stringify({ access: "tok-anthropic" }),
+              },
               { provider: "zai", data: JSON.stringify({ key: "zai-key-123" }) },
             ]),
             "",
@@ -138,7 +142,10 @@ describe("loadPiAuth OMP SQLite fallback", () => {
           (callback as (err: null, stdout: string, stderr: string) => void)(
             null,
             JSON.stringify([
-              { provider: "valid", data: JSON.stringify({ access: "good-token" }) },
+              {
+                provider: "valid",
+                data: JSON.stringify({ access: "good-token" }),
+              },
               { provider: "malformed", data: "{{not json}}" },
             ]),
             "",

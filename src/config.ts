@@ -748,8 +748,12 @@ export function cleanupConfigRaw(
     const debug = raw.debugLog as Record<string, unknown>;
     if (options.scope === "global" && typeof debug.path === "string") {
       const originalPath = debug.path.trim(),
+        escapedExtensionDir = EXTENSION_DIR.replace(
+          /[.*+?^${}()|[\]\\]/g,
+          "\\$&",
+        ),
         correctedPath = originalPath.replace(
-          new RegExp(`^(?:\\.\\/)?${EXTENSION_DIR}\\/`),
+          new RegExp(`^(?:\\.\\/)?${escapedExtensionDir}\\/`),
           "",
         );
       if (correctedPath.length > 0 && correctedPath !== originalPath) {

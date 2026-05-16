@@ -185,11 +185,11 @@ describe("Config removeMapping Branch Coverage", () => {
         minimax: { groupId: "group-a", region: "global" },
       });
 
-      updateProviderSettings(
-        { providerSettings: { minimax: "invalid" } },
-        "minimax",
-        { groupId: "group-b" },
-      );
+      const rawWithInvalid = { providerSettings: { minimax: "invalid" } };
+      updateProviderSettings(rawWithInvalid, "minimax", { groupId: "group-b" });
+      expect(rawWithInvalid.providerSettings).toEqual({
+        minimax: { groupId: "group-b" },
+      });
     });
 
     it("should keep malformed existing mappings while upserting valid mappings", () => {

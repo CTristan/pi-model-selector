@@ -1,4 +1,4 @@
-import { exec } from "node:child_process";
+import { exec, execFile } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -7,6 +7,8 @@ import { EXTENSION_DIR, isOmp } from "../adapter.js";
 
 /** Executes a shell command asynchronously. */
 export const execAsync = promisify(exec);
+/** Executes a command asynchronously without invoking a shell. */
+export const execFileAsync = promisify(execFile);
 
 /** Editor version string for Copilot. */
 export const COPILOT_EDITOR_VERSION = "vscode/1.97.2";
@@ -72,9 +74,11 @@ export async function loadPiAuth(): Promise<Record<string, unknown>> {
   if (isOmp) {
     try {
       const dbPath = path.join(os.homedir(), ".omp", "agent", "agent.db");
-      const { stdout } = await execAsync(
-        `sqlite3 -json "${dbPath}" "SELECT provider, data FROM auth_credentials"`,
-      );
+      const { stdout } = await execFileAsync("sqlite3", [
+        "-json",
+        dbPath,
+        "SELECT provider, data FROM auth_credentials",
+      ]);
       const rows = JSON.parse(stdout) as { provider: string; data: string }[];
       const auth: Record<string, unknown> = {};
       for (const row of rows) {

@@ -139,12 +139,18 @@ export async function hasProviderCredential(
           return true;
         }
       }
+
+      if (provider === "zai") {
+        const registryKey = await modelRegistry.authStorage.getApiKey?.("zai");
+        if (isNonEmptyString(registryKey) || resolveZaiApiKey(piAuth)) {
+          return true;
+        }
+      }
     } catch {
       // Ignore registry access errors
     }
   }
 
-  // Check piAuth for applicable providers
   if (provider === "zai" && resolveZaiApiKey(piAuth)) {
     return true;
   }

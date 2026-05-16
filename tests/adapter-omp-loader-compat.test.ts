@@ -42,10 +42,7 @@ describe("adapter OMP loader compatibility", () => {
       "utf-8",
     );
 
-    const executableSource = source
-      .split("\n")
-      .filter((line) => !line.trimStart().startsWith("//"))
-      .join("\n");
+    const executableSource = stripComments(source);
 
     expect(executableSource).toMatch(
       /await\s+import\(\s*"@mariozechner\/pi-coding-agent"\s*\)/,
