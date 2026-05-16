@@ -24,7 +24,14 @@ echo "Running type check..."
 npm run type-check
 
 echo "Running TypeDoc..."
-npx typedoc --emit none --treatWarningsAsErrors
+TYPEDOC_OUT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/pi-model-selector-typedoc.XXXXXX")"
+trap 'rm -rf "$TYPEDOC_OUT_DIR"' EXIT
+TYPEDOC_COVERAGE_FILE="$TYPEDOC_OUT_DIR/coverage.json"
+npx typedoc \
+  --out "$TYPEDOC_OUT_DIR" \
+  --coverageOutputPath "$TYPEDOC_COVERAGE_FILE" \
+  --coverageOutputType json
+node scripts/typedoc-check.cjs "$TYPEDOC_COVERAGE_FILE" 80
 
 if [ "$CHECK_ONLY" = "true" ]; then
   echo "Running linting and formatting (check only)..."
