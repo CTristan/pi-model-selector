@@ -95,19 +95,24 @@ async function discoverCodexCredentials(
     seenTokens = new Set<string>(),
     seenAccounts = new Set<string>(),
     piAuths = getPiCodexAuths(piAuth);
-  for (const p of piAuths) {
-    if (!seenTokens.has(p.accessToken)) {
-      const result: CodexCredential = {
-        accessToken: p.accessToken,
-        source: p.source,
-      };
-      if (p.accountId !== undefined) {
-        result.accountId = p.accountId;
-        seenAccounts.add(p.accountId);
-      }
-      credentials.push(result);
-      seenTokens.add(p.accessToken);
+  const addCredential = (credential: CodexCredential): void => {
+    if (seenTokens.has(credential.accessToken)) return;
+    if (
+      credential.accountId !== undefined &&
+      seenAccounts.has(credential.accountId)
+    ) {
+      return;
     }
+
+    credentials.push(credential);
+    seenTokens.add(credential.accessToken);
+    if (credential.accountId !== undefined) {
+      seenAccounts.add(credential.accountId);
+    }
+  };
+
+  for (const p of piAuths) {
+    addCredential(p);
   }
   try {
     const mr = modelRegistry as {
@@ -124,22 +129,20 @@ async function discoverCodexCredentials(
       };
     };
     const registryToken = await mr?.authStorage?.getApiKey?.("openai-codex");
-    if (typeof registryToken === "string" && !seenTokens.has(registryToken)) {
+    if (typeof registryToken === "string") {
       const cred = await mr?.authStorage?.get?.("openai-codex"),
         accountId =
           cred?.type === "oauth" && typeof cred.accountId === "string"
             ? cred.accountId
-            : undefined;
-      const result: CodexCredential = {
-        accessToken: registryToken,
-        source: "registry",
-      };
+            : undefined,
+        result: CodexCredential = {
+          accessToken: registryToken,
+          source: "registry",
+        };
       if (accountId !== undefined) {
         result.accountId = accountId;
-        seenAccounts.add(accountId);
       }
-      credentials.push(result);
-      seenTokens.add(registryToken);
+      addCredential(result);
     }
   } catch {
     // Ignore registry access errors
@@ -158,16 +161,10 @@ async function discoverCodexCredentials(
         const authPath = path.join(codexHome, authFile),
           auth = await readCodexAuthFile(authPath);
 
-        if (!auth.accessToken || seenTokens.has(auth.accessToken)) {
+        if (!auth.accessToken) {
           continue;
         }
 
-        // Skip file credentials for accounts already covered by piAuth/registry
-        if (auth.accountId && seenAccounts.has(auth.accountId)) {
-          continue;
-        }
-
-        seenTokens.add(auth.accessToken);
         const nameMatch = authFile.match(/auth[_-]?(.+)?\.json/i),
           suffix = nameMatch?.[1] || "auth",
           label = `.codex:${suffix}`;
@@ -178,7 +175,7 @@ async function discoverCodexCredentials(
         if (auth.accountId !== undefined) {
           result.accountId = auth.accountId;
         }
-        credentials.push(result);
+        addCredential(result);
       }
     }
   } catch {

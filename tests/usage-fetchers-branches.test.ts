@@ -800,6 +800,66 @@ describe("Usage Fetchers Branch Coverage", () => {
       expect(result[0]!.account).toBe("shared-account-123");
       expect(result[0]!.error).toBeUndefined();
     });
+
+    it("should skip duplicate Codex account credentials before fetching usage", async () => {
+      vi.mocked(fs.promises.stat).mockResolvedValue({
+        isDirectory: () => true,
+      } as any);
+      vi.mocked(fs.promises.readdir).mockResolvedValue([
+        "auth-a.json",
+        "auth-b.json",
+      ] as any);
+      vi.mocked(fs.promises.readFile).mockImplementation(async (p) => {
+        if (String(p).endsWith("auth-a.json")) {
+          return JSON.stringify({
+            tokens: {
+              access_token: "file-token-a",
+              account_id: "shared-account",
+            },
+          });
+        }
+        if (String(p).endsWith("auth-b.json")) {
+          return JSON.stringify({
+            tokens: {
+              access_token: "file-token-b",
+              account_id: "shared-account",
+            },
+          });
+        }
+        return "";
+      });
+
+      const modelRegistry = {
+        authStorage: {
+          getApiKey: vi.fn().mockResolvedValue("registry-token"),
+          get: vi
+            .fn()
+            .mockResolvedValue({ type: "oauth", accountId: "shared-account" }),
+        },
+      };
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          rate_limit: { primary_window: { used_percent: 30 } },
+        }),
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const result = await fetchAllCodexUsages(modelRegistry, {
+        "openai-codex": {
+          access: "pi-token",
+          accountId: "shared-account",
+        },
+        "openai-codex-alt": {
+          access: "pi-token-alt",
+          accountId: "shared-account",
+        },
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.account).toBe("shared-account");
+    });
   });
   // ========================================================================
   // Kiro
