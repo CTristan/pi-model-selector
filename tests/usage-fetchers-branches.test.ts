@@ -41,29 +41,34 @@ vi.mock("node:os", async () => {
 
 vi.mock("node:child_process", async () => {
   const util = await import("node:util");
-  const execMock = vi.fn((_cmd, options, cb) => {
-    if (typeof options === "function") cb = options;
-    if (cb) cb(null, "", "");
-    return {} as ReturnType<typeof import("node:child_process").exec>; // Return mock ChildProcess
-  });
+  const makeChildProcessMock = () => {
+    const mock = vi.fn((_cmd, options, cb) => {
+      if (typeof options === "function") cb = options;
+      if (cb) cb(null, "", "");
+      return {} as ReturnType<typeof import("node:child_process").exec>;
+    });
 
-  Object.defineProperty(execMock, util.promisify.custom, {
-    value: (cmd: string, options: any) => {
-      return new Promise((resolve, reject) => {
-        execMock(
-          cmd,
-          options,
-          (err: Error | null, stdout: string, stderr: string) => {
-            if (err) reject(err);
-            else resolve({ stdout, stderr });
-          },
-        );
-      });
-    },
-  });
+    Object.defineProperty(mock, util.promisify.custom, {
+      value: (cmd: string, options: any) => {
+        return new Promise((resolve, reject) => {
+          mock(
+            cmd,
+            options,
+            (err: Error | null, stdout: string, stderr: string) => {
+              if (err) reject(err);
+              else resolve({ stdout, stderr });
+            },
+          );
+        });
+      },
+    });
+
+    return mock;
+  };
 
   return {
-    exec: execMock,
+    exec: makeChildProcessMock(),
+    execFile: makeChildProcessMock(),
   };
 });
 
@@ -756,8 +761,112 @@ describe("Usage Fetchers Branch Coverage", () => {
       const result = await fetchAllCodexUsages({}, piAuth);
       expect(result).toHaveLength(1);
     });
-  });
 
+    it("should fetch distinct .codex and piAuth credentials then deduplicate by account", async () => {
+      vi.mocked(fs.promises.stat).mockResolvedValue({
+        isDirectory: () => true,
+      } as any);
+
+      vi.mocked(fs.promises.readdir).mockResolvedValue(["auth.json"] as any);
+
+      vi.mocked(fs.promises.readFile).mockImplementation(async (p) => {
+        if (String(p).endsWith("auth.json"))
+          return JSON.stringify({
+            tokens: {
+              access_token: "stale-file-token",
+              account_id: "shared-account-123",
+            },
+          });
+        return "";
+      });
+
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          rate_limit: { primary_window: { used_percent: 30 } },
+        }),
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      // piAuth has fresh token for the same account_id as the file
+      const result = await fetchAllCodexUsages(
+        {},
+        {
+          "openai-codex": {
+            access: "fresh-pi-token",
+            accountId: "shared-account-123",
+          },
+        },
+      );
+
+      // Both credentials should be tried (token dedup only), then final dedup merges by account
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.account).toBe("shared-account-123");
+      expect(result[0]!.error).toBeUndefined();
+    });
+
+    it("should fetch all distinct Codex tokens then deduplicate by account", async () => {
+      vi.mocked(fs.promises.stat).mockResolvedValue({
+        isDirectory: () => true,
+      } as any);
+      vi.mocked(fs.promises.readdir).mockResolvedValue([
+        "auth-a.json",
+        "auth-b.json",
+      ] as any);
+      vi.mocked(fs.promises.readFile).mockImplementation(async (p) => {
+        if (String(p).endsWith("auth-a.json")) {
+          return JSON.stringify({
+            tokens: {
+              access_token: "file-token-a",
+              account_id: "shared-account",
+            },
+          });
+        }
+        if (String(p).endsWith("auth-b.json")) {
+          return JSON.stringify({
+            tokens: {
+              access_token: "file-token-b",
+              account_id: "shared-account",
+            },
+          });
+        }
+        return "";
+      });
+
+      const modelRegistry = {
+        authStorage: {
+          getApiKey: vi.fn().mockResolvedValue("registry-token"),
+          get: vi
+            .fn()
+            .mockResolvedValue({ type: "oauth", accountId: "shared-account" }),
+        },
+      };
+      const fetchMock = vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          rate_limit: { primary_window: { used_percent: 30 } },
+        }),
+      });
+      vi.stubGlobal("fetch", fetchMock);
+
+      const result = await fetchAllCodexUsages(modelRegistry, {
+        "openai-codex": {
+          access: "pi-token",
+          accountId: "shared-account",
+        },
+        "openai-codex-alt": {
+          access: "pi-token-alt",
+          accountId: "shared-account",
+        },
+      });
+
+      // All distinct tokens are tried; final dedup merges by account
+      expect(fetchMock).toHaveBeenCalledTimes(5);
+      expect(result).toHaveLength(1);
+      expect(result[0]!.account).toBe("shared-account");
+    });
+  });
   // ========================================================================
   // Kiro
   // ========================================================================
@@ -1450,7 +1559,7 @@ describe("Usage Fetchers Branch Coverage", () => {
             }),
           }),
         );
-        const res = await fetchZaiUsage({ "z-ai": { access: "k" } });
+        const res = await fetchZaiUsage({}, { "z-ai": { access: "k" } });
         expect(res.windows[0]!.label).toBe("Tokens (10m)");
       });
 
@@ -1466,7 +1575,7 @@ describe("Usage Fetchers Branch Coverage", () => {
             }),
           }),
         );
-        const res = await fetchZaiUsage({ "z-ai": { access: "k" } });
+        const res = await fetchZaiUsage({}, { "z-ai": { access: "k" } });
         expect(res.windows).toHaveLength(0);
       });
 
@@ -1478,7 +1587,7 @@ describe("Usage Fetchers Branch Coverage", () => {
             json: async () => ({ success: false, msg: "failed" }),
           }),
         );
-        const res = await fetchZaiUsage({ "z-ai": { access: "k" } });
+        const res = await fetchZaiUsage({}, { "z-ai": { access: "k" } });
         expect(res.error).toBe("failed");
       });
     });

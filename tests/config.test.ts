@@ -216,6 +216,47 @@ describe("Config Loading", () => {
     expect(config?.enableModelLocking).toBe(false);
   });
 
+  it("should default preserveDefaultModel to false in Pi runtime", async () => {
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce("{}"); // Global
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce(
+      JSON.stringify({
+        mappings: [{ usage: { provider: "p1" }, ignore: true }],
+      }),
+    ); // Project
+    const config = await loadConfig(mockCtx);
+    expect(config?.preserveDefaultModel).toBe(false);
+  });
+
+  it("should let project preserveDefaultModel override global", async () => {
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce(
+      JSON.stringify({ preserveDefaultModel: true }),
+    ); // Global
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce(
+      JSON.stringify({
+        preserveDefaultModel: false,
+        mappings: [{ usage: { provider: "p1" }, ignore: true }],
+      }),
+    ); // Project
+    const config = await loadConfig(mockCtx);
+    expect(config?.preserveDefaultModel).toBe(false);
+  });
+
+  it("should reject non-boolean preserveDefaultModel with an error notify", async () => {
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce("{}"); // Global
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce(
+      JSON.stringify({
+        preserveDefaultModel: "yes",
+        mappings: [{ usage: { provider: "p1" }, ignore: true }],
+      }),
+    ); // Project
+    const config = await loadConfig(mockCtx);
+    expect(config).toBeNull();
+    const notifyMock = vi.mocked(mockCtx.ui.notify);
+    const calls = notifyMock.mock.calls;
+    const errorCall = calls.find((call) => call[1] === "error");
+    expect(errorCall).toBeDefined();
+    expect(String(errorCall?.[0])).toMatch(/preserveDefaultModel/);
+  });
   it("should reject non-boolean enableModelLocking with an error notify", async () => {
     vi.mocked(fs.promises.readFile).mockResolvedValueOnce("{}"); // Global
     vi.mocked(fs.promises.readFile).mockResolvedValueOnce(
@@ -269,8 +310,8 @@ describe("Config Loading", () => {
     const config = await loadConfig(mockCtx);
 
     expect(fs.promises.writeFile).toHaveBeenCalled();
-    // Default mappings length is 11
-    expect(config?.mappings).toHaveLength(11);
+    // Default mappings length is 9
+    expect(config?.mappings).toHaveLength(9);
     expect(config?.mappings[0]?.usage.provider).toBe("anthropic");
   });
 

@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { getRawMappings, removeMapping } from "../src/config.js";
+import {
+  clearBucketMappings,
+  getRawMappings,
+  removeMapping,
+  updateProviderSettings,
+  upsertMapping,
+} from "../src/config.js";
+import type { MappingEntry } from "../src/types.js";
 
 describe("Config removeMapping Branch Coverage", () => {
   it("should remove only ignore mappings when onlyIgnore is true", () => {
@@ -161,6 +168,85 @@ describe("Config removeMapping Branch Coverage", () => {
       // normalizeMappings should skip invalid entries
       // If all are invalid, it might return empty or skip them
       expect(Array.isArray(result)).toBe(true);
+    });
+  });
+
+  describe("mutation helper branch coverage", () => {
+    it("should update provider settings for missing and existing provider blocks", () => {
+      const raw: Record<string, unknown> = {};
+
+      updateProviderSettings(raw, "minimax", { groupId: "group-a" });
+      expect(raw.providerSettings).toEqual({
+        minimax: { groupId: "group-a" },
+      });
+
+      updateProviderSettings(raw, "minimax", { region: "global" });
+      expect(raw.providerSettings).toEqual({
+        minimax: { groupId: "group-a", region: "global" },
+      });
+
+      const rawWithInvalid = { providerSettings: { minimax: "invalid" } };
+      updateProviderSettings(rawWithInvalid, "minimax", { groupId: "group-b" });
+      expect(rawWithInvalid.providerSettings).toEqual({
+        minimax: { groupId: "group-b" },
+      });
+    });
+
+    it("should keep malformed existing mappings while upserting valid mappings", () => {
+      const raw: Record<string, unknown> = {
+        mappings: [
+          { usage: { provider: 123 }, ignore: true },
+          { invalid: "entry" },
+        ],
+      };
+      const mapping: MappingEntry = {
+        usage: { provider: "anthropic", account: "acct", window: "Week" },
+        model: { provider: "anthropic", id: "claude-opus-4-5" },
+      };
+
+      upsertMapping(raw, mapping);
+
+      expect(raw.mappings).toEqual([
+        { usage: { provider: 123 }, ignore: true },
+        { invalid: "entry" },
+        mapping,
+      ]);
+    });
+
+    it("should preserve non-action mappings when clearing bucket mappings", () => {
+      const raw: Record<string, unknown> = {
+        mappings: [
+          null,
+          { usage: "invalid" },
+          { usage: { provider: 123, window: "Week" }, ignore: true },
+          { usage: { provider: "anthropic", window: "Week" } },
+          { usage: { provider: "anthropic", window: "Month" }, ignore: true },
+          {
+            usage: { provider: "anthropic", account: "other", window: "Week" },
+            ignore: true,
+          },
+          { usage: { provider: "anthropic", window: "Week" }, ignore: true },
+        ],
+      };
+
+      const removed = clearBucketMappings(raw, {
+        provider: "anthropic",
+        account: "acct",
+        window: "Week",
+      });
+
+      expect(removed).toBe(1);
+      expect(raw.mappings).toEqual([
+        null,
+        { usage: "invalid" },
+        { usage: { provider: 123, window: "Week" }, ignore: true },
+        { usage: { provider: "anthropic", window: "Week" } },
+        { usage: { provider: "anthropic", window: "Month" }, ignore: true },
+        {
+          usage: { provider: "anthropic", account: "other", window: "Week" },
+          ignore: true,
+        },
+      ]);
     });
   });
 });

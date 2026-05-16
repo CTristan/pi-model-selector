@@ -67,6 +67,7 @@ describe("Selector with enableModelLocking: false", () => {
 
   const createContext = (): ExtensionContext =>
     ({
+      signal: new AbortController().signal,
       modelRegistry: {
         find: vi.fn(
           (provider: string, id: string) =>
@@ -87,7 +88,6 @@ describe("Selector with enableModelLocking: false", () => {
       hasUI: true,
       cwd: "/mock",
       sessionManager: {} as ExtensionContext["sessionManager"],
-      signal: undefined,
       isIdle: vi.fn().mockReturnValue(true),
       abort: vi.fn(),
       hasPendingMessages: vi.fn().mockReturnValue(false),

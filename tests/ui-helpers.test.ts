@@ -1,5 +1,5 @@
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   isCatchAllIgnoreMapping,
@@ -186,6 +186,10 @@ describe("UI Helpers", () => {
       } as unknown as ExtensionContext;
     });
 
+    afterEach(() => {
+      vi.doUnmock("../src/adapter.js");
+    });
+
     it("returns first option when hasUI is false", async () => {
       const { selectWrapped } = await import("../src/ui-helpers.js");
       const result = await selectWrapped(mockCtx, "Test", [
@@ -239,6 +243,66 @@ describe("UI Helpers", () => {
         "option2",
       ]);
       expect(result).toBe("option1");
+    });
+
+    it("falls back to default cursor when custom theme has no nav object", async () => {
+      const previousVitest = process.env.VITEST;
+      delete process.env.VITEST;
+
+      let capturedTheme: { symbols?: { cursor?: string } } | undefined;
+      class SelectListMock {
+        onSelect?: (item: { value: string }) => void;
+        onCancel?: () => void;
+
+        constructor(_items: unknown, _height: number, theme: unknown) {
+          capturedTheme = theme as { symbols?: { cursor?: string } };
+        }
+      }
+
+      vi.resetModules();
+      vi.doMock("../src/adapter.js", () => ({
+        Container: class {
+          addChild() {}
+          render() {
+            return [];
+          }
+          invalidate() {}
+        },
+        DynamicBorder: class {},
+        SelectList: SelectListMock,
+        Spacer: class {},
+        Text: class {},
+      }));
+
+      try {
+        const { selectWrapped } = await import("../src/ui-helpers.js");
+        mockCtx.hasUI = true;
+        (mockCtx.ui as any).custom = vi.fn((render: any) => {
+          render(
+            {},
+            {
+              fg: (_color: string, text: string) => text,
+              bold: (text: string) => text,
+            },
+            {},
+            vi.fn(),
+          );
+          return Promise.resolve("option1");
+        });
+
+        await expect(
+          selectWrapped(mockCtx, "Test", ["option1", "option2"]),
+        ).resolves.toBe("option1");
+        expect(capturedTheme?.symbols?.cursor).toBe(">");
+      } finally {
+        if (previousVitest === undefined) {
+          delete process.env.VITEST;
+        } else {
+          process.env.VITEST = previousVitest;
+        }
+        vi.doUnmock("../src/adapter.js");
+        vi.resetModules();
+      }
     });
   });
 });

@@ -22,6 +22,11 @@ async function whichAsync(cmd: string): Promise<string | null> {
   }
 }
 
+/**
+ * Parses a single Kiro reset date string (MM/DD or DD/MM) into a Date object.
+ * @param dateStr The date string from the Kiro CLI output.
+ * @returns The parsed Date or undefined if invalid.
+ */
 export function parseSingleKiroResetDate(dateStr: string): Date | undefined {
   const [first, second] = dateStr.split("/").map(Number);
   if (first === undefined || second === undefined) return undefined;
@@ -88,6 +93,8 @@ export function parseSingleKiroResetDate(dateStr: string): Date | undefined {
 
 /**
  * Parses Kiro CLI output to extract multiple quota windows.
+ * @param output The raw string output from the Kiro CLI.
+ * @returns An array of parsed rate windows.
  */
 export function parseKiroWindows(output: string): RateWindow[] {
   const windows: RateWindow[] = [];
@@ -277,6 +284,10 @@ export function parseKiroWindows(output: string): RateWindow[] {
   return Object.values(deduped);
 }
 
+/**
+ * Fetches usage snapshots by running the Kiro CLI.
+ * @returns A promise resolving to the usage snapshot.
+ */
 export async function fetchKiroUsage(): Promise<UsageSnapshot> {
   const kiroBinary = await whichAsync("kiro-cli");
   if (!kiroBinary) {

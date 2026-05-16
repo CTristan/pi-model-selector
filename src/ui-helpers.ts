@@ -1,21 +1,20 @@
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
-import {
-  DynamicBorder,
-  getSelectListTheme,
-} from "@mariozechner/pi-coding-agent";
+import type * as PiTui from "@mariozechner/pi-tui";
+import type { SelectItem } from "@mariozechner/pi-tui";
 
 import {
   Container,
-  type SelectItem,
+  DynamicBorder,
   SelectList,
   Spacer,
   Text,
-} from "@mariozechner/pi-tui";
+} from "./adapter.js";
 
 import type { PriorityRule } from "./types.js";
 
 const CATCH_ALL_PATTERNS = ["*", ".*", "^.*$", "^.*", ".*$", ".+", "^.+$"];
 
+/** Returns whether an ignore mapping covers every window for a provider. */
 export function isCatchAllIgnoreMapping(usage: {
   window?: string | null;
   windowPattern?: string | null;
@@ -40,6 +39,7 @@ export function isCatchAllIgnoreMapping(usage: {
   return false;
 }
 
+/** Returns whether provider/account usage is suppressed by catch-all ignore mapping. */
 export function isProviderIgnored(
   provider: string,
   account: string | undefined,
@@ -62,6 +62,7 @@ export function isProviderIgnored(
   );
 }
 
+/** Shows a selectable list using Pi UI, falling back to standard select when needed. */
 export async function selectWrapped(
   ctx: ExtensionContext,
   title: string,
@@ -86,10 +87,30 @@ export async function selectWrapped(
     container.addChild(new Spacer(1));
 
     const items = options.map((o) => ({ value: o, label: o }));
+    // Build the select list theme from the callback's theme parameter instead of
+    // calling getSelectListTheme(), which captures the module-level theme singleton
+    // that may not be initialized in the extension's module context (e.g. when the
+    // host runtime mirrors the extension into a temp directory for compat).
+    const nav = "nav" in theme ? theme.nav : undefined;
+    const selectListTheme = {
+      selectedPrefix: (text: string) => theme.fg("accent", text),
+      selectedText: (text: string) => theme.fg("accent", text),
+      description: (text: string) => theme.fg("muted", text),
+      scrollInfo: (text: string) => theme.fg("muted", text),
+      noMatch: (text: string) => theme.fg("muted", text),
+      // OMP's SelectList requires symbols.cursor; legacy Pi's does not.
+      // Use a defensive check so both runtimes work.
+      symbols: {
+        cursor:
+          nav && typeof nav === "object" && "cursor" in nav
+            ? (nav as { cursor: string }).cursor
+            : ">",
+      },
+    };
     const selectList = new SelectList(
       items,
       Math.min(items.length, 15),
-      getSelectListTheme(),
+      selectListTheme as unknown as PiTui.SelectListTheme,
     );
     selectList.onSelect = (item: SelectItem) => done(item.value);
     selectList.onCancel = () => done(undefined);
@@ -113,6 +134,7 @@ export async function selectWrapped(
   });
 }
 
+/** Preset priority-rule orderings offered by the configuration wizard. */
 export const priorityOptions: Array<{ label: string; value: PriorityRule[] }> =
   [
     {

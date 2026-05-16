@@ -3,6 +3,7 @@ import type {
   ExtensionContext,
 } from "@mariozechner/pi-coding-agent";
 
+import { withPreservedOmpDefaultModelRole } from "./adapter.js";
 import {
   buildCandidates,
   candidateKey,
@@ -13,7 +14,6 @@ import {
   selectionReason,
   sortCandidates,
 } from "./candidates.js";
-
 import { loadConfig } from "./config.js";
 import type { CooldownManager } from "./cooldown.js";
 
@@ -41,6 +41,9 @@ import { clearWidget, renderUsageWidget, updateWidgetState } from "./widget.js";
 const MODEL_LOCK_WAIT_TIMEOUT_MS = 10 * 60 * 1000;
 const MODEL_LOCK_POLL_MS = 1250;
 
+/**
+ * Optional inputs and lock behavior overrides for a selector run.
+ */
 export interface SelectorOptions {
   preloadedConfig?: LoadedConfig;
   preloadedUsages?: UsageSnapshot[];
@@ -48,12 +51,21 @@ export interface SelectorOptions {
   waitForModelLock?: boolean;
 }
 
+/**
+ * Result of an explicit model selection attempt.
+ */
 export interface SelectorResult {
   success: boolean;
   model?: { provider: string; id: string };
 }
 
+/**
+ * Coordinates cross-instance model locks for shared provider models.
+ */
 export interface ModelLockCoordinator {
+  /**
+   * Attempts to acquire a lock for the provided model key.
+   */
   acquire(
     key: string,
     options?: { timeoutMs?: number },
@@ -66,17 +78,35 @@ export interface ModelLockCoordinator {
       heartbeatAt: number;
     };
   }>;
+  /**
+   * Extends the lease for a held model lock.
+   */
   refresh(key: string): Promise<boolean>;
+  /**
+   * Releases a held model lock.
+   */
   release(key: string): Promise<boolean>;
+  /**
+   * Releases all locks owned by this coordinator.
+   */
   releaseAll(): Promise<number>;
 }
 
+/**
+ * Caller context that explains why selection is running.
+ */
 export type SelectorReason = "startup" | "command" | "auto" | "request";
 
+/**
+ * Creates the default file-backed coordinator used for model locks.
+ */
 export function createModelLockCoordinator(): ModelLockCoordinator {
   return createModelLockCoordinatorImpl();
 }
 
+/**
+ * Selects the best available model, updates Pi state, and refreshes selector UI.
+ */
 export async function runSelector(
   ctx: ExtensionContext,
   cooldownManager: CooldownManager,
@@ -385,6 +415,31 @@ export async function runSelector(
   }
 }
 
+async function setModelForSelector(
+  pi: ExtensionAPI,
+  model: NonNullable<ReturnType<ExtensionContext["modelRegistry"]["find"]>>,
+  config: LoadedConfig,
+  selfInitiatedModelChange?: { current: boolean },
+): Promise<boolean> {
+  const setModel = async (): Promise<boolean> => {
+    if (!selfInitiatedModelChange) {
+      return await pi.setModel(model);
+    }
+
+    selfInitiatedModelChange.current = true;
+    try {
+      return await pi.setModel(model);
+    } finally {
+      selfInitiatedModelChange.current = false;
+    }
+  };
+
+  return await withPreservedOmpDefaultModelRole(
+    config.preserveDefaultModel,
+    setModel,
+  );
+}
+
 async function handleExhaustedCandidates(
   ctx: ExtensionContext,
   config: LoadedConfig,
@@ -471,18 +526,12 @@ async function handleExhaustedCandidates(
       current.id === config.fallback.id;
 
   if (!isAlreadySelected) {
-    // Mark this as self-initiated so model_select event handler doesn't pause auto-selection
-    let success: boolean;
-    if (selfInitiatedModelChange) {
-      selfInitiatedModelChange.current = true;
-      try {
-        success = await pi.setModel(fallbackModel);
-      } finally {
-        selfInitiatedModelChange.current = false;
-      }
-    } else {
-      success = await pi.setModel(fallbackModel);
-    }
+    const success = await setModelForSelector(
+      pi,
+      fallbackModel,
+      config,
+      selfInitiatedModelChange,
+    );
     if (!success) {
       notify(
         ctx,
@@ -859,18 +908,12 @@ async function finalizeSelection(
       current.id === mapping.model.id;
 
   if (!isAlreadySelected) {
-    // Mark this as self-initiated so model_select event handler doesn't pause auto-selection
-    let success: boolean;
-    if (selfInitiatedModelChange) {
-      selfInitiatedModelChange.current = true;
-      try {
-        success = await pi.setModel(model);
-      } finally {
-        selfInitiatedModelChange.current = false;
-      }
-    } else {
-      success = await pi.setModel(model);
-    }
+    const success = await setModelForSelector(
+      pi,
+      model,
+      config,
+      selfInitiatedModelChange,
+    );
     if (!success) {
       notify(
         ctx,

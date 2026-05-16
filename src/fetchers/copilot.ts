@@ -15,6 +15,7 @@ import {
 const COPILOT_ETAGS = new Map<string, string>();
 const COPILOT_DATA_CACHE = new Map<string, unknown>();
 
+/** Fetches usage information for GitHub Copilot. */
 export async function fetchCopilotUsage(
   modelRegistry: unknown,
   piAuth: Record<string, unknown> = {},

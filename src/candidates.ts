@@ -15,6 +15,9 @@ function clampPercent(value: number): number {
   return Math.max(0, Math.min(100, value));
 }
 
+/**
+ * Builds a list of usage candidates from raw usage snapshots.
+ */
 export function buildCandidates(usages: UsageSnapshot[]): UsageCandidate[] {
   const candidates: UsageCandidate[] = [];
 
@@ -48,6 +51,9 @@ export function buildCandidates(usages: UsageSnapshot[]): UsageCandidate[] {
 // Candidate Comparison
 // ============================================================================
 
+/**
+ * Compares two candidates to determine their sorting order based on priority rules and mappings.
+ */
 export function compareCandidates(
   a: UsageCandidate,
   b: UsageCandidate,
@@ -105,6 +111,9 @@ function compareByPriority(
   return compareCandidates(a, b, priority, mappings).diff;
 }
 
+/**
+ * Sorts candidates using priority rules and configurations.
+ */
 export function sortCandidates(
   candidates: UsageCandidate[],
   priority: PriorityRule[],
@@ -117,6 +126,9 @@ export function sortCandidates(
   });
 }
 
+/**
+ * Returns a human-readable reason why the best candidate was selected over the runner-up.
+ */
 export function selectionReason(
   best: UsageCandidate,
   runnerUp: UsageCandidate | undefined,
@@ -244,6 +256,9 @@ function findMappingBy(
   return undefined;
 }
 
+/**
+ * Finds the model mapping for a given candidate, if any exists.
+ */
 export function findModelMapping(
   candidate: UsageCandidate,
   mappings: MappingEntry[],
@@ -255,6 +270,9 @@ export function findModelMapping(
   );
 }
 
+/**
+ * Finds the ignore mapping for a given candidate, if any exists.
+ */
 export function findIgnoreMapping(
   candidate: UsageCandidate,
   mappings: MappingEntry[],
@@ -266,6 +284,9 @@ export function findIgnoreMapping(
   );
 }
 
+/**
+ * Finds the combination mapping for a given candidate, if any exists.
+ */
 export function findCombinationMapping(
   candidate: UsageCandidate,
   mappings: MappingEntry[],
@@ -292,10 +313,16 @@ export function getReserveThreshold(
   return mapping.reserve ?? 0;
 }
 
+/**
+ * Generates a unique key for a candidate based on provider, account, window, and synthethic flag.
+ */
 export function candidateKey(candidate: UsageCandidate): string {
   return `${candidate.provider}|${candidate.account ?? ""}|${candidate.windowLabel}|${candidate.isSynthetic ? "synthetic" : "raw"}`;
 }
 
+/**
+ * Deduplicates candidates by their unique key, keeping the one with higher remaining quota.
+ */
 export function dedupeCandidates(
   candidates: UsageCandidate[],
 ): UsageCandidate[] {
@@ -310,6 +337,9 @@ export function dedupeCandidates(
   return Array.from(byKey.values());
 }
 
+/**
+ * Combines candidates according to combination mappings, summing their quotas.
+ */
 export function combineCandidates(
   candidates: UsageCandidate[],
   mappings: MappingEntry[],

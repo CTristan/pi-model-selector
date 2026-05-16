@@ -5,6 +5,7 @@ import type {
 
 import {
   buildCandidates,
+  candidateKey,
   combineCandidates,
   findIgnoreMapping,
   sortCandidates,
@@ -12,18 +13,25 @@ import {
 import { loadConfig } from "./src/config.js";
 import { CooldownManager } from "./src/cooldown.js";
 
-import { createModelLockCoordinator } from "./src/model-locks.js";
+import { createModelLockCoordinator, modelLockKey } from "./src/model-locks.js";
 import { runSelector, type SelectorReason } from "./src/selector.js";
 import type { LoadedConfig, UsageSnapshot } from "./src/types.js";
 import { notify, writeDebugLog } from "./src/types.js";
 import { fetchAllUsages } from "./src/usage-fetchers.js";
-import { renderUsageWidget, updateWidgetState } from "./src/widget.js";
+import {
+  getWidgetState,
+  renderUsageWidget,
+  updateWidgetState,
+} from "./src/widget.js";
 import { runMappingWizard } from "./src/wizard.js";
 
 // ============================================================================
 // Extension Hook
 // ============================================================================
 
+/**
+ * Registers the model selector extension hooks and slash commands with Pi.
+ */
 export default function modelSelectorExtension(pi: ExtensionAPI) {
   const cooldownManager = new CooldownManager();
   const modelLockCoordinator = createModelLockCoordinator();
@@ -115,7 +123,6 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
       writeDebugLog("Auto-selection disabled: --model CLI flag detected");
       // Ensure any existing widget reflects that auto-selection is disabled
       try {
-        const { getWidgetState } = await import("./src/widget.js");
         const state = getWidgetState();
         if (state) {
           updateWidgetState({ ...state, autoSelectionDisabled: true });
@@ -158,7 +165,6 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
         `Auto-selection paused: model explicitly selected (source: ${event.source})`,
       );
       // Update widget to reflect paused state
-      const { getWidgetState } = await import("./src/widget.js");
       const state = getWidgetState();
       if (state) {
         updateWidgetState({ ...state, autoSelectionDisabled: true });
@@ -199,7 +205,6 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
       // If we have an active lock that matches the current model, keep it.
       // Otherwise, acquire a lock for the current model to maintain coordination.
       if (ctx.model) {
-        const { modelLockKey } = await import("./src/model-locks.js");
         const currentModelKey = modelLockKey(ctx.model.provider, ctx.model.id);
         if (activeModelLockKey.current !== currentModelKey) {
           // Try to acquire the new lock first, then release the old lock.
@@ -284,7 +289,6 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
         autoSelectionDisabled = false;
         writeDebugLog("Auto-selection re-enabled via /model-select command");
         // Update widget to reflect resumed state
-        const { getWidgetState } = await import("./src/widget.js");
         const state = getWidgetState();
         if (state) {
           updateWidgetState({ ...state, autoSelectionDisabled: false });
@@ -325,8 +329,6 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
         config.disabledProviders,
         config.providerSettings,
       );
-
-      const { candidateKey } = await import("./src/candidates.js");
 
       let lastSelectedCandidateKey = cooldownManager.getLastSelectedKey();
 
@@ -378,7 +380,6 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
           preloadedUsages: usages,
         });
         // Explicitly refresh widget to show updated cooldown state
-        const { getWidgetState } = await import("./src/widget.js");
         const state = getWidgetState();
         if (state) {
           updateWidgetState({ ...state, config });
@@ -420,7 +421,6 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
             preloadedUsages: usages,
           });
           // Explicitly refresh widget to show updated cooldown state
-          const { getWidgetState } = await import("./src/widget.js");
           const state = getWidgetState();
           if (state) {
             updateWidgetState({ ...state, config });
@@ -432,7 +432,6 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
         // Still refresh widget to reflect current state
         const config = await loadConfig(ctx);
         if (config) {
-          const { getWidgetState } = await import("./src/widget.js");
           const state = getWidgetState();
           if (state) {
             updateWidgetState({ ...state, config });
@@ -459,7 +458,6 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
           "Auto model selection disabled for this session. Use Pi's built-in model selection to choose a model manually.",
         );
         // Refresh widget to show the disabled status
-        const { getWidgetState } = await import("./src/widget.js");
         const state = getWidgetState();
         if (state) {
           updateWidgetState({ ...state, autoSelectionDisabled: true });
@@ -472,7 +470,6 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
           "Auto model selection enabled for this session. The extension will now automatically select the best model.",
         );
         // Re-enable auto-selection and run it immediately
-        const { getWidgetState } = await import("./src/widget.js");
         const state = getWidgetState();
         if (state) {
           updateWidgetState({ ...state, autoSelectionDisabled: false });
@@ -522,4 +519,8 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
 }
 
 // Re-export cooldown functions for backward compatibility with tests
-export { loadCooldownState, saveCooldownState } from "./src/cooldown.js";
+export {
+  type CooldownState,
+  loadCooldownState,
+  saveCooldownState,
+} from "./src/cooldown.js";

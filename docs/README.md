@@ -12,6 +12,11 @@ This directory contains detailed information about each usage provider supported
 - [Kiro](kiro.md)
 - [z.ai](zai.md)
 
+
+## Runtime Compatibility
+
+- [OMP compatibility](omp-compatibility.md)
+
 ## Common Concepts
 
 ### Usage Windows

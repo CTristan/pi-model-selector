@@ -39,6 +39,11 @@ pi package install .
 
 Restart Pi after installation to load the extension.
 
+## Runtime compatibility
+
+This extension supports both Pi and OMP. OMP loads Pi-style extensions through a temporary Pi-compatibility mirror that rewrites literal `@mariozechner/*` SDK imports to OMP's `@oh-my-pi/*` packages. See [docs/omp-compatibility.md](docs/omp-compatibility.md) before changing SDK imports or source-relative runtime paths.
+
+
 ## Usage
 
 The extension runs automatically when you start a new session. You can also use the following commands within Pi:

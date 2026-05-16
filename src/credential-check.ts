@@ -1,3 +1,5 @@
+import { resolveMinimaxApiKey } from "./fetchers/minimax.js";
+import { resolveZaiApiKey } from "./fetchers/zai.js";
 import type { ProviderName } from "./types.js";
 
 const PROVIDER_LABELS: Record<ProviderName, string> = {
@@ -11,6 +13,9 @@ const PROVIDER_LABELS: Record<ProviderName, string> = {
   minimax: "Minimax",
 };
 
+/**
+ * A map of provider names to their human-readable display labels.
+ */
 export { PROVIDER_LABELS };
 
 function isNonEmptyString(value: unknown): value is string {
@@ -29,6 +34,14 @@ function hasTokenPayload(value: unknown): boolean {
   ].some(isNonEmptyString);
 }
 
+/**
+ * Checks if a provider has valid credentials available via environment variables,
+ * model registry storage, or user authentication configuration.
+ * @param provider The name of the provider.
+ * @param piAuth The user's Pi authentication configuration.
+ * @param modelRegistry The optional registry containing authentication storage.
+ * @returns A promise resolving to true if credentials exist, false otherwise.
+ */
 export async function hasProviderCredential(
   provider: ProviderName,
   piAuth: Record<string, unknown>,
@@ -106,6 +119,16 @@ export async function hasProviderCredential(
         }
       }
 
+      if (provider === "codex") {
+        const codexKey =
+          await modelRegistry.authStorage.getApiKey?.("openai-codex");
+        const codexData = await modelRegistry.authStorage.get?.("openai-codex");
+
+        if (isNonEmptyString(codexKey) || hasTokenPayload(codexData)) {
+          return true;
+        }
+      }
+
       if (provider === "anthropic") {
         const anthropicKey =
           await modelRegistry.authStorage.getApiKey?.("anthropic");
@@ -116,21 +139,24 @@ export async function hasProviderCredential(
           return true;
         }
       }
+
+      if (provider === "zai") {
+        const registryKey = await modelRegistry.authStorage.getApiKey?.("zai");
+        if (isNonEmptyString(registryKey) || resolveZaiApiKey(piAuth)) {
+          return true;
+        }
+      }
     } catch {
       // Ignore registry access errors
     }
   }
 
-  // Check piAuth for applicable providers
-  if (provider === "zai") {
-    // Need to import resolveZaiApiKey
-    const { resolveZaiApiKey } = await import("./fetchers/zai.js");
-    if (resolveZaiApiKey(piAuth)) return true;
+  if (provider === "zai" && resolveZaiApiKey(piAuth)) {
+    return true;
   }
 
-  if (provider === "minimax") {
-    const { resolveMinimaxApiKey } = await import("./fetchers/minimax.js");
-    if (resolveMinimaxApiKey(piAuth)) return true;
+  if (provider === "minimax" && resolveMinimaxApiKey(piAuth)) {
+    return true;
   }
 
   if (provider === "codex") {

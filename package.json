@@ -29,7 +29,24 @@
     ]
   },
   "peerDependencies": {
-    "@mariozechner/pi-coding-agent": "^0.67.68 || ^0.73.0"
+    "@mariozechner/pi-coding-agent": "^0.67.68 || ^0.73.0",
+    "@mariozechner/pi-tui": "*",
+    "@oh-my-pi/pi-coding-agent": "*",
+    "@oh-my-pi/pi-tui": "*"
+  },
+  "peerDependenciesMeta": {
+    "@mariozechner/pi-coding-agent": {
+      "optional": true
+    },
+    "@mariozechner/pi-tui": {
+      "optional": true
+    },
+    "@oh-my-pi/pi-coding-agent": {
+      "optional": true
+    },
+    "@oh-my-pi/pi-tui": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.15",
@@ -37,6 +54,8 @@
     "@types/luxon": "3.7.1",
     "@types/node": "24.12.4",
     "@vitest/coverage-v8": "4.1.6",
+    "typedoc": "^0.28.19",
+    "typedoc-plugin-coverage": "^4.0.3",
     "typescript": "6.0.3",
     "vitest": "4.1.6"
   },
