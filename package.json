@@ -52,7 +52,7 @@
     "@biomejs/biome": "2.4.16",
     "@mariozechner/pi-coding-agent": "0.73.1",
     "@types/luxon": "3.7.1",
-    "@types/node": "24.12.4",
+    "@types/node": "24.13.0",
     "@vitest/coverage-v8": "4.1.8",
     "typedoc": "0.28.19",
     "typedoc-plugin-coverage": "4.0.3",
