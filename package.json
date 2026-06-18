@@ -53,11 +53,11 @@
     "@mariozechner/pi-coding-agent": "0.73.1",
     "@types/luxon": "3.7.1",
     "@types/node": "24.13.2",
-    "@vitest/coverage-v8": "4.1.8",
+    "@vitest/coverage-v8": "4.1.9",
     "typedoc": "0.28.19",
     "typedoc-plugin-coverage": "4.0.3",
     "typescript": "6.0.3",
-    "vitest": "4.1.8"
+    "vitest": "4.1.9"
   },
   "scripts": {
     "type-check": "tsc",
