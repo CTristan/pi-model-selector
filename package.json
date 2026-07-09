@@ -54,7 +54,7 @@
     "@types/luxon": "3.7.2",
     "@types/node": "24.13.2",
     "@vitest/coverage-v8": "4.1.9",
-    "typedoc": "0.28.19",
+    "typedoc": "0.28.20",
     "typedoc-plugin-coverage": "4.0.3",
     "typescript": "6.0.3",
     "vitest": "4.1.9"
