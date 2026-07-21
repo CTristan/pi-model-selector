@@ -49,7 +49,7 @@
     }
   },
   "devDependencies": {
-    "@biomejs/biome": "2.5.3",
+    "@biomejs/biome": "2.5.4",
     "@mariozechner/pi-coding-agent": "0.73.1",
     "@types/luxon": "3.7.2",
     "@types/node": "24.13.3",
