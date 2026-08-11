@@ -631,6 +631,50 @@ describe("Usage Fetchers", () => {
   });
 
   describe("fetchZaiUsage", () => {
+    it("should emit current credit-limit windows", async () => {
+      const nextResetTime = Date.now() + 7 * 24 * 60 * 60 * 1000;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            success: true,
+            code: 200,
+            data: {
+              level: "lite",
+              limits: [
+                {
+                  type: "CREDIT_LIMIT",
+                  unit: 3,
+                  number: 5,
+                  percentage: 0,
+                },
+                {
+                  type: "CREDIT_LIMIT",
+                  unit: 6,
+                  number: 1,
+                  percentage: 7,
+                  nextResetTime,
+                },
+              ],
+            },
+          }),
+        }),
+      );
+
+      const result = await fetchZaiUsage({}, { zai: { key: "zai-key" } });
+
+      expect(result.plan).toBe("lite");
+      expect(result.windows).toHaveLength(2);
+      expect(result.windows[0]).toEqual(
+        expect.objectContaining({ label: "Credits (5h)", usedPercent: 0 }),
+      );
+      expect(result.windows[1]).toEqual(
+        expect.objectContaining({ label: "Credits (1w)", usedPercent: 7 }),
+      );
+      expect(result.windows[1]?.resetsAt?.getTime()).toBe(nextResetTime);
+    });
+
     it("should handle different time unit labels", async () => {
       vi.stubGlobal(
         "fetch",

@@ -114,9 +114,10 @@ export async function fetchZaiUsage(
       data?: {
         planName?: string;
         plan?: string;
+        level?: string;
         limits?: Array<{
           percentage?: number;
-          nextResetTime?: string;
+          nextResetTime?: string | number;
           unit?: number;
           number?: number;
           type?: string;
@@ -142,15 +143,18 @@ export async function fetchZaiUsage(
 
       let windowLabel = "Limit";
       if (typeof limit.number === "number" && typeof limit.unit === "number") {
-        // Unit: 1=day, 3=hour, 5=minute
-        if (limit.unit === 1) windowLabel = `${limit.number}d`;
-        else if (limit.unit === 3) windowLabel = `${limit.number}h`;
-        else if (limit.unit === 5) windowLabel = `${limit.number}m`;
+        // Unit: 3=hour, 4=day, 5=month, 6=week
+        if (limit.unit === 3) windowLabel = `${limit.number}h`;
+        else if (limit.unit === 4) windowLabel = `${limit.number}d`;
+        else if (limit.unit === 5) {
+          windowLabel = limit.number === 1 ? "Monthly" : `${limit.number}mo`;
+        } else if (limit.unit === 6) windowLabel = `${limit.number}w`;
       }
 
-      if (limit.type === "TOKENS_LIMIT") {
+      if (limit.type === "TOKENS_LIMIT" || limit.type === "CREDIT_LIMIT") {
+        const quotaLabel = limit.type === "TOKENS_LIMIT" ? "Tokens" : "Credits";
         const window: RateWindow = {
-          label: `Tokens (${windowLabel})`,
+          label: `${quotaLabel} (${windowLabel})`,
           usedPercent: percent,
         };
         if (nextReset) {
@@ -177,7 +181,8 @@ export async function fetchZaiUsage(
       windows,
       account: "pi-auth",
     };
-    const planValue = dataTyped.data?.planName || dataTyped.data?.plan;
+    const planValue =
+      dataTyped.data?.planName || dataTyped.data?.plan || dataTyped.data?.level;
     if (planValue !== undefined) {
       result.plan = planValue;
     }

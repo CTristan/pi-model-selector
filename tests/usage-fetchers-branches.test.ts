@@ -1543,7 +1543,7 @@ describe("Usage Fetchers Branch Coverage", () => {
     });
 
     describe("fetchZaiUsage Branches", () => {
-      it("should handle minute units (unit=5)", async () => {
+      it("should handle monthly units (unit=5)", async () => {
         vi.stubGlobal(
           "fetch",
           vi.fn().mockResolvedValue({
@@ -1560,7 +1560,7 @@ describe("Usage Fetchers Branch Coverage", () => {
           }),
         );
         const res = await fetchZaiUsage({}, { "z-ai": { access: "k" } });
-        expect(res.windows[0]!.label).toBe("Tokens (10m)");
+        expect(res.windows[0]!.label).toBe("Tokens (10mo)");
       });
 
       it("should ignore unknown limit types", async () => {

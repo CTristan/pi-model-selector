@@ -19,11 +19,12 @@ The quota request sends the `id.secret` key verbatim in the `Authorization` head
 
 ## Usage Windows
 
-- **Tokens**: Labeled based on the window duration, e.g., `Tokens (24h)`, `Tokens (1h)`.
+- **Credits**: Current coding plans report `CREDIT_LIMIT` buckets, labeled by duration such as `Credits (5h)` and `Credits (1w)`.
+- **Tokens**: Legacy `TOKENS_LIMIT` buckets retain labels such as `Tokens (5h)`.
 - **Monthly**: Corresponds to `TIME_LIMIT` type in the API.
 
 ## Logic Details
 
-- **Window Units**: The API provides units for limits (1=day, 3=hour, 5=minute), which are converted into human-readable labels like `1d`, `3h`, or `5m`.
+- **Window Units**: The API provides units for limits (3=hour, 4=day, 5=month, 6=week), which are converted into stable duration labels.
 - **Status Checking**: Validates the `success` boolean and `200` status code in the JSON response before processing data.
 - **Plan Info**: Displays the plan name returned by the API.
