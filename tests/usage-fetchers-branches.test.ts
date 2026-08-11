@@ -209,7 +209,7 @@ describe("Usage Fetchers Branch Coverage", () => {
         .mockResolvedValueOnce({ ok: false, status: 401 }) // Old token fails
         .mockResolvedValueOnce({
           ok: true,
-          json: async () => ({ five_hour: { utilization: 0.1 } }),
+          json: async () => ({ five_hour: { utilization: 10 } }),
         }); // New token succeeds
       vi.stubGlobal("fetch", fetchMock);
 
@@ -230,8 +230,8 @@ describe("Usage Fetchers Branch Coverage", () => {
         vi.fn().mockResolvedValue({
           ok: true,
           json: async () => ({
-            five_hour: { utilization: 0.9, resets_at: globalReset },
-            seven_day_sonnet: { utilization: 0.5, resets_at: sonnetReset },
+            five_hour: { utilization: 90, resets_at: globalReset },
+            seven_day_sonnet: { utilization: 50, resets_at: sonnetReset },
           }),
         }),
       );
@@ -250,9 +250,9 @@ describe("Usage Fetchers Branch Coverage", () => {
         vi.fn().mockResolvedValue({
           ok: true,
           json: async () => ({
-            five_hour: { utilization: 0.9 },
+            five_hour: { utilization: 90 },
             seven_day_sonnet: {
-              utilization: 0.5,
+              utilization: 50,
               resets_at: "2026-01-01T00:00:00Z",
             },
           }),
@@ -273,8 +273,8 @@ describe("Usage Fetchers Branch Coverage", () => {
         vi.fn().mockResolvedValue({
           ok: true,
           json: async () => ({
-            five_hour: { utilization: 0.9, resets_at: globalReset },
-            seven_day_sonnet: { utilization: 0.5 },
+            five_hour: { utilization: 90, resets_at: globalReset },
+            seven_day_sonnet: { utilization: 50 },
           }),
         }),
       );

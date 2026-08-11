@@ -11,6 +11,8 @@ Discovers API keys from:
 1. **Environment Variable**: `Z_AI_API_KEY`.
 2. **`auth.json`**: `z-ai` or `zai` entry (`access` or `key` field).
 
+The quota request sends the `id.secret` key verbatim in the `Authorization` header. It does not use a `Bearer` prefix.
+
 ## API Endpoint
 
 - **Usage**: `https://api.z.ai/api/monitor/usage/quota/limit`

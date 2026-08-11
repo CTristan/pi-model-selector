@@ -39,7 +39,7 @@ describe("Provider auth fallback behavior", () => {
           return Promise.resolve({
             ok: true,
             status: 200,
-            json: () => Promise.resolve({ five_hour: { utilization: 0.2 } }),
+            json: () => Promise.resolve({ five_hour: { utilization: 20 } }),
           } as Response);
         }
 
@@ -81,7 +81,7 @@ describe("Provider auth fallback behavior", () => {
           return Promise.resolve({
             ok: true,
             status: 200,
-            json: () => Promise.resolve({ five_hour: { utilization: 0.1 } }),
+            json: () => Promise.resolve({ five_hour: { utilization: 10 } }),
           } as Response);
         }
 

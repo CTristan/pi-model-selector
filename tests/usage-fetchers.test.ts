@@ -147,7 +147,7 @@ describe("Usage Fetchers", () => {
         .mockResolvedValueOnce({ ok: false, status: 401 })
         .mockResolvedValueOnce({
           ok: true,
-          json: () => Promise.resolve({ five_hour: { utilization: 0.1 } }),
+          json: () => Promise.resolve({ five_hour: { utilization: 10 } }),
         });
       vi.stubGlobal("fetch", fetchMock);
 
@@ -163,8 +163,8 @@ describe("Usage Fetchers", () => {
         vi.fn().mockResolvedValue({
           ok: true,
           json: async () => ({
-            five_hour: { utilization: 0.5, resets_at: "2026-02-08T22:00:00Z" },
-            seven_day: { utilization: 0.1, resets_at: "2026-02-08T23:00:00Z" },
+            five_hour: { utilization: 50, resets_at: "2026-02-08T22:00:00Z" },
+            seven_day: { utilization: 10, resets_at: "2026-02-08T23:00:00Z" },
           }),
         }),
       );
@@ -180,13 +180,13 @@ describe("Usage Fetchers", () => {
         vi.fn().mockResolvedValue({
           ok: true,
           json: async () => ({
-            five_hour: { utilization: 0.5, resets_at: "2026-02-08T22:00:00Z" },
+            five_hour: { utilization: 50, resets_at: "2026-02-08T22:00:00Z" },
             seven_day_sonnet: {
-              utilization: 0.3,
+              utilization: 30,
               resets_at: "2026-02-08T21:00:00Z",
             },
             seven_day_opus: {
-              utilization: 0.4,
+              utilization: 40,
               resets_at: "2026-02-08T23:00:00Z",
             },
           }),
@@ -668,7 +668,16 @@ describe("Usage Fetchers", () => {
               json: async () => ({
                 success: true,
                 code: 200,
-                data: { limits: [] },
+                data: {
+                  limits: [
+                    {
+                      type: "TOKENS_LIMIT",
+                      percentage: 25,
+                      unit: 3,
+                      number: 5,
+                    },
+                  ],
+                },
               }),
             }) satisfies {
               ok: boolean;
@@ -677,16 +686,22 @@ describe("Usage Fetchers", () => {
         );
         vi.stubGlobal("fetch", fetchMock);
 
-        await fetchZaiUsage({}, { zai: { key: "zai-key" } });
+        const result = await fetchZaiUsage({}, { zai: { key: "zai-key" } });
 
         expect(fetchMock).toHaveBeenCalledWith(
           expect.any(String),
           expect.objectContaining({
             headers: expect.objectContaining({
-              Authorization: "Bearer zai-key",
+              Authorization: "zai-key",
             }),
           }),
         );
+        expect(result.windows).toEqual([
+          expect.objectContaining({
+            label: "Tokens (5h)",
+            usedPercent: 25,
+          }),
+        ]);
       } finally {
         if (originalZaiKey === undefined) {
           delete process.env.Z_AI_API_KEY;

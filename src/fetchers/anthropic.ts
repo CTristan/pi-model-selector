@@ -89,7 +89,7 @@ function buildClaudeWindows(data: unknown): RateWindow[] {
 
       const window: RateWindow = {
         label,
-        usedPercent: finalUtilization * 100,
+        usedPercent: finalUtilization,
       };
       if (finalResetsAt) {
         window.resetDescription = formatReset(finalResetsAt);
@@ -120,7 +120,7 @@ function buildClaudeWindows(data: unknown): RateWindow[] {
     const resetsAt = safeDate(dataTyped.five_hour.resets_at);
     const window: RateWindow = {
       label: "5h",
-      usedPercent: (dataTyped.five_hour.utilization ?? 0) * 100,
+      usedPercent: dataTyped.five_hour.utilization ?? 0,
     };
     if (resetsAt) {
       window.resetDescription = formatReset(resetsAt);
@@ -133,7 +133,7 @@ function buildClaudeWindows(data: unknown): RateWindow[] {
     const resetsAt = safeDate(dataTyped.seven_day.resets_at);
     const window: RateWindow = {
       label: "Week",
-      usedPercent: (dataTyped.seven_day.utilization ?? 0) * 100,
+      usedPercent: dataTyped.seven_day.utilization ?? 0,
     };
     if (resetsAt) {
       window.resetDescription = formatReset(resetsAt);
@@ -147,7 +147,7 @@ function buildClaudeWindows(data: unknown): RateWindow[] {
   if (!windows.some((w) => w.label === "Sonnet" || w.label === "Opus")) {
     const window: RateWindow = {
       label: "Shared",
-      usedPercent: globalUtilization * 100,
+      usedPercent: globalUtilization,
     };
     if (globalResetsAt) {
       window.resetDescription = formatReset(globalResetsAt);
