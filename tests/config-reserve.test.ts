@@ -1,5 +1,5 @@
 import * as fs from "node:fs";
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { loadConfig, upsertMapping } from "../src/config.js";
 import type { MappingEntry } from "../src/types.js";

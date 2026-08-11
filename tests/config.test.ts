@@ -1,5 +1,5 @@
 import * as fs from "node:fs";
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   cleanupConfigRaw,
@@ -45,16 +45,20 @@ describe("Config Loading", () => {
     vi.mocked(mockCtx.ui.notify).mockReset();
   });
 
-  it("should merge global and project configs correctly", async () => {
-    const globalConfig = JSON.stringify({
-      priority: ["remainingPercent"],
-      mappings: [
-        {
-          usage: { provider: "anthropic", window: "Sonnet" },
-          model: { provider: "anthropic", id: "global-sonnet" },
-        },
-      ],
-    });
+  it("should merge global and trusted project configs correctly", async () => {
+    const trustedCtx = {
+        ...mockCtx,
+        isProjectTrusted: vi.fn().mockReturnValue(true),
+      } as unknown as ExtensionContext,
+      globalConfig = JSON.stringify({
+        priority: ["remainingPercent"],
+        mappings: [
+          {
+            usage: { provider: "anthropic", window: "Sonnet" },
+            model: { provider: "anthropic", id: "global-sonnet" },
+          },
+        ],
+      });
 
     const projectConfig = JSON.stringify({
       mappings: [
@@ -70,12 +74,37 @@ describe("Config Loading", () => {
     vi.mocked(fs.promises.readFile).mockResolvedValueOnce(globalConfig); // Global
     vi.mocked(fs.promises.readFile).mockResolvedValueOnce(projectConfig); // Project
 
-    const config = await loadConfig(mockCtx);
+    const config = await loadConfig(trustedCtx);
 
     expect(config).not.toBeNull();
+    expect(trustedCtx.isProjectTrusted).toHaveBeenCalledOnce();
     expect(config?.mappings[0]?.model?.id).toBe("project-sonnet");
     expect(config?.widget.enabled).toBe(false);
     expect(config?.autoRun).toBe(true);
+  });
+
+  it("ignores project config when current Pi marks the project untrusted", async () => {
+    const untrustedCtx = {
+      ...mockCtx,
+      isProjectTrusted: vi.fn().mockReturnValue(false),
+    } as unknown as ExtensionContext;
+    vi.mocked(fs.promises.readFile).mockResolvedValueOnce(
+      JSON.stringify({
+        priority: ["remainingPercent"],
+        mappings: [
+          {
+            usage: { provider: "anthropic", window: "Sonnet" },
+            model: { provider: "anthropic", id: "global-sonnet" },
+          },
+        ],
+      }),
+    );
+
+    const config = await loadConfig(untrustedCtx);
+
+    expect(config?.mappings[0]?.model?.id).toBe("global-sonnet");
+    expect(fs.promises.readFile).toHaveBeenCalledTimes(1);
+    expect(untrustedCtx.isProjectTrusted).toHaveBeenCalledOnce();
   });
 
   it("should handle missing files and return default values", async () => {

@@ -1,30 +1,30 @@
 # OMP compatibility
 
-`pi-model-selector` supports both Pi and OMP. OMP loads Pi extensions through a Pi-compatibility mirror instead of importing the extension source in place.
+`pi-model-selector` supports these current host families:
 
-## How the OMP mirror works
+- Pi 0.84.1 through `@earendil-works/pi-coding-agent` and `@earendil-works/pi-tui` (Node.js 22.19 or newer).
+- OMP 17.2.12 through its `@oh-my-pi/pi-coding-agent` and `@oh-my-pi/pi-tui` compatibility surface (Bun as required by OMP).
 
-When OMP discovers a Pi-style extension, it mirrors the extension's source files into a temporary directory similar to:
+Legacy Pi releases published under `@mariozechner/*` are not supported.
 
-```text
-$TMPDIR/omp-legacy-pi-file/<extension-hash>/<file-hash>.ts
-```
+## How OMP resolves current Pi imports
 
-During that mirroring step, OMP rewrites literal Pi package specifiers to their OMP package equivalents. For example:
+OMP 17.2.12 parses extension module specifiers and aliases supported Pi package scopes to bundled virtual host modules. Literal imports such as:
 
 ```ts
-await import("@mariozechner/pi-coding-agent");
-await import("@mariozechner/pi-tui");
+await import("@earendil-works/pi-coding-agent");
+await import("@earendil-works/pi-tui");
 ```
 
-are rewritten by OMP to load the corresponding `@oh-my-pi/*` packages from the mirrored file.
+therefore resolve directly under Pi and resolve to OMP's canonical in-process compatibility modules under OMP. This keeps one host extension registry and does not require a separate OMP entry point or direct `@oh-my-pi/*` imports in extension source.
 
-## Rules for this extension
+## Dual-runtime rules
 
-- Import Pi/SDK packages with literal `@mariozechner/*` specifiers in runtime code. OMP rewrites them; Pi loads them directly.
-- Do not probe or import `@oh-my-pi/*` directly from the extension. That can re-enter OMP's SDK import while the extension loader is still resolving the mirror and can fail with `RangeError: Maximum call stack size exceeded`.
-- Do not rely on `import.meta.url`, module singleton identity, or source-relative filesystem paths when code may run under OMP. In OMP, the executing module URL points at the temporary mirror, not the editable source tree.
-- Avoid relative dynamic imports such as `await import("./src/foo.js")` in runtime code. OMP's mirror resolves static relative imports, but older OMP versions can leave relative dynamic imports pointing at the temporary mirror directory.
-- Runtime-specific persistent files should use the runtime config directory (`.pi` for Pi, `.omp` for OMP), not paths derived from the mirrored module location.
+- Use literal `@earendil-works/pi-*` specifiers for SDK imports. Do not import `@oh-my-pi/*` or deprecated `@mariozechner/pi-*` host packages directly.
+- Avoid relative dynamic imports in runtime code. Static relative source imports remain supported.
+- Use the host's exported `CONFIG_DIR_NAME` and `getAgentDir()` values for persistent state and credentials. They resolve to Pi's `.pi` locations or OMP's configured `.omp` locations.
+- Current Pi exposes `ExtensionContext.mode` and `isProjectTrusted()`. OMP 17.2.12 does not, so compatibility checks enforce these APIs when present and fall back to OMP's `hasUI` and existing project-config behavior otherwise.
+- Current Pi credentials are detected through public `ModelRegistry` methods. OMP's structural `authStorage` API and SQLite credential fallback remain supported for usage reporting.
+- OMP model changes may update its default model role. The `preserveDefaultModel` setting retains the role around selector-driven changes.
 
-The regression test in `tests/adapter-omp-loader-compat.test.ts` protects the import-specifier and dynamic-import rules.
+`tests/adapter-omp-loader-compat.test.ts` protects package specifiers and the relative dynamic-import rule. The OMP-specific suites cover default-role restoration, usage conversion, provider filtering, and SQLite auth behavior.

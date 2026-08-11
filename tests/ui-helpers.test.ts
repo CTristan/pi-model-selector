@@ -1,4 +1,4 @@
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -243,6 +243,25 @@ describe("UI Helpers", () => {
         "option2",
       ]);
       expect(result).toBe("option1");
+    });
+
+    it("uses dialog selection in Pi RPC mode instead of custom TUI", async () => {
+      const previousVitest = process.env.VITEST;
+      delete process.env.VITEST;
+      mockCtx.hasUI = true;
+      mockCtx.mode = "rpc";
+      mockCtx.ui.select = vi.fn().mockResolvedValue("option2");
+
+      try {
+        const { selectWrapped } = await import("../src/ui-helpers.js");
+        await expect(
+          selectWrapped(mockCtx, "Test", ["option1", "option2"]),
+        ).resolves.toBe("option2");
+        expect(mockCtx.ui.custom).not.toHaveBeenCalled();
+      } finally {
+        if (previousVitest === undefined) delete process.env.VITEST;
+        else process.env.VITEST = previousVitest;
+      }
     });
 
     it("falls back to default cursor when custom theme has no nav object", async () => {

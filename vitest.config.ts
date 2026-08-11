@@ -6,7 +6,7 @@ export default defineConfig({
     environment: "node",
     server: {
       deps: {
-        inline: ["@mariozechner/pi-coding-agent"],
+        inline: ["@earendil-works/pi-coding-agent"],
       },
     },
     testTimeout: 1000,

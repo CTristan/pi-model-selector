@@ -1,4 +1,4 @@
-import type { ExtensionContext, Theme } from "@mariozechner/pi-coding-agent";
+import type { ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import type { LoadedConfig, UsageCandidate } from "../src/types.js";
 import {
@@ -53,6 +53,20 @@ describe("Widget", () => {
       "model-selector",
       undefined,
     );
+  });
+
+  it("does not install or clear terminal widgets in Pi RPC mode", () => {
+    const setWidget = vi.fn(),
+      rpcCtx = {
+        mode: "rpc",
+        hasUI: true,
+        ui: { setWidget },
+      } as unknown as ExtensionContext;
+
+    renderUsageWidget(rpcCtx);
+    clearWidget(rpcCtx);
+
+    expect(setWidget).not.toHaveBeenCalled();
   });
 
   it("should handle no UI or no setWidget branch", () => {

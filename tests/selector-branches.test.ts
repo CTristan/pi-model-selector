@@ -1,7 +1,7 @@
 import type {
   ExtensionAPI,
   ExtensionContext,
-} from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-coding-agent";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as configMod from "../src/config.js";
 import type { CooldownManager } from "../src/cooldown.js";
@@ -99,10 +99,13 @@ describe("Selector Branch Coverage", () => {
         notify: vi.fn(),
         setStatus: vi.fn(),
       } as unknown as MockExtensionContext["ui"],
+      mode: "tui",
       hasUI: true,
       cwd: "/mock",
       sessionManager: {} as ExtensionContext["sessionManager"],
+      scopedModels: [],
       isIdle: vi.fn().mockReturnValue(true),
+      isProjectTrusted: vi.fn().mockReturnValue(true),
       abort: vi.fn(),
       hasPendingMessages: vi.fn().mockReturnValue(false),
       shutdown: vi.fn(),

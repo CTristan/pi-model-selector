@@ -1,7 +1,7 @@
 import type {
   ExtensionAPI,
   ExtensionContext,
-} from "@mariozechner/pi-coding-agent";
+} from "@earendil-works/pi-coding-agent";
 import { beforeEach, describe, expect, it, type Mock, vi } from "vitest";
 import type { CooldownManager } from "../src/cooldown.js";
 import type { LoadedConfig, UsageSnapshot } from "../src/types.js";
@@ -319,10 +319,13 @@ function createContext(): ExtensionContext {
       notify: vi.fn(),
       setStatus: vi.fn(),
     } as unknown as ExtensionContext["ui"],
+    mode: "tui",
     hasUI: true,
     cwd: "/mock",
     sessionManager: {} as ExtensionContext["sessionManager"],
+    scopedModels: [],
     isIdle: vi.fn().mockReturnValue(true),
+    isProjectTrusted: vi.fn().mockReturnValue(true),
     abort: vi.fn(),
     hasPendingMessages: vi.fn().mockReturnValue(false),
     shutdown: vi.fn(),

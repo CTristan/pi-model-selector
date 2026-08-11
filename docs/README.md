@@ -29,7 +29,7 @@ Each provider reports usage in one or more "windows". A window typically consist
 
 ### Authentication
 
-Most providers look for credentials in `~/.pi/agent/auth.json`, which is the standard location for Pi authentication data. Some providers also support environment variables, system keychains, or specific CLI tools.
+Most providers look for credentials in the active host's configured agent directory (`auth.json`). This is normally `~/.pi/agent/auth.json` under Pi. OMP's configured agent directory and SQLite credential store are also supported. Some providers additionally support environment variables, system keychains, or specific CLI tools.
 
 > **Note**: When configuring mappings, the `model.provider` must exactly match the provider name as registered in the Pi model registry (e.g., `openai`, `google`, `anthropic`, `github-copilot`). Use the `/models` command in Pi to see available providers and their IDs.
 

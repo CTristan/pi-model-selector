@@ -1,7 +1,8 @@
-import type { ExtensionContext, Theme } from "@mariozechner/pi-coding-agent";
+import type { ExtensionContext, Theme } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth } from "./adapter.js";
 import { findIgnoreMapping, findModelMapping } from "./candidates.js";
 import type { LoadedConfig, MappingEntry, UsageCandidate } from "./types.js";
+import { isTuiContext } from "./ui-helpers.js";
 import { formatReset } from "./usage-fetchers.js";
 
 // ============================================================================
@@ -118,15 +119,9 @@ export function getWidgetState(): WidgetState | null {
 
 /** Renders the current usage candidates in Pi's widget area. */
 export function renderUsageWidget(ctx: ExtensionContext): void {
-  if (!ctx.hasUI) return;
+  if (!isTuiContext(ctx)) return;
 
-  const ui = ctx.ui as {
-    setWidget?: (
-      id: string,
-      component: unknown,
-      options?: { placement: string },
-    ) => void;
-  };
+  const { ui } = ctx;
   if (typeof ui?.setWidget !== "function") return;
 
   const state = currentWidgetState;
@@ -217,10 +212,8 @@ export function renderUsageWidget(ctx: ExtensionContext): void {
 
 /** Removes the model selector widget and clears its cached state. */
 export function clearWidget(ctx: ExtensionContext): void {
-  if (!ctx.hasUI) return;
-  const ui = ctx.ui as {
-    setWidget?: (id: string, component: undefined) => void;
-  };
+  if (!isTuiContext(ctx)) return;
+  const { ui } = ctx;
   if (typeof ui?.setWidget === "function") {
     ui.setWidget("model-selector", undefined);
   }

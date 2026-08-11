@@ -28,17 +28,20 @@
       "index.ts"
     ]
   },
+  "engines": {
+    "node": ">=22.19.0"
+  },
   "peerDependencies": {
-    "@mariozechner/pi-coding-agent": "^0.67.68 || ^0.73.0",
-    "@mariozechner/pi-tui": "*",
-    "@oh-my-pi/pi-coding-agent": "*",
-    "@oh-my-pi/pi-tui": "*"
+    "@earendil-works/pi-coding-agent": "^0.84.1",
+    "@earendil-works/pi-tui": "^0.84.1",
+    "@oh-my-pi/pi-coding-agent": "^17.2.12",
+    "@oh-my-pi/pi-tui": "^17.2.12"
   },
   "peerDependenciesMeta": {
-    "@mariozechner/pi-coding-agent": {
+    "@earendil-works/pi-coding-agent": {
       "optional": true
     },
-    "@mariozechner/pi-tui": {
+    "@earendil-works/pi-tui": {
       "optional": true
     },
     "@oh-my-pi/pi-coding-agent": {
@@ -50,7 +53,8 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.3",
-    "@mariozechner/pi-coding-agent": "0.73.1",
+    "@earendil-works/pi-coding-agent": "0.84.1",
+    "@earendil-works/pi-tui": "0.84.1",
     "@types/luxon": "3.7.4",
     "@types/node": "24.13.3",
     "@vitest/coverage-v8": "4.1.10",
