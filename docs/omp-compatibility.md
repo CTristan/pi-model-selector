@@ -9,7 +9,7 @@ Legacy Pi releases published under `@mariozechner/*` are not supported.
 
 ## How OMP resolves current Pi imports
 
-OMP 17.2.12's extension loader (`src/extensibility/extensions/loader.ts` in `@oh-my-pi/pi-coding-agent`) installs a specifier shim and loads every extension module through it, so we never rewrite imports ourselves. Specifically, the loader calls `installLegacyPiSpecifierShim()` at startup and imports each extension entry through `loadLegacyPiModule()`; both live in `src/extensibility/plugins/legacy-pi-compat.ts`. The shim matches package specifiers against the filter `^@(oh-my-pi|mariozechner|earendil-works)/pi-(coding-agent|tui)$`, remaps them to the canonical `@oh-my-pi` scope, and resolves them against the host-bundled modules inside the OMP binary.
+OMP 17.2.12's extension loader (`src/extensibility/extensions/loader.ts` in `@oh-my-pi/pi-coding-agent`) installs a specifier shim and loads every extension module through it, so we never rewrite imports ourselves. Specifically, the loader calls `installLegacyPiSpecifierShim()` at startup and imports each extension entry through `loadLegacyPiModule()`; both live in `src/extensibility/plugins/legacy-pi-compat.ts`. The shim matches package specifiers against the filter `^@(?:oh-my-pi|mariozechner|earendil-works)/(?:pi-agent-core|pi-ai|pi-coding-agent|pi-natives|pi-tui|pi-utils)(?:/.*)?$`, remaps them to the canonical `@oh-my-pi` scope, and resolves them against the host-bundled modules inside the OMP binary.
 
 That means literal imports such as:
 
