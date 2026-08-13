@@ -246,8 +246,7 @@ describe("UI Helpers", () => {
     });
 
     it("uses dialog selection in Pi RPC mode instead of custom TUI", async () => {
-      const previousVitest = process.env.VITEST;
-      delete process.env.VITEST;
+      vi.stubEnv("VITEST", "");
       mockCtx.hasUI = true;
       mockCtx.mode = "rpc";
       mockCtx.ui.select = vi.fn().mockResolvedValue("option2");
@@ -259,8 +258,7 @@ describe("UI Helpers", () => {
         ).resolves.toBe("option2");
         expect(mockCtx.ui.custom).not.toHaveBeenCalled();
       } finally {
-        if (previousVitest === undefined) delete process.env.VITEST;
-        else process.env.VITEST = previousVitest;
+        vi.unstubAllEnvs();
       }
     });
 

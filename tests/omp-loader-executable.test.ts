@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { describe, expect, it } from "vitest";
 
 /**
@@ -14,7 +14,7 @@ import { describe, expect, it } from "vitest";
 
 function hasBun(): boolean {
   return (
-    process.env.PATH?.split(":").some((dir) =>
+    process.env.PATH?.split(delimiter).some((dir) =>
       ["bun", "bun.exe"].some((name) => existsSync(join(dir, name))),
     ) ?? false
   );
