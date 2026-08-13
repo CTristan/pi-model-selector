@@ -20,17 +20,20 @@ import { fileURLToPath } from "node:url";
 
 const repoRoot = fileURLToPath(new URL("..", import.meta.url));
 
+const ompDetectedByEnv = process.env.OMP_ROOT !== undefined;
+const ompBinary = Bun.which("omp");
+const ompDetectedByBinary = ompBinary !== null;
+
 function ompRootCandidates(): string[] {
   const candidates: string[] = [];
-  if (process.env.OMP_ROOT) candidates.push(process.env.OMP_ROOT);
+  if (ompDetectedByEnv) candidates.push(process.env.OMP_ROOT!);
 
-  const ompBin = Bun.which("omp");
-  if (ompBin) {
+  if (ompBinary) {
     try {
       // `omp` is a symlink into the package, for example
       // `<root>/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js`. Resolve it
       // and walk up to the package root.
-      const real = fs.realpathSync(ompBin);
+      const real = fs.realpathSync(ompBinary);
       const pkgRoot = path.dirname(path.dirname(real));
       candidates.push(pkgRoot);
     } catch {
@@ -73,7 +76,16 @@ function fail(message: string): never {
   process.exit(1);
 }
 
+// SKIP only when nothing indicates OMP is present: no explicit OMP_ROOT and no
+// `omp` executable on PATH. When a detection source succeeds but the compat
+// module is missing, that is a real failure (wrong layout or version), not a
+// skip.
 const compatModule = findOmpCompatModule();
+if (!compatModule && (ompDetectedByEnv || ompDetectedByBinary)) {
+  fail(
+    "OMP detected but legacy-pi-compat.ts not found under any candidate root",
+  );
+}
 if (!compatModule) {
   console.log("SKIP: OMP is not installed; nothing to verify");
   process.exit(0);
