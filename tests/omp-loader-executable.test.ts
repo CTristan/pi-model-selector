@@ -30,6 +30,13 @@ function runCheck(): Promise<{ code: number | null; output: string }> {
       cwd: process.cwd(),
       env,
     });
+    // Terminate a hung loader instead of leaking a process past the vitest
+    // timeout; OMP module evaluation can block on host-side IO.
+    const timeout = setTimeout(() => {
+      child.kill("SIGKILL");
+      reject(new Error("omp-compat-check timed out"));
+    }, 60_000);
+    timeout.unref();
     let output = "";
     child.stdout.on("data", (chunk: Buffer) => {
       output += chunk.toString();
@@ -37,8 +44,14 @@ function runCheck(): Promise<{ code: number | null; output: string }> {
     child.stderr.on("data", (chunk: Buffer) => {
       output += chunk.toString();
     });
-    child.on("error", reject);
-    child.on("close", (code) => resolve({ code, output }));
+    child.on("error", (error) => {
+      clearTimeout(timeout);
+      reject(error);
+    });
+    child.on("close", (code) => {
+      clearTimeout(timeout);
+      resolve({ code, output });
+    });
   });
 }
 
