@@ -25,8 +25,10 @@ const ompBinary = Bun.which("omp");
 const ompDetectedByBinary = ompBinary !== null;
 
 function ompRootCandidates(): string[] {
-  const candidates: string[] = [];
-  if (ompDetectedByEnv) candidates.push(process.env.OMP_ROOT!);
+  // An explicit OMP_ROOT or a resolved omp binary names the exact installation
+  // to verify. Falling through to other installs would let a broken explicit
+  // root pass by testing a different one, so return only the explicit source.
+  if (ompDetectedByEnv) return [process.env.OMP_ROOT!];
 
   if (ompBinary) {
     try {
@@ -34,15 +36,16 @@ function ompRootCandidates(): string[] {
       // `<root>/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js`. Resolve it
       // and walk up to the package root.
       const real = fs.realpathSync(ompBinary);
-      const pkgRoot = path.dirname(path.dirname(real));
-      candidates.push(pkgRoot);
+      return [path.dirname(path.dirname(real))];
     } catch {
-      // Fall through to the conventional global locations.
+      // A broken symlink is a real failure; the caller reports it via
+      // ompDetectedByBinary when no module is found.
+      return [];
     }
   }
 
   const home = os.homedir();
-  candidates.push(
+  return [
     path.join(home, "node_modules", "@oh-my-pi", "pi-coding-agent"),
     path.join(
       home,
@@ -53,8 +56,7 @@ function ompRootCandidates(): string[] {
       "@oh-my-pi",
       "pi-coding-agent",
     ),
-  );
-  return candidates;
+  ];
 }
 
 function findOmpCompatModule(): string | null {
