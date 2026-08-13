@@ -1,6 +1,6 @@
 import * as os from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { execAsync } from "../src/fetchers/common.js";
+import { execFileAsync } from "../src/fetchers/common.js";
 import { fetchCopilotUsage } from "../src/fetchers/copilot.js";
 import { resetGlobalState } from "../src/types.js";
 
@@ -18,7 +18,7 @@ vi.mock("../src/fetchers/common.js", async () => {
   >("../src/fetchers/common.js");
   return {
     ...actual,
-    execAsync: vi.fn(),
+    execFileAsync: vi.fn(),
   };
 });
 
@@ -27,7 +27,7 @@ describe("Copilot Deduplication", () => {
     vi.useFakeTimers();
     vi.resetAllMocks();
     vi.stubGlobal("fetch", vi.fn());
-    vi.mocked(execAsync).mockResolvedValue({ stdout: "", stderr: "" });
+    vi.mocked(execFileAsync).mockResolvedValue({ stdout: "", stderr: "" });
     vi.mocked(os.platform).mockReturnValue("linux");
   });
 

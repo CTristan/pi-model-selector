@@ -41,44 +41,45 @@ vi.mock("node:os", async () => {
 
 vi.mock("node:child_process", async () => {
   const util = await import("node:util");
-  const makeChildProcessMock = () => {
-    const mock = vi.fn(
-      (
-        _cmd: string,
-        options: unknown,
-        cb?: (err: Error | null, stdout: string, stderr: string) => void,
-      ) => {
-        if (typeof options === "function")
-          cb = options as (
-            err: Error | null,
-            stdout: string,
-            stderr: string,
-          ) => void;
-        if (cb) cb(null, "{}", "");
-      },
-    );
+  const mock = vi.fn(
+    (
+      _cmd: string,
+      options: unknown,
+      cb?: (err: Error | null, stdout: string, stderr: string) => void,
+    ) => {
+      if (typeof options === "function")
+        cb = options as (
+          err: Error | null,
+          stdout: string,
+          stderr: string,
+        ) => void;
+      if (cb) cb(null, "{}", "");
+    },
+  );
 
-    Object.defineProperty(mock, util.promisify.custom, {
-      value: (cmd: string, options: any) => {
-        return new Promise((resolve, reject) => {
-          mock(
-            cmd,
-            options,
-            (err: Error | null, stdout: string, stderr: string) => {
-              if (err) reject(err);
-              else resolve({ stdout, stderr });
-            },
-          );
-        });
-      },
-    });
-
-    return mock;
-  };
+  Object.defineProperty(mock, util.promisify.custom, {
+    value: (cmd: string, options: any) => {
+      // execFile passes (file, args[]); join into a command string so the
+      // shared mock keeps matching on command text like the old exec shape.
+      const command = Array.isArray(options)
+        ? `${cmd} ${options.join(" ")}`
+        : cmd;
+      return new Promise((resolve, reject) => {
+        mock(
+          command,
+          Array.isArray(options) ? {} : options,
+          (err: Error | null, stdout: string, stderr: string) => {
+            if (err) reject(err);
+            else resolve({ stdout, stderr });
+          },
+        );
+      });
+    },
+  });
 
   return {
-    exec: makeChildProcessMock(),
-    execFile: makeChildProcessMock(),
+    exec: mock,
+    execFile: mock,
   };
 });
 

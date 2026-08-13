@@ -9,14 +9,18 @@ Legacy Pi releases published under `@mariozechner/*` are not supported.
 
 ## How OMP resolves current Pi imports
 
-OMP 17.2.12 parses extension module specifiers and aliases supported Pi package scopes to bundled virtual host modules. Literal imports such as:
+OMP 17.2.12's extension loader (`src/extensibility/extensions/loader.ts` in `@oh-my-pi/pi-coding-agent`) installs a specifier shim and loads every extension module through it, so we never rewrite imports ourselves. Specifically, the loader calls `installLegacyPiSpecifierShim()` at startup and imports each extension entry through `loadLegacyPiModule()`; both live in `src/extensibility/plugins/legacy-pi-compat.ts`. The shim matches package specifiers against the filter `^@(oh-my-pi|mariozechner|earendil-works)/pi-(coding-agent|tui)$`, remaps them to the canonical `@oh-my-pi` scope, and resolves them against the host-bundled modules inside the OMP binary.
+
+That means literal imports such as:
 
 ```ts
 await import("@earendil-works/pi-coding-agent");
 await import("@earendil-works/pi-tui");
 ```
 
-therefore resolve directly under Pi and resolve to OMP's canonical in-process compatibility modules under OMP. This keeps one host extension registry and does not require a separate OMP entry point or direct `@oh-my-pi/*` imports in extension source.
+resolve directly under Pi and resolve to OMP's canonical in-process compatibility modules under OMP. This keeps one host extension registry and does not require a separate OMP entry point or direct `@oh-my-pi/*` imports in extension source.
+
+`scripts/omp-compat-check.ts` executes this guarantee: when run under Bun on a machine with OMP installed, it loads `src/adapter.ts` through the real `installLegacyPiSpecifierShim()` plus `loadLegacyPiModule()` path and asserts both imports resolve to OMP host modules and that OMP mode is detected. It exits `SKIP` when OMP is absent, so CI without OMP stays green. `tests/omp-loader-executable.test.ts` runs that script from the vitest suite when Bun is available.
 
 ## Dual-runtime rules
 

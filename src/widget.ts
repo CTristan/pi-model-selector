@@ -212,10 +212,11 @@ export function renderUsageWidget(ctx: ExtensionContext): void {
 
 /** Removes the model selector widget and clears its cached state. */
 export function clearWidget(ctx: ExtensionContext): void {
-  if (!isTuiContext(ctx)) return;
-  const { ui } = ctx;
-  if (typeof ui?.setWidget === "function") {
-    ui.setWidget("model-selector", undefined);
+  if (isTuiContext(ctx)) {
+    const { ui } = ctx;
+    if (typeof ui?.setWidget === "function") {
+      ui.setWidget("model-selector", undefined);
+    }
   }
   currentWidgetState = null;
 }

@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { LoadedConfig, UsageCandidate } from "../src/types.js";
 import {
   clearWidget,
+  getWidgetState,
   renderUsageWidget,
   updateWidgetState,
 } from "../src/widget.js";
@@ -67,6 +68,24 @@ describe("Widget", () => {
     clearWidget(rpcCtx);
 
     expect(setWidget).not.toHaveBeenCalled();
+  });
+
+  it("resets cached widget state when cleared in RPC mode", () => {
+    const rpcCtx = {
+      mode: "rpc",
+      hasUI: true,
+      ui: { setWidget: vi.fn() },
+    } as unknown as ExtensionContext;
+    updateWidgetState({
+      candidates: [],
+      config: {
+        widget: { enabled: true, showCount: 5 },
+      } as unknown as LoadedConfig,
+    });
+
+    clearWidget(rpcCtx);
+
+    expect(getWidgetState()).toBeNull();
   });
 
   it("should handle no UI or no setWidget branch", () => {

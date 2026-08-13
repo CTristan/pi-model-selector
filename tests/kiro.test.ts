@@ -22,10 +22,15 @@ vi.mock("node:child_process", async () => {
 
   Object.defineProperty(execMock, util.promisify.custom, {
     value: (cmd: string, options: any) => {
+      // execFile passes (file, args[]); join into a command string so the
+      // shared mock keeps matching on command text like the old exec shape.
+      const command = Array.isArray(options)
+        ? `${cmd} ${options.join(" ")}`
+        : cmd;
       return new Promise((resolve, reject) => {
         execMock(
-          cmd,
-          options,
+          command,
+          Array.isArray(options) ? {} : options,
           (err: Error | null, stdout: string, stderr: string) => {
             if (err) reject(err);
             else resolve({ stdout, stderr });

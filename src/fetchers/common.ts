@@ -1,12 +1,10 @@
-import { exec, execFile } from "node:child_process";
+import { execFile } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { promisify } from "node:util";
 import * as runtimeAdapter from "../adapter.js";
 
-/** Executes a shell command asynchronously. */
-export const execAsync = promisify(exec);
 /** Executes a command asynchronously without invoking a shell. */
 export const execFileAsync = promisify(execFile);
 

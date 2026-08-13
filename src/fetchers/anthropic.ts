@@ -1,7 +1,7 @@
 import * as os from "node:os";
 import type { RateWindow, UsageSnapshot } from "../types.js";
 import {
-  execAsync,
+  execFileAsync,
   fetchWithTimeout,
   formatReset,
   parseEpochMillis,
@@ -162,8 +162,9 @@ function buildClaudeWindows(data: unknown): RateWindow[] {
 async function loadClaudeKeychainToken(): Promise<string | undefined> {
   if (os.platform() !== "darwin") return undefined;
   try {
-    const { stdout } = await execAsync(
-        'security find-generic-password -s "Claude Code-credentials" -w 2>/dev/null',
+    const { stdout } = await execFileAsync(
+        "security",
+        ["find-generic-password", "-s", "Claude Code-credentials", "-w"],
         { encoding: "utf-8", timeout: 5000 },
       ),
       keychainData = stdout.trim();

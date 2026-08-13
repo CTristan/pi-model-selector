@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { execAsync } from "../src/fetchers/common.js";
+import { execFileAsync } from "../src/fetchers/common.js";
 import { fetchCopilotUsage } from "../src/fetchers/copilot.js";
 
 vi.mock("../src/fetchers/common.js", async () => {
@@ -8,7 +8,7 @@ vi.mock("../src/fetchers/common.js", async () => {
   >("../src/fetchers/common.js");
   return {
     ...actual,
-    execAsync: vi.fn(),
+    execFileAsync: vi.fn(),
   };
 });
 
@@ -22,7 +22,7 @@ describe("Copilot Token Fetch Isolation & Uniqueness", () => {
   });
 
   it("should isolate failures so one throwing token doesn't crash all", async () => {
-    vi.mocked(execAsync).mockRejectedValue(new Error("gh-cli fail"));
+    vi.mocked(execFileAsync).mockRejectedValue(new Error("gh-cli fail"));
 
     let callCount = 0;
     vi.stubGlobal(
@@ -66,7 +66,7 @@ describe("Copilot Token Fetch Isolation & Uniqueness", () => {
   });
 
   it("should use unique identifiers for fallback accounts", async () => {
-    vi.mocked(execAsync).mockRejectedValue(new Error("gh-cli fail"));
+    vi.mocked(execFileAsync).mockRejectedValue(new Error("gh-cli fail"));
 
     vi.stubGlobal(
       "fetch",
@@ -96,7 +96,7 @@ describe("Copilot Token Fetch Isolation & Uniqueness", () => {
   });
 
   it("should suppress errors if at least one successful snapshot is found", async () => {
-    vi.mocked(execAsync).mockRejectedValue(new Error("gh-cli fail"));
+    vi.mocked(execFileAsync).mockRejectedValue(new Error("gh-cli fail"));
 
     let callCount = 0;
     vi.stubGlobal(
@@ -140,7 +140,7 @@ describe("Copilot Token Fetch Isolation & Uniqueness", () => {
   });
 
   it("should handle null modelRegistry gracefully", async () => {
-    vi.mocked(execAsync).mockRejectedValue(new Error("gh-cli fail"));
+    vi.mocked(execFileAsync).mockRejectedValue(new Error("gh-cli fail"));
 
     const results = await fetchCopilotUsage(null, {});
 
@@ -150,7 +150,7 @@ describe("Copilot Token Fetch Isolation & Uniqueness", () => {
   });
 
   it("should suppress error from second token for same account when first succeeds", async () => {
-    vi.mocked(execAsync).mockRejectedValue(new Error("gh-cli fail"));
+    vi.mocked(execFileAsync).mockRejectedValue(new Error("gh-cli fail"));
 
     let callCount = 0;
     vi.stubGlobal(
@@ -195,7 +195,7 @@ describe("Copilot Token Fetch Isolation & Uniqueness", () => {
   });
 
   it("should suppress error from first token for same account when second succeeds", async () => {
-    vi.mocked(execAsync).mockRejectedValue(new Error("gh-cli fail"));
+    vi.mocked(execFileAsync).mockRejectedValue(new Error("gh-cli fail"));
 
     let callCount = 0;
     vi.stubGlobal(
