@@ -1,0 +1,11 @@
+---
+# ast-grep project configuration for `ast-grep scan`.
+#
+# The rules under `rules/` are the TypeScript security subset of the
+# coderabbitai/ast-grep-essentials package (Apache-2.0), the default preset
+# CodeRabbit runs. Vendored here so CI scans offline; the full upstream
+# package is at https://github.com/coderabbitai/ast-grep-essentials.
+#
+# Run locally: `ast-grep scan` (or `sg scan`).
+ruleDirs:
+  - rules

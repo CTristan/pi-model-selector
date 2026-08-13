@@ -41,6 +41,11 @@ else
   npm run fix
 fi
 
+echo "Running ast-grep scan..."
+# Vendored essentials rules; --error promotes all rules so findings exit 1 and
+# regressions surface at CI time.
+npx ast-grep scan --error
+
 echo "Running unit tests..."
 # Timeout protects against import hangs (vitest testTimeout only applies to test execution)
 # Tests normally complete in ~2-3 seconds; 60s allows generous headroom
