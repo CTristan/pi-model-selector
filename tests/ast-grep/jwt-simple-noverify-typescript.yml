@@ -16,6 +16,18 @@ valid:
   - |-
     const jwt = require("jwt-simple");
     const decoded = jwt.decode(token, secret, 0x0);
+  # An empty string is falsy, so verification still happens.
+  - |-
+    const jwt = require("jwt-simple");
+    const decoded = jwt.decode(token, secret, "");
+  # An empty template is falsy too.
+  - |-
+    const jwt = require("jwt-simple");
+    const decoded = jwt.decode(token, secret, ``);
+  # Negative zero is still zero, so it is falsy.
+  - |-
+    const jwt = require("jwt-simple");
+    const decoded = jwt.decode(token, secret, -0);
   # The module name must be the first and only string in the require call.
   - |-
     jwt = require("other-mod", "jwt-simple");
@@ -45,3 +57,11 @@ invalid:
   - |-
     import jwteq = require("jwt-simple");
     const decoded = jwteq.decode(token, secret, true);
+  # A negative non-zero number is truthy and skips verification.
+  - |-
+    const jwt = require("jwt-simple");
+    const decoded = jwt.decode(token, secret, -1);
+  # Named-import destructuring drops the receiver but not the risk.
+  - |-
+    import { decode } from "jwt-simple";
+    const decoded = decode(token, secret, true);

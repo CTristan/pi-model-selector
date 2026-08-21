@@ -30,11 +30,13 @@
 #   quoted strings only, and mislabels CWE-287).
 # - `jwt-simple-noverify-typescript.yml` uses lowercase `typescript`, a
 #   properly folded message with correct remediation guidance, import
-#   forms for both ES imports and import-equals bindings, a require
-#   matcher that pins the module name to the first and only string
-#   argument, and a no-verify matcher for unambiguous non-zero decimals
-#   (upstream capitalizes the language inconsistently, renders the
-#   diagnostic with stray quotes and inverted guidance, accepts no
-#   imports, and misses numeric truthy flags).
+#   forms for ES imports, import-equals bindings, and named-import
+#   destructuring, a require matcher that pins the module name to the
+#   first and only string argument, and a no-verify matcher that accepts
+#   non-empty strings and templates plus unambiguous non-zero decimals
+#   (signed or unsigned) while excluding empty and zero literals (upstream
+#   capitalizes the language inconsistently, renders the diagnostic with
+#   stray quotes and inverted guidance, accepts no imports, and misses
+#   numeric truthy flags).
 ruleDirs:
   - rules

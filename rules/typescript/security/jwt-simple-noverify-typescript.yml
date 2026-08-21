@@ -17,19 +17,107 @@ note: >-
       - https://cwe.mitre.org/data/definitions/345
       - https://cwe.mitre.org/data/definitions/347
 ast-grep-essentials: true
+# The require arguments must hold the module name as the first and only
+# string argument, so require("other", "jwt-simple") cannot satisfy it.
 rule:
-  pattern: $JWT.decode($TOKEN, $SECRET, $NOVERIFY $$$)
-  inside:
-    stopBy: end
-    follows:
-      stopBy: end
-      any:
-        - any:
-            - kind: lexical_declaration
-            - kind: variable_declaration
-          all:
-            - has:
-                kind: variable_declarator
+  any:
+    # Receiver form: jwt.decode(token, secret, noVerify).
+    - pattern: $JWT.decode($TOKEN, $SECRET, $NOVERIFY $$$)
+      inside:
+        stopBy: end
+        follows:
+          stopBy: end
+          any:
+            # const/let/var binding of the required module.
+            - any:
+                - kind: lexical_declaration
+                - kind: variable_declaration
+              all:
+                - has:
+                    kind: variable_declarator
+                    all:
+                      - has:
+                          kind: identifier
+                          pattern: $JWT
+                          nthChild: 1
+                      - has:
+                          kind: call_expression
+                          nthChild: 2
+                          all:
+                            - has:
+                                nthChild: 1
+                                kind: identifier
+                                regex: ^require$
+                            - has:
+                                nthChild: 2
+                                kind: arguments
+                                has:
+                                  stopBy: end
+                                  kind: string
+                                  nthChild: 1
+                                  has:
+                                    kind: string_fragment
+                                    regex: ^jwt-simple$
+                                  all:
+                                    - not:
+                                        has:
+                                          nthChild: 2
+                                    - not:
+                                        has:
+                                          stopBy: end
+                                          any:
+                                            - kind: object
+                                            - kind: array
+                                            - kind: pair
+
+            # ES module import of jwt-simple.
+            - kind: import_statement
+              all:
+                - has:
+                    kind: import_clause
+                    any:
+                      - has:
+                          kind: namespace_import
+                          has:
+                            kind: identifier
+                            pattern: $JWT
+                      - has:
+                          kind: named_imports
+                          has:
+                            kind: import_specifier
+                            pattern: $JWT
+                      - has:
+                          kind: identifier
+                          pattern: $JWT
+                - has:
+                    kind: string
+                    nthChild: 2
+                    has:
+                      kind: string_fragment
+                      regex: ^jwt-simple$
+
+            # TypeScript import-equals binding of the CommonJS module. The
+            # clause lives inside the import statement (the follows-visible
+            # sibling), and its require accepts exactly one string argument,
+            # so no arity guards are needed here.
+            - kind: import_statement
+              has:
+                kind: import_require_clause
+                all:
+                  - has:
+                      kind: identifier
+                      pattern: $JWT
+                  - has:
+                      stopBy: end
+                      kind: string
+                      has:
+                        kind: string_fragment
+                        regex: ^jwt-simple$
+
+            # Assignment binding of the required module.
+            - kind: expression_statement
+              has:
+                kind: assignment_expression
                 all:
                   - has:
                       kind: identifier
@@ -53,37 +141,36 @@ rule:
                               has:
                                 kind: string_fragment
                                 regex: ^jwt-simple$
-                            all:
-                              - not:
-                                  has:
-                                    nthChild: 2
-                              - not:
-                                  has:
-                                    stopBy: end
-                                    any:
-                                      - kind: object
-                                      - kind: array
-                                      - kind: pair
+                              all:
+                                - not:
+                                    has:
+                                      nthChild: 2
+                                - not:
+                                    has:
+                                      stopBy: end
+                                      any:
+                                        - kind: object
+                                        - kind: array
+                                        - kind: pair
 
-        # ES module import of jwt-simple.
-        - kind: import_statement
+    # Named-import form: import { decode } from "jwt-simple" followed by a
+    # bare decode(token, secret, noVerify) call.
+    - pattern: decode($TOKEN, $SECRET, $NOVERIFY $$$)
+      inside:
+        stopBy: end
+        follows:
+          stopBy: end
+          kind: import_statement
           all:
             - has:
                 kind: import_clause
-                any:
-                  - has:
-                      kind: namespace_import
-                      has:
-                        kind: identifier
-                        pattern: $JWT
-                  - has:
-                      kind: named_imports
-                      has:
-                        kind: import_specifier
-                        pattern: $JWT
-                  - has:
+                has:
+                  kind: named_imports
+                  has:
+                    kind: import_specifier
+                    has:
                       kind: identifier
-                      pattern: $JWT
+                      regex: ^decode$
             - has:
                 kind: string
                 nthChild: 2
@@ -91,77 +178,39 @@ rule:
                   kind: string_fragment
                   regex: ^jwt-simple$
 
-        # TypeScript import-equals binding of the CommonJS module. The
-        # clause lives inside the import statement (the follows-visible
-        # sibling), and its require accepts exactly one string argument,
-        # so no arity guards are needed here.
-        - kind: import_statement
-          has:
-            kind: import_require_clause
-            all:
-              - has:
-                  kind: identifier
-                  pattern: $JWT
-              - has:
-                  stopBy: end
-                  kind: string
-                  has:
-                    kind: string_fragment
-                    regex: ^jwt-simple$
-
-        - kind: expression_statement
-          has:
-            kind: assignment_expression
-            all:
-              - has:
-                  kind: identifier
-                  pattern: $JWT
-                  nthChild: 1
-              - has:
-                  kind: call_expression
-                  nthChild: 2
-                  all:
-                    - has:
-                        nthChild: 1
-                        kind: identifier
-                        regex: ^require$
-                    - has:
-                        nthChild: 2
-                        kind: arguments
-                        has:
-                          stopBy: end
-                          kind: string
-                          nthChild: 1
-                          has:
-                            kind: string_fragment
-                            regex: ^jwt-simple$
-                          all:
-                            - not:
-                                has:
-                                  nthChild: 2
-                            - not:
-                                has:
-                                  stopBy: end
-                                  any:
-                                    - kind: object
-                                    - kind: array
-                                    - kind: pair
-
 constraints:
   NOVERIFY:
     all:
       - any:
-          - any:
-              - regex: ^true$
-              - kind: string
-              - kind: template_string
+          # A bare `true` or any non-empty string or constant template is
+          # truthy; non-empty literals carry a fragment child, which the
+          # fragment guard uses to exclude empty strings and templates.
+          - all:
+              - any:
+                  - regex: ^true$
+                  - all:
+                      - kind: string
+                      - has:
+                          kind: string_fragment
+                  - all:
+                      - kind: template_string
+                      - has:
+                          kind: string_fragment
           # Any unambiguous non-zero decimal is truthy, so it skips
-          # verification too; zero in any spelling and non-decimal forms
-          # like hex, binary, and exponents stay excluded because their
-          # value is not obvious from the literal alone.
+          # verification too; zero in any spelling (including negative
+          # zero) and non-decimal forms like hex, binary, and exponents
+          # stay excluded because their value is not obvious from the
+          # literal alone. A leading minus parses as a unary_expression,
+          # not a number, so negative and positive values need separate
+          # arms.
           - all:
               - kind: number
               - regex: ^(?:[1-9][0-9]*(?:\\.[0-9]+)?|0*\\.[0-9]*[1-9][0-9]*)$
+          - all:
+              - kind: unary_expression
+              - has:
+                  kind: number
+                  regex: ^(?:[1-9][0-9]*(?:\\.[0-9]+)?|0*\\.[0-9]*[1-9][0-9]*)$
           - has:
               stopBy: end
               any:
