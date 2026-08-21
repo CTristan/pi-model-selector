@@ -1,0 +1,9 @@
+id: detect-angular-sce-disabled-typescript
+valid:
+  # Enabling SCE is the safe direction.
+  - |-
+    $sceProvider.enabled(true);
+invalid:
+  # Disabling SCE disables strict contextual escaping.
+  - |-
+    $sceProvider.enabled(false);

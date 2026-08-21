@@ -1,0 +1,90 @@
+id: jwt-simple-noverify-typescript
+snapshots:
+  ? |-
+    const jwt = require("jwt-simple");
+    const decoded = jwt.decode(token, secret, true);
+  : labels:
+    - source: jwt.decode(token, secret, true)
+      style: primary
+      start: 51
+      end: 82
+    - source: jwt
+      style: secondary
+      start: 6
+      end: 9
+    - source: require
+      style: secondary
+      start: 12
+      end: 19
+    - source: jwt-simple
+      style: secondary
+      start: 21
+      end: 31
+    - source: '"jwt-simple"'
+      style: secondary
+      start: 20
+      end: 32
+    - source: ("jwt-simple")
+      style: secondary
+      start: 19
+      end: 33
+    - source: require("jwt-simple")
+      style: secondary
+      start: 12
+      end: 33
+    - source: jwt = require("jwt-simple")
+      style: secondary
+      start: 6
+      end: 33
+    - source: const jwt = require("jwt-simple");
+      style: secondary
+      start: 0
+      end: 34
+    - source: const jwt = require("jwt-simple");
+      style: secondary
+      start: 0
+      end: 34
+  ? |-
+    const jwt = require('jwt-simple');
+    const decoded = jwt.decode(token, secret, true);
+  : labels:
+    - source: jwt.decode(token, secret, true)
+      style: primary
+      start: 51
+      end: 82
+    - source: jwt
+      style: secondary
+      start: 6
+      end: 9
+    - source: require
+      style: secondary
+      start: 12
+      end: 19
+    - source: jwt-simple
+      style: secondary
+      start: 21
+      end: 31
+    - source: '''jwt-simple'''
+      style: secondary
+      start: 20
+      end: 32
+    - source: ('jwt-simple')
+      style: secondary
+      start: 19
+      end: 33
+    - source: require('jwt-simple')
+      style: secondary
+      start: 12
+      end: 33
+    - source: jwt = require('jwt-simple')
+      style: secondary
+      start: 6
+      end: 33
+    - source: const jwt = require('jwt-simple');
+      style: secondary
+      start: 0
+      end: 34
+    - source: const jwt = require('jwt-simple');
+      style: secondary
+      start: 0
+      end: 34

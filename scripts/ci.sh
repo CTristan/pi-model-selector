@@ -42,9 +42,14 @@ else
 fi
 
 echo "Running ast-grep scan..."
-# Vendored essentials rules; --error promotes all rules so findings exit 1 and
-# regressions surface at CI time.
+# Project-maintained rules (derived from ast-grep-essentials); --error
+# promotes all rules so findings exit 1 and regressions surface at CI time.
 npx ast-grep scan --error
+
+echo "Running ast-grep rule tests..."
+# Snapshot tests hold the rules' semantic contract, so rule edits and
+# re-vendors are judged against the recorded probe matrix.
+npx ast-grep test -t tests/ast-grep
 
 echo "Running unit tests..."
 # Timeout protects against import hangs (vitest testTimeout only applies to test execution)

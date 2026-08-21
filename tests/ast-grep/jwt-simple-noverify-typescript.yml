@@ -1,0 +1,19 @@
+id: jwt-simple-noverify-typescript
+valid:
+  # Two-argument decode has no no-verify flag to pass.
+  - |-
+    const jwt = require("jwt-simple");
+    const decoded = jwt.decode(token, secret);
+  # Wrong module must not fire.
+  - |-
+    const jwt = require("jsonwebtoken");
+    const decoded = jwt.decode(token, secret, true);
+invalid:
+  # Single-quoted require with a truthy no-verify argument.
+  - |-
+    const jwt = require('jwt-simple');
+    const decoded = jwt.decode(token, secret, true);
+  # Double-quoted require with a truthy no-verify argument.
+  - |-
+    const jwt = require("jwt-simple");
+    const decoded = jwt.decode(token, secret, true);
