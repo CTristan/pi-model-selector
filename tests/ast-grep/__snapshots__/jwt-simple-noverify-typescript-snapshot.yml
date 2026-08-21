@@ -176,3 +176,67 @@ snapshots:
       style: secondary
       start: 0
       end: 34
+  ? |-
+    import jwt from "jwt-simple";
+    const decoded = jwt.decode(token, secret, true);
+  : labels:
+    - source: jwt.decode(token, secret, true)
+      style: primary
+      start: 46
+      end: 77
+    - source: jwt
+      style: secondary
+      start: 7
+      end: 10
+    - source: jwt
+      style: secondary
+      start: 7
+      end: 10
+    - source: jwt-simple
+      style: secondary
+      start: 17
+      end: 27
+    - source: '"jwt-simple"'
+      style: secondary
+      start: 16
+      end: 28
+    - source: import jwt from "jwt-simple";
+      style: secondary
+      start: 0
+      end: 29
+    - source: import jwt from "jwt-simple";
+      style: secondary
+      start: 0
+      end: 29
+  ? |-
+    import jwteq = require("jwt-simple");
+    const decoded = jwteq.decode(token, secret, true);
+  : labels:
+    - source: jwteq.decode(token, secret, true)
+      style: primary
+      start: 54
+      end: 87
+    - source: jwteq
+      style: secondary
+      start: 7
+      end: 12
+    - source: jwt-simple
+      style: secondary
+      start: 24
+      end: 34
+    - source: '"jwt-simple"'
+      style: secondary
+      start: 23
+      end: 35
+    - source: jwteq = require("jwt-simple")
+      style: secondary
+      start: 7
+      end: 36
+    - source: import jwteq = require("jwt-simple");
+      style: secondary
+      start: 0
+      end: 37
+    - source: import jwteq = require("jwt-simple");
+      style: secondary
+      start: 0
+      end: 37

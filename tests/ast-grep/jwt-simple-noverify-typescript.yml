@@ -12,6 +12,14 @@ valid:
   - |-
     const jwt = require("jsonwebtoken");
     const decoded = jwt.decode(token, secret, true);
+  # Hex, binary, and exponent spellings of zero are falsy.
+  - |-
+    const jwt = require("jwt-simple");
+    const decoded = jwt.decode(token, secret, 0x0);
+  # The module name must be the first and only string in the require call.
+  - |-
+    jwt = require("other-mod", "jwt-simple");
+    const decoded = jwt.decode(token, secret, true);
 invalid:
   # Single-quoted require with a truthy no-verify argument.
   - |-
@@ -29,3 +37,11 @@ invalid:
   - |-
     const jwt = require("jwt-simple");
     const decoded = jwt.decode(token, secret, 1);
+  # ES module import binds the module the same way require does.
+  - |-
+    import jwt from "jwt-simple";
+    const decoded = jwt.decode(token, secret, true);
+  # TypeScript import-equals binding of the CommonJS module.
+  - |-
+    import jwteq = require("jwt-simple");
+    const decoded = jwteq.decode(token, secret, true);

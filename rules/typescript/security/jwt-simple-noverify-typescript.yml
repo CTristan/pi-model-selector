@@ -4,8 +4,9 @@ severity: warning
 message: >-
   Detected the decoding of a JWT token without a verify step. JWT tokens
   must be verified before use, otherwise the token's integrity is unknown.
-  This means a malicious actor could forge a JWT token with any claims. Set
-  'verify' to `true` before using the token.
+  This means a malicious actor could forge a JWT token with any claims.
+  Omit the third argument or pass `false` so jwt-simple verifies the
+  signature before the token is used.
 note: >-
   [CWE-287] Improper Authentication
   [CWE-345] Insufficient Verification of Data Authenticity
@@ -64,6 +65,50 @@ rule:
                                       - kind: array
                                       - kind: pair
 
+        # ES module import of jwt-simple.
+        - kind: import_statement
+          all:
+            - has:
+                kind: import_clause
+                any:
+                  - has:
+                      kind: namespace_import
+                      has:
+                        kind: identifier
+                        pattern: $JWT
+                  - has:
+                      kind: named_imports
+                      has:
+                        kind: import_specifier
+                        pattern: $JWT
+                  - has:
+                      kind: identifier
+                      pattern: $JWT
+            - has:
+                kind: string
+                nthChild: 2
+                has:
+                  kind: string_fragment
+                  regex: ^jwt-simple$
+
+        # TypeScript import-equals binding of the CommonJS module. The
+        # clause lives inside the import statement (the follows-visible
+        # sibling), and its require accepts exactly one string argument,
+        # so no arity guards are needed here.
+        - kind: import_statement
+          has:
+            kind: import_require_clause
+            all:
+              - has:
+                  kind: identifier
+                  pattern: $JWT
+              - has:
+                  stopBy: end
+                  kind: string
+                  has:
+                    kind: string_fragment
+                    regex: ^jwt-simple$
+
         - kind: expression_statement
           has:
             kind: assignment_expression
@@ -86,9 +131,21 @@ rule:
                         has:
                           stopBy: end
                           kind: string
+                          nthChild: 1
                           has:
                             kind: string_fragment
                             regex: ^jwt-simple$
+                          all:
+                            - not:
+                                has:
+                                  nthChild: 2
+                            - not:
+                                has:
+                                  stopBy: end
+                                  any:
+                                    - kind: object
+                                    - kind: array
+                                    - kind: pair
 
 constraints:
   NOVERIFY:
@@ -98,12 +155,13 @@ constraints:
               - regex: ^true$
               - kind: string
               - kind: template_string
-          # Any non-zero number is truthy, so it skips verification too;
-          # zero in any spelling is falsy and verifies normally.
+          # Any unambiguous non-zero decimal is truthy, so it skips
+          # verification too; zero in any spelling and non-decimal forms
+          # like hex, binary, and exponents stay excluded because their
+          # value is not obvious from the literal alone.
           - all:
               - kind: number
-              - not:
-                  regex: ^0+(?:\\.0+)?$
+              - regex: ^(?:[1-9][0-9]*(?:\\.[0-9]+)?|0*\\.[0-9]*[1-9][0-9]*)$
           - has:
               stopBy: end
               any:
