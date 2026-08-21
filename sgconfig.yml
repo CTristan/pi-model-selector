@@ -11,8 +11,10 @@
 # Two rules carry local fixes that are NOT upstream yet, so re-vendoring
 # from ast-grep-essentials must reconcile them instead of overwriting:
 # - `express-session-hardcoded-secret-typescript.yml` matches module
-#   specifiers quote-agnostically (upstream only matches single quotes,
-#   which never occurs here because biome enforces double quotes).
+#   specifiers quote-agnostically, accepts `var` requires, and detects
+#   backtick secrets (upstream only matches single quotes and `const`/
+#   `let`/assignment requires, and quoted strings only; single quotes
+#   never occur here because biome enforces double quotes).
 # - `node-sequelize-empty-password-argument-typescript.yml` detects
 #   three-argument constructor calls and double-quoted `require` calls
 #   (upstream requires four arguments and single quotes).
