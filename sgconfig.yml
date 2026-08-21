@@ -15,8 +15,9 @@
 #   backtick secrets (upstream only matches single quotes and `const`/
 #   `let`/assignment requires, and quoted strings only; single quotes
 #   never occur here because biome enforces double quotes).
-# - `node-sequelize-empty-password-argument-typescript.yml` detects
-#   three-argument constructor calls and double-quoted `require` calls
-#   (upstream requires four arguments and single quotes).
+# - both `node-sequelize-*` rules detect three-argument constructor
+#   calls and double-quoted `require` calls, and the hardcoded-secret
+#   rule carries the correct CWE-798 classification (upstream requires
+#   four arguments, single quotes, and mislabels CWE-287).
 ruleDirs:
   - rules
