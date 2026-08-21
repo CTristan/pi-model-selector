@@ -7,5 +7,14 @@
 # package is at https://github.com/coderabbitai/ast-grep-essentials.
 #
 # Run locally: `ast-grep scan` (or `sg scan`).
+#
+# Two rules carry local fixes that are NOT upstream yet, so re-vendoring
+# from ast-grep-essentials must reconcile them instead of overwriting:
+# - `express-session-hardcoded-secret-typescript.yml` matches module
+#   specifiers quote-agnostically (upstream only matches single quotes,
+#   which never occurs here because biome enforces double quotes).
+# - `node-sequelize-empty-password-argument-typescript.yml` detects
+#   three-argument constructor calls and double-quoted `require` calls
+#   (upstream requires four arguments and single quotes).
 ruleDirs:
   - rules
