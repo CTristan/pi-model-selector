@@ -98,6 +98,12 @@ constraints:
               - regex: ^true$
               - kind: string
               - kind: template_string
+          # Any non-zero number is truthy, so it skips verification too;
+          # zero in any spelling is falsy and verifies normally.
+          - all:
+              - kind: number
+              - not:
+                  regex: ^0+(?:\\.0+)?$
           - has:
               stopBy: end
               any:

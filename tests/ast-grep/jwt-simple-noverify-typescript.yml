@@ -4,6 +4,10 @@ valid:
   - |-
     const jwt = require("jwt-simple");
     const decoded = jwt.decode(token, secret);
+  # A falsy no-verify flag still verifies.
+  - |-
+    const jwt = require("jwt-simple");
+    const decoded = jwt.decode(token, secret, 0);
   # Wrong module must not fire.
   - |-
     const jwt = require("jsonwebtoken");
@@ -17,3 +21,11 @@ invalid:
   - |-
     const jwt = require("jwt-simple");
     const decoded = jwt.decode(token, secret, true);
+  # Any truthy string skips verification, not just the literal true.
+  - |-
+    const jwt = require("jwt-simple");
+    const decoded = jwt.decode(token, secret, "HS256");
+  # Any non-zero number is truthy and skips verification.
+  - |-
+    const jwt = require("jwt-simple");
+    const decoded = jwt.decode(token, secret, 1);
