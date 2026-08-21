@@ -8,7 +8,7 @@
 #
 # Run locally: `ast-grep scan` (or `sg scan`).
 #
-# Two rules carry local fixes that are NOT upstream yet, so re-vendoring
+# Four rules carry local fixes that are NOT upstream yet, so re-vendoring
 # from ast-grep-essentials must reconcile them instead of overwriting:
 # - `express-session-hardcoded-secret-typescript.yml` matches module
 #   specifiers quote-agnostically, accepts `var` requires, and detects
@@ -19,5 +19,8 @@
 #   calls and double-quoted `require` calls, and the hardcoded-secret
 #   rule carries the correct CWE-798 classification (upstream requires
 #   four arguments, single quotes, and mislabels CWE-287).
+# - `jwt-simple-noverify-typescript.yml` uses lowercase `typescript` and
+#   a properly folded message scalar (upstream capitalizes the language
+#   inconsistently and renders the diagnostic with stray quotes).
 ruleDirs:
   - rules
