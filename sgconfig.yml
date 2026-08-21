@@ -1,12 +1,18 @@
 ---
-# ast-grep project configuration for `ast-grep scan`.
+# ast-grep project configuration for `ast-grep scan` and `ast-grep test`.
 #
-# The rules under `rules/` are the TypeScript security subset of the
-# coderabbitai/ast-grep-essentials package (Apache-2.0), the default preset
-# CodeRabbit runs. Vendored here so CI scans offline; the full upstream
-# package is at https://github.com/coderabbitai/ast-grep-essentials.
+# The rules under `rules/` are project-maintained, originally derived from
+# the TypeScript security subset of the coderabbitai/ast-grep-essentials
+# package (Apache-2.0, the default preset CodeRabbit runs). Attribution is
+# retained in `rules/ESSENTIALS-LICENSE.txt`; the full upstream package is
+# at https://github.com/coderabbitai/ast-grep-essentials.
 #
-# Run locally: `ast-grep scan` (or `sg scan`).
+# The semantic contract of every rule lives in `tests/ast-grep/` and runs in
+# CI, so rule edits and re-vendors are judged against the recorded probe
+# matrix rather than by review alone.
+#
+# Run locally: `ast-grep scan` (or `sg scan`), or
+# `ast-grep test -t tests/ast-grep` for the rule tests.
 #
 # Four rules carry local fixes that are NOT upstream yet, so re-vendoring
 # from ast-grep-essentials must reconcile them instead of overwriting:
