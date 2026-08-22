@@ -164,6 +164,58 @@ describe("OMP loader executable compatibility", () => {
   );
 
   it.skipIf(!BUN)(
+    "fails when an explicit OMP_ROOT is not an OMP package root",
+    async () => {
+      const dir = mkdtempSync(join(tmpdir(), "omp-fake-root-"));
+      try {
+        const home = join(dir, "home");
+        const emptyBin = join(dir, "empty-bin");
+        const fakeRoot = join(dir, "fake-omp");
+        const pluginDir = join(fakeRoot, "src", "extensibility", "plugins");
+        mkdirSync(home);
+        mkdirSync(emptyBin);
+        mkdirSync(pluginDir, { recursive: true });
+        // The stub satisfies every assertion the check makes, so without root
+        // validation this directory fabricates a PASS for an install that is
+        // not OMP at all.
+        writeFileSync(
+          join(pluginDir, "legacy-pi-compat.ts"),
+          [
+            "export function installLegacyPiSpecifierShim(): void {}",
+            "export async function loadLegacyPiModule(_adapterPath: string) {",
+            "  return {",
+            "    isOmp: true,",
+            '    EXTENSION_DIR: ".omp",',
+            `    AGENT_DIR: ${JSON.stringify(join(home, ".omp", "agent"))},`,
+            "    DynamicBorder: class DynamicBorder {},",
+            "    Container: function Container() {},",
+            "    truncateToWidth: function truncateToWidth() {},",
+            "    SelectList: function SelectList() {},",
+            "    Spacer: function Spacer() {},",
+            "    Text: function Text() {},",
+            "  };",
+            "}",
+            "",
+          ].join("\n"),
+        );
+        writeFileSync(
+          join(fakeRoot, "package.json"),
+          JSON.stringify({ name: "definitely-not-omp" }),
+        );
+        const env = syntheticEnv(home, emptyBin);
+        env.OMP_ROOT = fakeRoot;
+        const { code, output } = await spawnCheck(env);
+        expect(code, `omp-compat-check exited ${code}:\n${output}`).toBe(1);
+        expect(output).toContain("FAIL");
+        expect(output).not.toContain("PASS");
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+    120_000,
+  );
+
+  it.skipIf(!BUN)(
     "classifies an omp symlink into a package tree as a package install",
     async () => {
       const dir = mkdtempSync(join(tmpdir(), "omp-symlink-"));

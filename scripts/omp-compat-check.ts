@@ -127,6 +127,10 @@ function ompRootCandidates(): string[] {
 
 function findOmpCompatModule(): string | null {
   for (const root of ompRootCandidates()) {
+    // A candidate is only trustworthy once its package.json confirms the
+    // real OMP package; otherwise a lookalike directory such as an arbitrary
+    // OMP_ROOT holding the relative module path could fabricate a PASS.
+    if (!isOmpPackageRoot(root)) continue;
     const candidate = path.join(root, compatModuleRelative);
     if (fs.existsSync(candidate)) return candidate;
   }
@@ -168,7 +172,8 @@ const ompDetected =
   ompDetectedByEnv || ompDetectedByBinary || ompDetectedByConventionalRoot;
 if (!compatModule && ompDetected) {
   fail(
-    "OMP detected but legacy-pi-compat.ts not found under any candidate root",
+    "OMP detected but no candidate root is a valid " +
+      "@oh-my-pi/pi-coding-agent package containing legacy-pi-compat.ts",
   );
 }
 if (!compatModule) {
