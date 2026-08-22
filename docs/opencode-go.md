@@ -23,7 +23,7 @@ The endpoint is undocumented, so the response schema is treated as subject to ch
 
 ## Usage Windows
 
-- **5-hour**: The rolling `rolling` window.
+- **5-hour**: The `rolling` window.
 - **Weekly**: The `weekly` window.
 - **Monthly**: The `monthly` window.
 
