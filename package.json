@@ -57,11 +57,11 @@
     "@earendil-works/pi-tui": "0.84.1",
     "@types/luxon": "3.7.4",
     "@types/node": "24.13.3",
-    "@vitest/coverage-v8": "4.1.10",
+    "@vitest/coverage-v8": "4.1.11",
     "typedoc": "0.28.20",
     "typedoc-plugin-coverage": "4.0.3",
     "typescript": "6.0.3",
-    "vitest": "4.1.10"
+    "vitest": "4.1.11"
   },
   "scripts": {
     "type-check": "tsc",
