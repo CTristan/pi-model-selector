@@ -91,7 +91,7 @@ export async function fetchZaiUsage(
     const { res, data } = await fetchWithTimeout(URLS.ZAI_QUOTA, {
       method: "GET",
       headers: {
-        Authorization: apiKey,
+        Authorization: `Bearer ${apiKey}`,
         Accept: "application/json",
       },
       timeout: 5000,

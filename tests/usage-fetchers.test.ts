@@ -737,7 +737,7 @@ describe("Usage Fetchers", () => {
           expect.any(String),
           expect.objectContaining({
             headers: expect.objectContaining({
-              Authorization: "zai-key",
+              Authorization: "Bearer zai-key",
             }),
           }),
         );

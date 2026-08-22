@@ -57,7 +57,7 @@ describe("adapter OMP loader compatibility", () => {
     // Module evaluation must detect OMP without dereferencing its settings
     // proxy, which throws until the compatibility settings graph is initialized.
     expect(executableSource).toContain('"settings" in agent');
-    expect(executableSource).not.toMatch(/=\s*agent\.settings\b/);
+    expect(executableSource).not.toMatch(/\bagent\.settings\b/);
   });
 
   it("does not use relative dynamic imports in runtime sources", async () => {
