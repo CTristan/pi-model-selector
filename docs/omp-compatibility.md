@@ -20,7 +20,7 @@ await import("@earendil-works/pi-tui");
 
 resolve directly under Pi and resolve to OMP's canonical in-process compatibility modules under OMP. This keeps one host extension registry and does not require a separate OMP entry point or direct `@oh-my-pi/*` imports in extension source.
 
-`scripts/omp-compat-check.ts` executes this guarantee: when run under Bun on a machine with OMP installed, it loads `src/adapter.ts` through the real `installLegacyPiSpecifierShim()` plus `loadLegacyPiModule()` path and asserts both imports resolve to OMP host modules and that OMP mode is detected. It exits `SKIP` when OMP is absent, so CI without OMP stays green. `tests/omp-loader-executable.test.ts` runs that script from the vitest suite when Bun is available.
+`scripts/omp-compat-check.ts` executes this guarantee: when run under Bun on a machine with OMP installed, it loads `src/adapter.ts` through the real `installLegacyPiSpecifierShim()` plus `loadLegacyPiModule()` path and asserts both imports resolve to OMP host modules and that OMP mode is detected. It exits `SKIP` when OMP is absent or when `omp` is a prebuilt standalone binary (that install bundles the compat module inside the executable, so a source-level check cannot load it), so CI without a package-layout OMP stays green. `tests/omp-loader-executable.test.ts` runs that script from the vitest suite when Bun is available.
 
 ## Dual-runtime rules
 

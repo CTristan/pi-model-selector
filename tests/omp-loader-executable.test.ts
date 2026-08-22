@@ -1,5 +1,14 @@
 import { spawn } from "node:child_process";
-import { existsSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -10,23 +19,38 @@ import { describe, expect, it } from "vitest";
  * extension loader against `src/adapter.ts`. The script exits 0 both when OMP
  * resolves both imports (PASS) and when OMP is not installed (SKIP), so CI
  * without Bun or OMP stays green. We fail only on a real resolution failure.
+ *
+ * The synthetic-layout cases pin the discovery contract with a temporary
+ * HOME and PATH: the prebuilt standalone binary skips with an explicit
+ * reason, a conventional root without the compat module fails, and an omp
+ * symlink into a package tree is classified as a package install rather
+ * than a standalone binary.
  */
 
-function hasBun(): boolean {
-  return (
-    process.env.PATH?.split(delimiter).some((dir) =>
-      ["bun", "bun.exe"].some((name) => existsSync(join(dir, name))),
-    ) ?? false
-  );
+function findBun(): string | null {
+  for (const dir of process.env.PATH?.split(delimiter) ?? []) {
+    for (const name of ["bun", "bun.exe"]) {
+      const candidate = join(dir, name);
+      if (existsSync(candidate)) return candidate;
+    }
+  }
+  return null;
 }
 
-function runCheck(): Promise<{ code: number | null; output: string }> {
+const BUN = findBun();
+
+type CheckResult = { code: number | null; output: string };
+
+function spawnCheck(env: Record<string, string>): Promise<CheckResult> {
   return new Promise((resolve, reject) => {
-    // The adapter switches to mock components when `VITEST` is set, so strip it
-    // from the child env: this check must exercise the real runtime path.
-    const env = { ...process.env };
-    delete env.VITEST;
-    const child = spawn("bun", ["scripts/omp-compat-check.ts"], {
+    if (!BUN) {
+      reject(new Error("bun not found"));
+      return;
+    }
+    // The adapter switches to mock components when `VITEST` is set, so the
+    // synthetic env deliberately omits it: this check must exercise the real
+    // runtime path.
+    const child = spawn(BUN, ["scripts/omp-compat-check.ts"], {
       cwd: process.cwd(),
       env,
     });
@@ -55,12 +79,121 @@ function runCheck(): Promise<{ code: number | null; output: string }> {
   });
 }
 
+function runCheck(): Promise<CheckResult> {
+  const env = { ...process.env };
+  delete env.VITEST;
+  return spawnCheck(env as Record<string, string>);
+}
+
+/** Minimal child env pinned to a temporary HOME and PATH. */
+function syntheticEnv(home: string, pathDir: string): Record<string, string> {
+  const env: Record<string, string> = { HOME: home, PATH: pathDir };
+  if (process.env.TMPDIR) env.TMPDIR = process.env.TMPDIR;
+  return env;
+}
+
+function writeExecutable(file: string, body: string): void {
+  writeFileSync(file, body);
+  chmodSync(file, 0o755);
+}
+
 describe("OMP loader executable compatibility", () => {
-  it.skipIf(!hasBun())(
+  it.skipIf(!BUN)(
     "resolves @earendil-works/pi-* imports through OMP's loader",
     async () => {
       const { code, output } = await runCheck();
       expect(code, `omp-compat-check exited ${code}:\n${output}`).toBe(0);
+    },
+    120_000,
+  );
+
+  it.skipIf(!BUN)(
+    "skips with an explicit reason for a prebuilt standalone omp binary",
+    async () => {
+      const dir = mkdtempSync(join(tmpdir(), "omp-standalone-"));
+      try {
+        const binDir = join(dir, "bin");
+        const home = join(dir, "home");
+        mkdirSync(binDir);
+        mkdirSync(home);
+        writeExecutable(
+          join(binDir, "omp"),
+          '#!/bin/sh\necho "omp/17.2.12"\nexit 0\n',
+        );
+        const { code, output } = await spawnCheck(syntheticEnv(home, binDir));
+        expect(code, `omp-compat-check exited ${code}:\n${output}`).toBe(0);
+        expect(output).toContain("SKIP");
+        expect(output).toContain("standalone binary");
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+    120_000,
+  );
+
+  it.skipIf(!BUN)(
+    "fails when a conventional OMP root exists without the compat module",
+    async () => {
+      const dir = mkdtempSync(join(tmpdir(), "omp-conventional-"));
+      try {
+        const home = join(dir, "home");
+        const emptyBin = join(dir, "empty-bin");
+        const pkgRoot = join(
+          home,
+          "node_modules",
+          "@oh-my-pi",
+          "pi-coding-agent",
+        );
+        mkdirSync(emptyBin);
+        mkdirSync(pkgRoot, { recursive: true });
+        writeFileSync(
+          join(pkgRoot, "package.json"),
+          JSON.stringify({
+            name: "@oh-my-pi/pi-coding-agent",
+            version: "17.2.12",
+          }),
+        );
+        const { code, output } = await spawnCheck(syntheticEnv(home, emptyBin));
+        expect(code, `omp-compat-check exited ${code}:\n${output}`).toBe(1);
+        expect(output).toContain("FAIL");
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
+    },
+    120_000,
+  );
+
+  it.skipIf(!BUN)(
+    "classifies an omp symlink into a package tree as a package install",
+    async () => {
+      const dir = mkdtempSync(join(tmpdir(), "omp-symlink-"));
+      try {
+        const home = join(dir, "home");
+        const binDir = join(dir, "bin");
+        const pkgRoot = join(
+          home,
+          "node_modules",
+          "@oh-my-pi",
+          "pi-coding-agent",
+        );
+        mkdirSync(binDir);
+        mkdirSync(join(pkgRoot, "dist"), { recursive: true });
+        writeFileSync(
+          join(pkgRoot, "package.json"),
+          JSON.stringify({ name: "@oh-my-pi/pi-coding-agent" }),
+        );
+        // The compat module is intentionally absent: discovery must still
+        // recognize the package layout and fail, not treat the symlink as a
+        // standalone binary and skip.
+        writeExecutable(join(pkgRoot, "dist", "cli.js"), "#!/bin/sh\n");
+        symlinkSync(join(pkgRoot, "dist", "cli.js"), join(binDir, "omp"));
+        const { code, output } = await spawnCheck(syntheticEnv(home, binDir));
+        expect(code, `omp-compat-check exited ${code}:\n${output}`).toBe(1);
+        expect(output).toContain("FAIL");
+        expect(output).not.toContain("standalone");
+      } finally {
+        rmSync(dir, { recursive: true, force: true });
+      }
     },
     120_000,
   );

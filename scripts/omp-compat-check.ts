@@ -8,10 +8,20 @@
  * host modules and that OMP mode is detected. Run with Bun:
  * `bun scripts/omp-compat-check.ts`.
  *
+ * OMP ships in two layouts, and discovery treats them differently:
+ * a package install (bun global or node_modules, reached through the `omp`
+ * symlink) exposes `src/extensibility/plugins/legacy-pi-compat.ts` on disk,
+ * while the prebuilt standalone binary at `~/.local/bin/omp` bundles the
+ * compat module inside the executable where an external process cannot
+ * import it.
+ *
  * Exit codes:
  *   0  PASS — OMP resolved both imports and the adapter detected OMP mode.
- *   0  SKIP — OMP is not installed, so there is nothing to verify (CI-safe).
- *   1  FAIL — OMP is installed but a resolution or detection assertion failed.
+ *   0  SKIP — nothing to verify: OMP is absent, or `omp` is a prebuilt
+ *             standalone binary whose bundled internals cannot be imported
+ *             from this process (CI-safe).
+ *   1  FAIL — OMP is installed but a resolution or detection assertion
+ *             failed, or a detected install cannot be verified.
  */
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -24,26 +34,17 @@ const ompDetectedByEnv = process.env.OMP_ROOT !== undefined;
 const ompBinary = Bun.which("omp");
 const ompDetectedByBinary = ompBinary !== null;
 
-function ompRootCandidates(): string[] {
-  // An explicit OMP_ROOT or a resolved omp binary names the exact installation
-  // to verify. Falling through to other installs would let a broken explicit
-  // root pass by testing a different one, so return only the explicit source.
-  if (ompDetectedByEnv) return [process.env.OMP_ROOT!];
+// Relative location of OMP's extension loader entry inside a package install.
+const compatModuleRelative = path.join(
+  "src",
+  "extensibility",
+  "plugins",
+  "legacy-pi-compat.ts",
+);
 
-  if (ompBinary) {
-    try {
-      // `omp` is a symlink into the package, for example
-      // `<root>/node_modules/@oh-my-pi/pi-coding-agent/dist/cli.js`. Resolve it
-      // and walk up to the package root.
-      const real = fs.realpathSync(ompBinary);
-      return [path.dirname(path.dirname(real))];
-    } catch {
-      // A broken symlink is a real failure; the caller reports it via
-      // ompDetectedByBinary when no module is found.
-      return [];
-    }
-  }
-
+// Conventional install roots probed when neither OMP_ROOT nor an `omp`
+// executable names the installation.
+function conventionalOmpRoots(): string[] {
   const home = os.homedir();
   return [
     path.join(home, "node_modules", "@oh-my-pi", "pi-coding-agent"),
@@ -59,15 +60,74 @@ function ompRootCandidates(): string[] {
   ];
 }
 
+const ompDetectedByConventionalRoot = conventionalOmpRoots().some((root) =>
+  fs.existsSync(root),
+);
+
+function isOmpPackageRoot(dir: string): boolean {
+  try {
+    const pkg: unknown = JSON.parse(
+      fs.readFileSync(path.join(dir, "package.json"), "utf8"),
+    );
+    return (
+      typeof pkg === "object" &&
+      pkg !== null &&
+      (pkg as { name?: unknown }).name === "@oh-my-pi/pi-coding-agent"
+    );
+  } catch {
+    return false;
+  }
+}
+
+// Walk the ancestors of the resolved binary until a directory holds either
+// the compat module itself or an @oh-my-pi/pi-coding-agent package.json.
+// A fixed two-parent walk assumed dist/cli.js inside the package, which
+// mis-derives the root for OMP's prebuilt binary install at ~/.local/bin.
+function packageRootFromBinary(binary: string): string | null {
+  let dir = path.dirname(binary);
+  for (;;) {
+    if (fs.existsSync(path.join(dir, compatModuleRelative))) return dir;
+    if (isOmpPackageRoot(dir)) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) return null;
+    dir = parent;
+  }
+}
+
+type BinaryInstall =
+  | { kind: "broken-symlink" }
+  | { kind: "standalone-binary" }
+  | { kind: "package"; root: string };
+
+function discoverBinaryInstall(): BinaryInstall | null {
+  if (!ompBinary) return null;
+  let real: string;
+  try {
+    real = fs.realpathSync(ompBinary);
+  } catch {
+    return { kind: "broken-symlink" };
+  }
+  const root = packageRootFromBinary(real);
+  return root ? { kind: "package", root } : { kind: "standalone-binary" };
+}
+
+const binaryInstall = discoverBinaryInstall();
+
+function ompRootCandidates(): string[] {
+  // An explicit OMP_ROOT or a resolved omp binary names the exact installation
+  // to verify. Falling through to other installs would let a broken explicit
+  // root pass by testing a different one, so return only the explicit source.
+  if (ompDetectedByEnv) return [process.env.OMP_ROOT!];
+
+  if (binaryInstall?.kind === "package") return [binaryInstall.root];
+  if (binaryInstall) return [];
+
+  return conventionalOmpRoots();
+}
+
 function findOmpCompatModule(): string | null {
   for (const root of ompRootCandidates()) {
-    const candidate = path.join(
-      root,
-      "src",
-      "extensibility",
-      "plugins",
-      "legacy-pi-compat.ts",
-    );
+    const candidate = path.join(root, compatModuleRelative);
     if (fs.existsSync(candidate)) return candidate;
   }
   return null;
@@ -78,12 +138,35 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-// SKIP only when nothing indicates OMP is present: no explicit OMP_ROOT and no
-// `omp` executable on PATH. When a detection source succeeds but the compat
-// module is missing, that is a real failure (wrong layout or version), not a
-// skip.
+// OMP's prebuilt binary bundles the compat module inside the executable, so
+// this external process cannot import it for a source-level check. Verify the
+// binary at least starts, then skip with an explicit reason instead of
+// failing or claiming PASS. An explicit OMP_ROOT still takes precedence and
+// must not fall through to the binary install.
+if (!ompDetectedByEnv && binaryInstall?.kind === "standalone-binary") {
+  const version = Bun.spawnSync([ompBinary ?? "omp", "--version"], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  if (version.exitCode !== 0) {
+    fail(`omp binary at ${ompBinary} exited ${version.exitCode} on --version`);
+  }
+  console.log(
+    "SKIP: omp is a prebuilt standalone binary; its compat module is " +
+      "bundled inside the executable and cannot be loaded for a " +
+      "source-level check",
+  );
+  process.exit(0);
+}
+
+// SKIP only when nothing indicates OMP is present: no explicit OMP_ROOT, no
+// `omp` executable on PATH, and no conventional install root on disk. When a
+// detection source succeeds but the compat module is missing, that is a real
+// failure (wrong layout or version), not a skip.
 const compatModule = findOmpCompatModule();
-if (!compatModule && (ompDetectedByEnv || ompDetectedByBinary)) {
+const ompDetected =
+  ompDetectedByEnv || ompDetectedByBinary || ompDetectedByConventionalRoot;
+if (!compatModule && ompDetected) {
   fail(
     "OMP detected but legacy-pi-compat.ts not found under any candidate root",
   );
