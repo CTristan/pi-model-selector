@@ -36,7 +36,7 @@ async function readRuntimeSources(): Promise<
   );
 }
 describe("adapter OMP loader compatibility", () => {
-  it("uses literal legacy Pi imports so OMP can rewrite them before mirroring", async () => {
+  it("uses literal current Pi imports that OMP rewrites to host modules", async () => {
     const source = await readFile(
       new URL("../src/adapter.ts", import.meta.url),
       "utf-8",
@@ -45,13 +45,19 @@ describe("adapter OMP loader compatibility", () => {
     const executableSource = stripComments(source);
 
     expect(executableSource).toMatch(
-      /await\s+import\(\s*"@mariozechner\/pi-coding-agent"\s*\)/,
+      /await\s+import\(\s*"@earendil-works\/pi-coding-agent"\s*\)/,
     );
     expect(executableSource).toMatch(
-      /await\s+import\(\s*"@mariozechner\/pi-tui"\s*\)/,
+      /await\s+import\(\s*"@earendil-works\/pi-tui"\s*\)/,
     );
     expect(executableSource).not.toContain("@oh-my-pi/pi-coding-agent");
     expect(executableSource).not.toContain("@oh-my-pi/pi-tui");
+    expect(executableSource).not.toContain("@mariozechner/pi-coding-agent");
+    expect(executableSource).not.toContain("@mariozechner/pi-tui");
+    // Module evaluation must detect OMP without dereferencing its settings
+    // proxy, which throws until the compatibility settings graph is initialized.
+    expect(executableSource).toContain('"settings" in agent');
+    expect(executableSource).not.toMatch(/\bagent\.settings\b/);
   });
 
   it("does not use relative dynamic imports in runtime sources", async () => {

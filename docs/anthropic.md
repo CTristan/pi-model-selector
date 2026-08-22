@@ -33,6 +33,7 @@ The provider tracks several utilization metrics:
 
 ## Logic Details
 
+- **Percentage Scale**: The usage API reports each `utilization` value directly on a `0..100` percentage scale. The extension preserves that value rather than treating it as a `0..1` fraction.
 - **Global Utilization**: The extension calculates a "global utilization" by taking the maximum of the `five_hour`, `seven_day`, `seven_day_sonnet`, and `seven_day_opus` utilization.
 - **Raw Windows**: The `5h` and `Week` windows always reflect their true raw utilization and reset times to provide accurate information to the user.
 - **Pessimistic Windows**: For model-specific windows (`Sonnet`, `Opus`) and the `Shared` fallback window, the extension uses a pessimistic approach. It sets the utilization to the maximum of the specific window's value and the global utilization. This ensures that whichever limit is stricter (short-term or long-term) is reflected in the window the selector likely uses.

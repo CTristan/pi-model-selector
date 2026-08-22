@@ -1,5 +1,7 @@
-import type * as PiCodingAgent from "@mariozechner/pi-coding-agent";
-import type * as PiTui from "@mariozechner/pi-tui";
+import * as os from "node:os";
+import * as path from "node:path";
+import type * as PiCodingAgent from "@earendil-works/pi-coding-agent";
+import type * as PiTui from "@earendil-works/pi-tui";
 
 /** Pi TUI container component constructor for runtime-compatible UI rendering. */
 export let Container: typeof PiTui.Container;
@@ -38,7 +40,10 @@ interface CapturedDefaultModelRole {
   value: unknown;
 }
 
-let ompSettings: OmpSettingsLike | undefined;
+let ompSettingsPromise: Promise<OmpSettingsLike | undefined> | undefined;
+let initializeOmpSettings: (() => Promise<OmpSettingsLike>) | undefined;
+let runtimeConfigDirName = ".pi";
+let runtimeAgentDir = path.join(os.homedir(), runtimeConfigDirName, "agent");
 
 const DEBUG =
   typeof process !== "undefined" && process.env.MODEL_SELECTOR_DEBUG === "1";
@@ -67,19 +72,45 @@ if (typeof process !== "undefined" && process.env.VITEST) {
   Spacer = class {} as unknown as typeof PiTui.Spacer;
   Text = class {} as unknown as typeof PiTui.Text;
 } else {
-  // Always import the legacy Pi package names. OMP's extension loader rewrites
-  // these literal specifiers to @oh-my-pi while mirroring the extension; probing
-  // @oh-my-pi directly re-enters OMP's SDK import during extension resolution.
+  // Pi resolves these current package names directly. OMP 17.2.12 rewrites
+  // the literal specifiers to its canonical host modules, avoiding duplicate
+  // extension registries while preserving Pi's public SDK surface.
   debugLog("loading Pi compatibility packages...");
   const agent = (await import(
-    "@mariozechner/pi-coding-agent"
-  )) as typeof import("@mariozechner/pi-coding-agent") & {
+    "@earendil-works/pi-coding-agent"
+  )) as typeof import("@earendil-works/pi-coding-agent") & {
     settings?: OmpSettingsLike;
+    Settings?: {
+      init(options?: {
+        cwd?: string;
+        agentDir?: string;
+      }): Promise<OmpSettingsLike>;
+    };
   };
-  const tui = await import("@mariozechner/pi-tui");
+  const tui = await import("@earendil-works/pi-tui");
 
-  ompSettings = agent.settings as OmpSettingsLike | undefined;
-  isOmp = ompSettings !== undefined;
+  // Detect the compatibility export by presence only. OMP's exported settings
+  // proxy throws when accessed before its compatibility graph is initialized.
+  isOmp = "settings" in agent;
+  const ompSettingsApi = agent.Settings;
+  if (isOmp && ompSettingsApi) {
+    initializeOmpSettings = () =>
+      ompSettingsApi.init({
+        cwd: process.cwd(),
+        agentDir: agent.getAgentDir(),
+      });
+  }
+  try {
+    runtimeConfigDirName = agent.CONFIG_DIR_NAME;
+  } catch (error) {
+    debugLog(`using default config directory: ${String(error)}`);
+  }
+  runtimeAgentDir = path.join(os.homedir(), runtimeConfigDirName, "agent");
+  try {
+    runtimeAgentDir = agent.getAgentDir();
+  } catch (error) {
+    debugLog(`using default agent directory: ${String(error)}`);
+  }
 
   debugLog(`detected runtime: ${isOmp ? "OMP" : "Pi"}`);
 
@@ -95,11 +126,13 @@ if (typeof process !== "undefined" && process.env.VITEST) {
   debugLog(`Container = ${tui.Container ? "ok" : "MISSING"}`);
   debugLog(`truncateToWidth = ${typeof tui.truncateToWidth}`);
   debugLog(`SelectList = ${tui.SelectList ? "ok" : "MISSING"}`);
-  debugLog(`EXTENSION_DIR = ${isOmp ? ".omp" : ".pi"}`);
+  debugLog(`EXTENSION_DIR = ${runtimeConfigDirName}`);
 }
 
 /** Per-runtime directory name used for model-selector state files. */
-export const EXTENSION_DIR = isOmp ? ".omp" : ".pi";
+export const EXTENSION_DIR = runtimeConfigDirName;
+/** Configured agent directory supplied by the active host. */
+export const AGENT_DIR = runtimeAgentDir;
 
 function readModelRoles(settings: OmpSettingsLike): Record<string, unknown> {
   if (typeof settings.get !== "function") {
@@ -146,19 +179,29 @@ async function restoreDefaultModelRole(
   await settings.flush?.();
 }
 
+async function getOmpSettings(): Promise<OmpSettingsLike | undefined> {
+  if (!initializeOmpSettings) return undefined;
+  ompSettingsPromise ??= initializeOmpSettings().catch((error) => {
+    ompSettingsPromise = undefined;
+    debugLog(`OMP settings initialization failed: ${String(error)}`);
+    return undefined;
+  });
+  return ompSettingsPromise;
+}
+
 /**
  * Runs an action while restoring OMP's default model role afterward when enabled.
  */
 export async function withPreservedOmpDefaultModelRole<T>(
   preserveDefaultModel: boolean | undefined,
   action: () => Promise<T>,
-  settings: OmpSettingsLike | undefined = ompSettings,
+  settings?: OmpSettingsLike,
 ): Promise<T> {
-  if (preserveDefaultModel === false || !settings) {
-    return await action();
-  }
+  if (preserveDefaultModel === false) return await action();
+  const activeSettings = settings ?? (await getOmpSettings());
+  if (!activeSettings) return await action();
 
-  const captured = captureDefaultModelRole(settings);
+  const captured = captureDefaultModelRole(activeSettings);
   let actionError: unknown, result: T | undefined;
 
   try {
@@ -168,7 +211,7 @@ export async function withPreservedOmpDefaultModelRole<T>(
   }
 
   try {
-    await restoreDefaultModelRole(settings, captured);
+    await restoreDefaultModelRole(activeSettings, captured);
   } catch (error) {
     if (actionError === undefined) {
       throw error;

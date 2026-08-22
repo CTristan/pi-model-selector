@@ -4,7 +4,7 @@ import {
   COPILOT_EDITOR_VERSION,
   COPILOT_PLUGIN_VERSION,
   COPILOT_USER_AGENT,
-  execAsync,
+  execFileAsync,
   fetchWithTimeout,
   formatReset,
   safeDate,
@@ -114,7 +114,7 @@ export async function fetchCopilotUsage(
     }
 
     try {
-      const { stdout } = await execAsync("gh auth token", {
+      const { stdout } = await execFileAsync("gh", ["auth", "token"], {
         encoding: "utf-8",
         timeout: 5000,
       });

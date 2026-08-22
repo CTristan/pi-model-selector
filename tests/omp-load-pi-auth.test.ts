@@ -230,8 +230,9 @@ describe("loadPiAuth OMP SQLite fallback", () => {
     expect(result).toEqual({});
   });
 
-  it("uses EXTENSION_DIR path for the auth.json file", async () => {
+  it("uses the host-configured agent directory for auth.json", async () => {
     vi.doMock("../src/adapter.js", () => ({
+      AGENT_DIR: "/custom/omp-agent",
       EXTENSION_DIR: ".omp",
       isOmp: true,
     }));
@@ -247,7 +248,6 @@ describe("loadPiAuth OMP SQLite fallback", () => {
     expect(result).toEqual({ "omp-provider": { access: "omp-token" } });
     const readFileCalls = vi.mocked(fs.promises.readFile).mock.calls;
     const calledPath = String(readFileCalls[0]?.[0] ?? "");
-    expect(calledPath).toContain(".omp");
-    expect(calledPath).toContain("auth.json");
+    expect(calledPath).toBe("/custom/omp-agent/auth.json");
   });
 });

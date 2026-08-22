@@ -1,6 +1,6 @@
 import * as os from "node:os";
 import type { RateWindow, UsageSnapshot } from "../types.js";
-import { execAsync, formatReset } from "./common.js";
+import { execFileAsync, formatReset } from "./common.js";
 
 function stripAnsi(text: string): string {
   return text.replace(
@@ -13,8 +13,11 @@ function stripAnsi(text: string): string {
 async function whichAsync(cmd: string): Promise<string | null> {
   try {
     const isWindows = os.platform() === "win32";
-    const whichCmd = isWindows ? `where ${cmd}` : `which ${cmd}`;
-    const { stdout } = await execAsync(whichCmd, { encoding: "utf-8" });
+    const { stdout } = await execFileAsync(
+      isWindows ? "where" : "which",
+      [cmd],
+      { encoding: "utf-8" },
+    );
     const lines = stdout.trim().split(/\r?\n/);
     return lines[0] ?? null;
   } catch {
@@ -302,7 +305,7 @@ export async function fetchKiroUsage(): Promise<UsageSnapshot> {
 
   try {
     try {
-      await execAsync("kiro-cli whoami", { timeout: 5000 });
+      await execFileAsync("kiro-cli", ["whoami"], { timeout: 5000 });
     } catch {
       return {
         provider: "kiro",
@@ -313,8 +316,9 @@ export async function fetchKiroUsage(): Promise<UsageSnapshot> {
       };
     }
 
-    const { stdout: output } = await execAsync(
-      "kiro-cli chat --no-interactive /usage",
+    const { stdout: output } = await execFileAsync(
+      "kiro-cli",
+      ["chat", "--no-interactive", "/usage"],
       {
         timeout: 10000,
         env: { ...process.env, TERM: "xterm-256color" },

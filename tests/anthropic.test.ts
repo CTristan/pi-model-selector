@@ -1,5 +1,6 @@
 import * as os from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { buildCandidates } from "../src/candidates.js";
 import { fetchClaudeUsage } from "../src/fetchers/anthropic.js";
 
 vi.mock("node:os", async () => {
@@ -25,11 +26,11 @@ describe("Anthropic Usage Fetcher", () => {
     it("should return both 5h and Week windows when both are present in API response", async () => {
       const mockResponse = {
         five_hour: {
-          utilization: 0.8,
+          utilization: 80,
           resets_at: new Date(Date.now() + 3600 * 1000).toISOString(),
         },
         seven_day: {
-          utilization: 0.1,
+          utilization: 10,
           resets_at: new Date(Date.now() + 7200 * 1000).toISOString(),
         },
       };
@@ -61,16 +62,24 @@ describe("Anthropic Usage Fetcher", () => {
       expect(result.windows.find((w) => w.label === "Week")?.usedPercent).toBe(
         10,
       );
-      // Shared should reflect pessimistic utilization (max of 0.8 and 0.1 => 80%)
+      // Shared should reflect pessimistic utilization (max of 80 and 10 => 80%)
       expect(
         result.windows.find((w) => w.label === "Shared")?.usedPercent,
       ).toBe(80);
+
+      const candidates = buildCandidates([result]);
+      expect(
+        candidates.find((c) => c.windowLabel === "5h")?.remainingPercent,
+      ).toBe(20);
+      expect(
+        candidates.find((c) => c.windowLabel === "Week")?.remainingPercent,
+      ).toBe(90);
     });
 
     it("should return 5h and Shared windows if Week is missing", async () => {
       const mockResponse = {
         five_hour: {
-          utilization: 0.5,
+          utilization: 50,
           resets_at: new Date(Date.now() + 3600 * 1000).toISOString(),
         },
       };
@@ -96,7 +105,7 @@ describe("Anthropic Usage Fetcher", () => {
     it("should return Week and Shared windows if 5h is missing", async () => {
       const mockResponse = {
         seven_day: {
-          utilization: 0.5,
+          utilization: 50,
           resets_at: new Date(Date.now() + 3600 * 1000).toISOString(),
         },
       };
@@ -126,7 +135,7 @@ describe("Anthropic Usage Fetcher", () => {
           resets_at: new Date(Date.now() + 3600 * 1000).toISOString(),
         },
         seven_day: {
-          utilization: 0.1,
+          utilization: 10,
           resets_at: new Date(Date.now() + 7200 * 1000).toISOString(),
         },
       };
@@ -152,7 +161,7 @@ describe("Anthropic Usage Fetcher", () => {
       expect(week?.usedPercent).toBe(10);
 
       const shared = result.windows.find((w) => w.label === "Shared");
-      expect(shared?.usedPercent).toBe(10); // max(0, 0.1) * 100
+      expect(shared?.usedPercent).toBe(10); // max(0, 10)
     });
 
     it("should retain reset time in Shared window even if utilization is 0", async () => {
@@ -194,11 +203,11 @@ describe("Anthropic Usage Fetcher", () => {
     it("should align globalResetsAt with the limiting window (5h limit hit)", async () => {
       const mockResponse = {
         five_hour: {
-          utilization: 1.0,
+          utilization: 100,
           resets_at: new Date(Date.now() + 3600 * 1000).toISOString(),
         }, // 1 hour
         seven_day: {
-          utilization: 0.1,
+          utilization: 10,
           resets_at: new Date(Date.now() + 5 * 24 * 3600 * 1000).toISOString(),
         }, // 5 days
       };
@@ -226,11 +235,11 @@ describe("Anthropic Usage Fetcher", () => {
     it("should align globalResetsAt with the limiting window (7d limit hit)", async () => {
       const mockResponse = {
         five_hour: {
-          utilization: 0.2,
+          utilization: 20,
           resets_at: new Date(Date.now() + 3600 * 1000).toISOString(),
         },
         seven_day: {
-          utilization: 0.9,
+          utilization: 90,
           resets_at: new Date(Date.now() + 5 * 24 * 3600 * 1000).toISOString(),
         },
       };
@@ -259,11 +268,11 @@ describe("Anthropic Usage Fetcher", () => {
       const now = Date.now();
       const mockResponse = {
         five_hour: {
-          utilization: 0.8,
+          utilization: 80,
           resets_at: new Date(now + 3600 * 1000).toISOString(),
         }, // 1 hour
         seven_day_sonnet: {
-          utilization: 0.8,
+          utilization: 80,
           resets_at: new Date(now + 1800 * 1000).toISOString(),
         }, // 0.5 hour
       };
@@ -282,7 +291,7 @@ describe("Anthropic Usage Fetcher", () => {
       });
 
       const sonnet = result.windows.find((w) => w.label === "Sonnet");
-      // Both have 0.8 utilization, so it should pick the LATEST reset (the 1 hour one from five_hour)
+      // Both have 80% utilization, so it should pick the LATEST reset (the 1 hour one from five_hour)
       expect(sonnet?.resetsAt?.getTime()).toBe(now + 3600 * 1000);
     });
   });
@@ -331,7 +340,7 @@ describe("Anthropic Usage Fetcher", () => {
             status: 200,
             json: () =>
               Promise.resolve({
-                five_hour: { utilization: 0.1 },
+                five_hour: { utilization: 10 },
               }),
           });
         }),
@@ -348,7 +357,7 @@ describe("Anthropic Usage Fetcher", () => {
   describe("Argument Reinterpretation", () => {
     it("should correctly handle legacy 1-arg call path fetchClaudeUsage(piAuth)", async () => {
       const mockResponse = {
-        five_hour: { utilization: 0.5 },
+        five_hour: { utilization: 50 },
       };
 
       vi.stubGlobal(
@@ -383,7 +392,7 @@ describe("Anthropic Usage Fetcher", () => {
 
     it("should NOT reinterpret if first arg looks like modelRegistry", async () => {
       const mockResponse = {
-        five_hour: { utilization: 0.5 },
+        five_hour: { utilization: 50 },
       };
 
       vi.stubGlobal(

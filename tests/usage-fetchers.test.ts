@@ -41,44 +41,45 @@ vi.mock("node:os", async () => {
 
 vi.mock("node:child_process", async () => {
   const util = await import("node:util");
-  const makeChildProcessMock = () => {
-    const mock = vi.fn(
-      (
-        _cmd: string,
-        options: unknown,
-        cb?: (err: Error | null, stdout: string, stderr: string) => void,
-      ) => {
-        if (typeof options === "function")
-          cb = options as (
-            err: Error | null,
-            stdout: string,
-            stderr: string,
-          ) => void;
-        if (cb) cb(null, "{}", "");
-      },
-    );
+  const mock = vi.fn(
+    (
+      _cmd: string,
+      options: unknown,
+      cb?: (err: Error | null, stdout: string, stderr: string) => void,
+    ) => {
+      if (typeof options === "function")
+        cb = options as (
+          err: Error | null,
+          stdout: string,
+          stderr: string,
+        ) => void;
+      if (cb) cb(null, "{}", "");
+    },
+  );
 
-    Object.defineProperty(mock, util.promisify.custom, {
-      value: (cmd: string, options: any) => {
-        return new Promise((resolve, reject) => {
-          mock(
-            cmd,
-            options,
-            (err: Error | null, stdout: string, stderr: string) => {
-              if (err) reject(err);
-              else resolve({ stdout, stderr });
-            },
-          );
-        });
-      },
-    });
-
-    return mock;
-  };
+  Object.defineProperty(mock, util.promisify.custom, {
+    value: (cmd: string, options: any) => {
+      // execFile passes (file, args[]); join into a command string so the
+      // shared mock keeps matching on command text like the old exec shape.
+      const command = Array.isArray(options)
+        ? `${cmd} ${options.join(" ")}`
+        : cmd;
+      return new Promise((resolve, reject) => {
+        mock(
+          command,
+          Array.isArray(options) ? {} : options,
+          (err: Error | null, stdout: string, stderr: string) => {
+            if (err) reject(err);
+            else resolve({ stdout, stderr });
+          },
+        );
+      });
+    },
+  });
 
   return {
-    exec: makeChildProcessMock(),
-    execFile: makeChildProcessMock(),
+    exec: mock,
+    execFile: mock,
   };
 });
 
@@ -147,7 +148,7 @@ describe("Usage Fetchers", () => {
         .mockResolvedValueOnce({ ok: false, status: 401 })
         .mockResolvedValueOnce({
           ok: true,
-          json: () => Promise.resolve({ five_hour: { utilization: 0.1 } }),
+          json: () => Promise.resolve({ five_hour: { utilization: 10 } }),
         });
       vi.stubGlobal("fetch", fetchMock);
 
@@ -163,8 +164,8 @@ describe("Usage Fetchers", () => {
         vi.fn().mockResolvedValue({
           ok: true,
           json: async () => ({
-            five_hour: { utilization: 0.5, resets_at: "2026-02-08T22:00:00Z" },
-            seven_day: { utilization: 0.1, resets_at: "2026-02-08T23:00:00Z" },
+            five_hour: { utilization: 50, resets_at: "2026-02-08T22:00:00Z" },
+            seven_day: { utilization: 10, resets_at: "2026-02-08T23:00:00Z" },
           }),
         }),
       );
@@ -180,13 +181,13 @@ describe("Usage Fetchers", () => {
         vi.fn().mockResolvedValue({
           ok: true,
           json: async () => ({
-            five_hour: { utilization: 0.5, resets_at: "2026-02-08T22:00:00Z" },
+            five_hour: { utilization: 50, resets_at: "2026-02-08T22:00:00Z" },
             seven_day_sonnet: {
-              utilization: 0.3,
+              utilization: 30,
               resets_at: "2026-02-08T21:00:00Z",
             },
             seven_day_opus: {
-              utilization: 0.4,
+              utilization: 40,
               resets_at: "2026-02-08T23:00:00Z",
             },
           }),
@@ -631,6 +632,50 @@ describe("Usage Fetchers", () => {
   });
 
   describe("fetchZaiUsage", () => {
+    it("should emit current credit-limit windows", async () => {
+      const nextResetTime = Date.now() + 7 * 24 * 60 * 60 * 1000;
+      vi.stubGlobal(
+        "fetch",
+        vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            success: true,
+            code: 200,
+            data: {
+              level: "lite",
+              limits: [
+                {
+                  type: "CREDIT_LIMIT",
+                  unit: 3,
+                  number: 5,
+                  percentage: 0,
+                },
+                {
+                  type: "CREDIT_LIMIT",
+                  unit: 6,
+                  number: 1,
+                  percentage: 7,
+                  nextResetTime,
+                },
+              ],
+            },
+          }),
+        }),
+      );
+
+      const result = await fetchZaiUsage({}, { zai: { key: "zai-key" } });
+
+      expect(result.plan).toBe("lite");
+      expect(result.windows).toHaveLength(2);
+      expect(result.windows[0]).toEqual(
+        expect.objectContaining({ label: "Credits (5h)", usedPercent: 0 }),
+      );
+      expect(result.windows[1]).toEqual(
+        expect.objectContaining({ label: "Credits (1w)", usedPercent: 7 }),
+      );
+      expect(result.windows[1]?.resetsAt?.getTime()).toBe(nextResetTime);
+    });
+
     it("should handle different time unit labels", async () => {
       vi.stubGlobal(
         "fetch",
@@ -668,7 +713,16 @@ describe("Usage Fetchers", () => {
               json: async () => ({
                 success: true,
                 code: 200,
-                data: { limits: [] },
+                data: {
+                  limits: [
+                    {
+                      type: "TOKENS_LIMIT",
+                      percentage: 25,
+                      unit: 3,
+                      number: 5,
+                    },
+                  ],
+                },
               }),
             }) satisfies {
               ok: boolean;
@@ -677,7 +731,7 @@ describe("Usage Fetchers", () => {
         );
         vi.stubGlobal("fetch", fetchMock);
 
-        await fetchZaiUsage({}, { zai: { key: "zai-key" } });
+        const result = await fetchZaiUsage({}, { zai: { key: "zai-key" } });
 
         expect(fetchMock).toHaveBeenCalledWith(
           expect.any(String),
@@ -687,6 +741,12 @@ describe("Usage Fetchers", () => {
             }),
           }),
         );
+        expect(result.windows).toEqual([
+          expect.objectContaining({
+            label: "Tokens (5h)",
+            usedPercent: 25,
+          }),
+        ]);
       } finally {
         if (originalZaiKey === undefined) {
           delete process.env.Z_AI_API_KEY;

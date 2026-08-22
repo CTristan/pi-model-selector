@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { execAsync, URLS } from "../src/fetchers/common.js";
+import { execFileAsync, URLS } from "../src/fetchers/common.js";
 import { fetchCopilotUsage } from "../src/fetchers/copilot.js";
 
 vi.mock("../src/fetchers/common.js", async () => {
@@ -8,7 +8,7 @@ vi.mock("../src/fetchers/common.js", async () => {
   >("../src/fetchers/common.js");
   return {
     ...actual,
-    execAsync: vi.fn(),
+    execFileAsync: vi.fn(),
   };
 });
 
@@ -24,7 +24,10 @@ describe("Copilot 401 Error Regression", () => {
 
   it("should retry with Bearer in tryExchange if token header fails with 401", async () => {
     // Mock gh-cli token
-    vi.mocked(execAsync).mockResolvedValue({ stdout: "gho_token", stderr: "" });
+    vi.mocked(execFileAsync).mockResolvedValue({
+      stdout: "gho_token",
+      stderr: "",
+    });
 
     const fetchMock = vi.mocked(fetch);
 
@@ -83,7 +86,7 @@ describe("Copilot 401 Error Regression", () => {
 
   it("should suppress 401 errors from invalid tokens if at least one token succeeds", async () => {
     // 1 valid token from gh-cli, 1 invalid from registry
-    vi.mocked(execAsync).mockResolvedValue({
+    vi.mocked(execFileAsync).mockResolvedValue({
       stdout: "valid_gh_token",
       stderr: "",
     });
@@ -136,7 +139,7 @@ describe("Copilot 401 Error Regression", () => {
   });
 
   it("should suppress stale auth.json token errors when gh-cli succeeds", async () => {
-    vi.mocked(execAsync).mockResolvedValue({
+    vi.mocked(execFileAsync).mockResolvedValue({
       stdout: "valid_gh_token",
       stderr: "",
     });

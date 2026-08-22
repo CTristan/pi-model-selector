@@ -41,34 +41,35 @@ vi.mock("node:os", async () => {
 
 vi.mock("node:child_process", async () => {
   const util = await import("node:util");
-  const makeChildProcessMock = () => {
-    const mock = vi.fn((_cmd, options, cb) => {
-      if (typeof options === "function") cb = options;
-      if (cb) cb(null, "", "");
-      return {} as ReturnType<typeof import("node:child_process").exec>;
-    });
+  const mock = vi.fn((_cmd, options, cb) => {
+    if (typeof options === "function") cb = options;
+    if (cb) cb(null, "", "");
+    return {} as ReturnType<typeof import("node:child_process").exec>;
+  });
 
-    Object.defineProperty(mock, util.promisify.custom, {
-      value: (cmd: string, options: any) => {
-        return new Promise((resolve, reject) => {
-          mock(
-            cmd,
-            options,
-            (err: Error | null, stdout: string, stderr: string) => {
-              if (err) reject(err);
-              else resolve({ stdout, stderr });
-            },
-          );
-        });
-      },
-    });
-
-    return mock;
-  };
+  Object.defineProperty(mock, util.promisify.custom, {
+    value: (cmd: string, options: any) => {
+      // execFile passes (file, args[]); join into a command string so the
+      // shared mock keeps matching on command text like the old exec shape.
+      const command = Array.isArray(options)
+        ? `${cmd} ${options.join(" ")}`
+        : cmd;
+      return new Promise((resolve, reject) => {
+        mock(
+          command,
+          Array.isArray(options) ? {} : options,
+          (err: Error | null, stdout: string, stderr: string) => {
+            if (err) reject(err);
+            else resolve({ stdout, stderr });
+          },
+        );
+      });
+    },
+  });
 
   return {
-    exec: makeChildProcessMock(),
-    execFile: makeChildProcessMock(),
+    exec: mock,
+    execFile: mock,
   };
 });
 
@@ -209,7 +210,7 @@ describe("Usage Fetchers Branch Coverage", () => {
         .mockResolvedValueOnce({ ok: false, status: 401 }) // Old token fails
         .mockResolvedValueOnce({
           ok: true,
-          json: async () => ({ five_hour: { utilization: 0.1 } }),
+          json: async () => ({ five_hour: { utilization: 10 } }),
         }); // New token succeeds
       vi.stubGlobal("fetch", fetchMock);
 
@@ -230,8 +231,8 @@ describe("Usage Fetchers Branch Coverage", () => {
         vi.fn().mockResolvedValue({
           ok: true,
           json: async () => ({
-            five_hour: { utilization: 0.9, resets_at: globalReset },
-            seven_day_sonnet: { utilization: 0.5, resets_at: sonnetReset },
+            five_hour: { utilization: 90, resets_at: globalReset },
+            seven_day_sonnet: { utilization: 50, resets_at: sonnetReset },
           }),
         }),
       );
@@ -250,9 +251,9 @@ describe("Usage Fetchers Branch Coverage", () => {
         vi.fn().mockResolvedValue({
           ok: true,
           json: async () => ({
-            five_hour: { utilization: 0.9 },
+            five_hour: { utilization: 90 },
             seven_day_sonnet: {
-              utilization: 0.5,
+              utilization: 50,
               resets_at: "2026-01-01T00:00:00Z",
             },
           }),
@@ -273,8 +274,8 @@ describe("Usage Fetchers Branch Coverage", () => {
         vi.fn().mockResolvedValue({
           ok: true,
           json: async () => ({
-            five_hour: { utilization: 0.9, resets_at: globalReset },
-            seven_day_sonnet: { utilization: 0.5 },
+            five_hour: { utilization: 90, resets_at: globalReset },
+            seven_day_sonnet: { utilization: 50 },
           }),
         }),
       );
@@ -1543,7 +1544,7 @@ describe("Usage Fetchers Branch Coverage", () => {
     });
 
     describe("fetchZaiUsage Branches", () => {
-      it("should handle minute units (unit=5)", async () => {
+      it("should handle monthly units (unit=5)", async () => {
         vi.stubGlobal(
           "fetch",
           vi.fn().mockResolvedValue({
@@ -1560,7 +1561,7 @@ describe("Usage Fetchers Branch Coverage", () => {
           }),
         );
         const res = await fetchZaiUsage({}, { "z-ai": { access: "k" } });
-        expect(res.windows[0]!.label).toBe("Tokens (10m)");
+        expect(res.windows[0]!.label).toBe("Tokens (10mo)");
       });
 
       it("should ignore unknown limit types", async () => {

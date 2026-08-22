@@ -1,6 +1,6 @@
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
-import type * as PiTui from "@mariozechner/pi-tui";
-import type { SelectItem } from "@mariozechner/pi-tui";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type * as PiTui from "@earendil-works/pi-tui";
+import type { SelectItem } from "@earendil-works/pi-tui";
 
 import {
   Container,
@@ -13,6 +13,12 @@ import {
 import type { PriorityRule } from "./types.js";
 
 const CATCH_ALL_PATTERNS = ["*", ".*", "^.*$", "^.*", ".*$", ".+", "^.+$"];
+
+/** Whether the active context can render custom terminal components. */
+export function isTuiContext(ctx: ExtensionContext): boolean {
+  const mode = (ctx as ExtensionContext & { mode?: unknown }).mode;
+  return mode === undefined ? ctx.hasUI : mode === "tui";
+}
 
 /** Returns whether an ignore mapping covers every window for a provider. */
 export function isCatchAllIgnoreMapping(usage: {
@@ -75,7 +81,7 @@ export async function selectWrapped(
     (import.meta as unknown as { env?: { VITEST?: boolean } }).env?.VITEST ||
     (typeof process !== "undefined" && !!process.env.VITEST);
 
-  if (isVitest || !ctx.ui.custom) {
+  if (isVitest || !isTuiContext(ctx) || !ctx.ui.custom) {
     return ctx.ui.select(title, options);
   }
 
@@ -98,7 +104,7 @@ export async function selectWrapped(
       description: (text: string) => theme.fg("muted", text),
       scrollInfo: (text: string) => theme.fg("muted", text),
       noMatch: (text: string) => theme.fg("muted", text),
-      // OMP's SelectList requires symbols.cursor; legacy Pi's does not.
+      // OMP's SelectList requires symbols.cursor; Pi tolerates the fallback.
       // Use a defensive check so both runtimes work.
       symbols: {
         cursor:

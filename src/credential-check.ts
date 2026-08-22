@@ -45,35 +45,67 @@ function hasTokenPayload(value: unknown): boolean {
 export async function hasProviderCredential(
   provider: ProviderName,
   piAuth: Record<string, unknown>,
-  modelRegistry?: {
-    authStorage?: {
-      getApiKey?: (
-        id: string,
-      ) => Promise<string | undefined> | string | undefined;
-      get?: (
-        id: string,
-      ) =>
-        | Promise<Record<string, unknown> | undefined>
-        | Record<string, unknown>
-        | undefined;
-    };
-  },
+  modelRegistry?: unknown,
 ): Promise<boolean> {
+  const registry = modelRegistry as
+    | {
+        getProviderAuthStatus?: (id: string) => { configured: boolean };
+        getProviderAuth?: (id: string) => Promise<unknown>;
+        getApiKeyForProvider?: (id: string) => Promise<string | undefined>;
+        authStorage?: {
+          getApiKey?: (
+            id: string,
+          ) => Promise<string | undefined> | string | undefined;
+          get?: (
+            id: string,
+          ) =>
+            | Promise<Record<string, unknown> | undefined>
+            | Record<string, unknown>
+            | undefined;
+        };
+      }
+    | undefined;
+
   // Check environment variables
   if (provider === "antigravity") {
     if (isNonEmptyString(process.env.ANTIGRAVITY_API_KEY)) return true;
   }
 
-  // Check authStorage for applicable providers
-  if (modelRegistry?.authStorage) {
+  // Prefer the public current-Pi registry API. Check host provider aliases
+  // because quota provider names do not always match registry provider ids.
+  const registryProviderAliases: Record<ProviderName, string[]> = {
+    anthropic: ["anthropic"],
+    copilot: ["github-copilot", "github"],
+    gemini: ["google-gemini", "google-gemini-cli"],
+    codex: ["openai-codex"],
+    antigravity: ["google-antigravity"],
+    kiro: ["kiro"],
+    zai: ["zai"],
+    minimax: ["minimax"],
+  };
+  for (const providerId of registryProviderAliases[provider]) {
+    try {
+      if (registry?.getProviderAuthStatus?.(providerId).configured) return true;
+      const [apiKey, auth] = await Promise.all([
+        registry?.getApiKeyForProvider?.(providerId),
+        registry?.getProviderAuth?.(providerId),
+      ]);
+      if (isNonEmptyString(apiKey) || auth !== undefined) return true;
+    } catch {
+      // Continue through aliases and compatibility fallbacks.
+    }
+  }
+
+  // OMP exposes its credential store structurally as authStorage.
+  if (registry?.authStorage) {
     try {
       if (provider === "copilot") {
         const [githubCopilotKey, githubKey, githubCopilotData, githubData] =
           await Promise.all([
-            modelRegistry.authStorage.getApiKey?.("github-copilot"),
-            modelRegistry.authStorage.getApiKey?.("github"),
-            modelRegistry.authStorage.get?.("github-copilot"),
-            modelRegistry.authStorage.get?.("github"),
+            registry.authStorage.getApiKey?.("github-copilot"),
+            registry.authStorage.getApiKey?.("github"),
+            registry.authStorage.get?.("github-copilot"),
+            registry.authStorage.get?.("github"),
           ]);
 
         if (
@@ -89,10 +121,10 @@ export async function hasProviderCredential(
       if (provider === "gemini") {
         const [geminiKey, geminiCliKey, geminiData, geminiCliData] =
           await Promise.all([
-            modelRegistry.authStorage.getApiKey?.("google-gemini"),
-            modelRegistry.authStorage.getApiKey?.("google-gemini-cli"),
-            modelRegistry.authStorage.get?.("google-gemini"),
-            modelRegistry.authStorage.get?.("google-gemini-cli"),
+            registry.authStorage.getApiKey?.("google-gemini"),
+            registry.authStorage.getApiKey?.("google-gemini-cli"),
+            registry.authStorage.get?.("google-gemini"),
+            registry.authStorage.get?.("google-gemini-cli"),
           ]);
 
         if (
@@ -107,8 +139,8 @@ export async function hasProviderCredential(
 
       if (provider === "antigravity") {
         const [antigravityKey, antigravityData] = await Promise.all([
-          modelRegistry.authStorage.getApiKey?.("google-antigravity"),
-          modelRegistry.authStorage.get?.("google-antigravity"),
+          registry.authStorage.getApiKey?.("google-antigravity"),
+          registry.authStorage.get?.("google-antigravity"),
         ]);
 
         if (
@@ -120,9 +152,8 @@ export async function hasProviderCredential(
       }
 
       if (provider === "codex") {
-        const codexKey =
-          await modelRegistry.authStorage.getApiKey?.("openai-codex");
-        const codexData = await modelRegistry.authStorage.get?.("openai-codex");
+        const codexKey = await registry.authStorage.getApiKey?.("openai-codex");
+        const codexData = await registry.authStorage.get?.("openai-codex");
 
         if (isNonEmptyString(codexKey) || hasTokenPayload(codexData)) {
           return true;
@@ -131,9 +162,8 @@ export async function hasProviderCredential(
 
       if (provider === "anthropic") {
         const anthropicKey =
-          await modelRegistry.authStorage.getApiKey?.("anthropic");
-        const anthropicData =
-          await modelRegistry.authStorage.get?.("anthropic");
+          await registry.authStorage.getApiKey?.("anthropic");
+        const anthropicData = await registry.authStorage.get?.("anthropic");
 
         if (isNonEmptyString(anthropicKey) || hasTokenPayload(anthropicData)) {
           return true;
@@ -141,7 +171,7 @@ export async function hasProviderCredential(
       }
 
       if (provider === "zai") {
-        const registryKey = await modelRegistry.authStorage.getApiKey?.("zai");
+        const registryKey = await registry.authStorage.getApiKey?.("zai");
         if (isNonEmptyString(registryKey) || resolveZaiApiKey(piAuth)) {
           return true;
         }

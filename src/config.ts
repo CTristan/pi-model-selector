@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
+import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { EXTENSION_DIR, isOmp } from "./adapter.js";
 
 import type {
@@ -585,9 +585,13 @@ export async function loadConfig(
     };
   }
 
-  const projectRaw = (await readConfigFile(projectPath, errors)) ?? {
-    mappings: [],
-  };
+  const isProjectTrusted = (
+      ctx as ExtensionContext & { isProjectTrusted?: () => boolean }
+    ).isProjectTrusted,
+    projectRaw =
+      typeof isProjectTrusted !== "function" || isProjectTrusted.call(ctx)
+        ? ((await readConfigFile(projectPath, errors)) ?? { mappings: [] })
+        : { mappings: [] };
 
   if (errors.length > 0) {
     notify(ctx, "error", errors.join("\n"));

@@ -41,7 +41,7 @@ Restart Pi after installation to load the extension.
 
 ## Runtime compatibility
 
-This extension supports both Pi and OMP. OMP loads Pi-style extensions through a temporary Pi-compatibility mirror that rewrites literal `@mariozechner/*` SDK imports to OMP's `@oh-my-pi/*` packages. See [docs/omp-compatibility.md](docs/omp-compatibility.md) before changing SDK imports or source-relative runtime paths.
+This extension supports current Pi 0.84.1 (Node.js 22.19+) and OMP 17.2.12 (its supported Bun runtime). OMP aliases literal `@earendil-works/pi-*` imports to its canonical in-process compatibility modules. Legacy `@mariozechner/*` Pi releases are not supported. See [docs/omp-compatibility.md](docs/omp-compatibility.md) before changing SDK imports or runtime integration code.
 
 
 ## Usage
@@ -59,8 +59,8 @@ The extension runs automatically when you start a new session. You can also use 
 
 Configuration is merged from two sources:
 
-1.  **Global Config**: `~/.pi/model-selector.json` (stored in your home directory). Use this for your personal model mappings and preferences.
-2.  **Project Config**: `.pi/model-selector.json` (inside your project directory). Use this for project-specific overrides.
+1.  **Global Config**: `~/.pi/model-selector.json` under Pi or `~/.omp/model-selector.json` under OMP. Use this for personal model mappings and preferences.
+2.  **Project Config**: `.pi/model-selector.json` under Pi or `.omp/model-selector.json` under OMP. Use this for project-specific overrides. Current Pi ignores project-local configuration when the project is not trusted.
 
 A template for the global configuration can be found in `config/model-selector.example.json`.
 

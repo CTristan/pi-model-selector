@@ -1,12 +1,10 @@
-import { exec, execFile } from "node:child_process";
+import { execFile } from "node:child_process";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { promisify } from "node:util";
-import { EXTENSION_DIR, isOmp } from "../adapter.js";
+import * as runtimeAdapter from "../adapter.js";
 
-/** Executes a shell command asynchronously. */
-export const execAsync = promisify(exec);
 /** Executes a command asynchronously without invoking a shell. */
 export const execFileAsync = promisify(execFile);
 
@@ -56,13 +54,16 @@ export const URLS = {
 
 /** Loads Pi platform authentication credentials. */
 export async function loadPiAuth(): Promise<Record<string, unknown>> {
-  // Try JSON file first (legacy Pi and OMP < SQLite migration)
-  const piAuthPath = path.join(
-    os.homedir(),
-    EXTENSION_DIR,
-    "agent",
-    "auth.json",
-  );
+  // Try the active host's configured agent directory first.
+  const configuredAgentDir =
+      "AGENT_DIR" in runtimeAdapter
+        ? (runtimeAdapter as typeof runtimeAdapter & { AGENT_DIR: string })
+            .AGENT_DIR
+        : undefined,
+    agentDir =
+      configuredAgentDir ??
+      path.join(os.homedir(), runtimeAdapter.EXTENSION_DIR, "agent");
+  const piAuthPath = path.join(agentDir, "auth.json");
   try {
     const data = await fs.promises.readFile(piAuthPath, "utf-8");
     return JSON.parse(data) as Record<string, unknown>;
@@ -71,9 +72,9 @@ export async function loadPiAuth(): Promise<Record<string, unknown>> {
   }
 
   // OMP stores auth in SQLite
-  if (isOmp) {
+  if (runtimeAdapter.isOmp) {
     try {
-      const dbPath = path.join(os.homedir(), ".omp", "agent", "agent.db");
+      const dbPath = path.join(agentDir, "agent.db");
       const { stdout } = await execFileAsync("sqlite3", [
         "-json",
         dbPath,

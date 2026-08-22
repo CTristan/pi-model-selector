@@ -286,7 +286,7 @@ async function fetchOmpUsages(
 /**
  * Aggregates usage data from all enabled providers.
  * When running under OMP, delegates to authStorage.fetchUsageReports().
- * Falls back to extension-managed HTTP fetchers for legacy Pi.
+ * Falls back to extension-managed HTTP fetchers for Pi or OMP without reports.
  */
 export async function fetchAllUsages(
   modelRegistry: unknown,
