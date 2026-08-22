@@ -27,6 +27,7 @@ const OMP_PROVIDER_MAP: Record<string, string> = {
   zai: "zai",
   "minimax-code": "minimax",
   "kimi-code": "kimi",
+  "opencode-go": "opencode-go",
 };
 
 // ============================================================================
@@ -418,4 +419,5 @@ export { fetchCopilotUsage } from "./fetchers/copilot.js";
 export { fetchGeminiUsage } from "./fetchers/gemini.js";
 export { fetchKiroUsage } from "./fetchers/kiro.js";
 export { fetchMinimaxUsage } from "./fetchers/minimax.js";
+export { fetchOpenCodeGoUsage } from "./fetchers/opencode-go.js";
 export { fetchZaiUsage } from "./fetchers/zai.js";

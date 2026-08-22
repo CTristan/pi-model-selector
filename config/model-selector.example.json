@@ -122,6 +122,16 @@
         "provider": "openai",
         "id": "gpt-5.4"
       }
+    },
+    {
+      "usage": {
+        "provider": "opencode-go",
+        "window": "5-hour"
+      },
+      "model": {
+        "provider": "opencode-go",
+        "id": "kimi-k3"
+      }
     }
   ]
 }

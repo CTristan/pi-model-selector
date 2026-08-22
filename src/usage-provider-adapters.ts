@@ -5,6 +5,7 @@ import { fetchCopilotUsage } from "./fetchers/copilot.js";
 import { fetchGeminiUsage } from "./fetchers/gemini.js";
 import { fetchKiroUsage } from "./fetchers/kiro.js";
 import { fetchMinimaxUsage } from "./fetchers/minimax.js";
+import { fetchOpenCodeGoUsage } from "./fetchers/opencode-go.js";
 import { fetchZaiUsage } from "./fetchers/zai.js";
 import type { MappingEntry, ProviderSettings, UsageSnapshot } from "./types.js";
 
@@ -95,6 +96,14 @@ const USAGE_PROVIDER_ADAPTERS: readonly UsageProviderAdapter[] = [
       ),
     isUnavailable: (snapshot) =>
       snapshot.error?.startsWith("No API key found") === true,
+  },
+  {
+    usageProvider: "opencode-go",
+    piProviderIds: ["opencode-go"],
+    authMode: "pi",
+    fetch: (modelRegistry, piAuth) =>
+      fetchOpenCodeGoUsage(modelRegistry, piAuth),
+    isUnavailable: (snapshot) => snapshot.error === "No API key",
   },
 ];
 

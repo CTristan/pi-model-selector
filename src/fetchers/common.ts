@@ -34,6 +34,7 @@ export const PROVIDER_DISPLAY_NAMES: Record<string, string> = {
   kiro: "Kiro",
   zai: "z.ai",
   minimax: "Minimax",
+  "opencode-go": "OpenCode Go",
 };
 
 /** URLs for various provider APIs and resources. */
@@ -50,6 +51,7 @@ export const URLS = {
   ZAI_QUOTA: "https://api.z.ai/api/monitor/usage/quota/limit",
   MINIMAX_CODING_PLAN:
     "https://platform.minimax.io/v1/api/openplatform/coding_plan/remains",
+  OPENCODE_GO_USAGE: "https://opencode.ai/zen/go/v1/usage",
 };
 
 /** Loads Pi platform authentication credentials. */

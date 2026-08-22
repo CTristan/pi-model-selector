@@ -12,7 +12,7 @@ This directory contains detailed information about each usage provider supported
 - [Kiro](kiro.md)
 - [z.ai](zai.md)
 - [MiniMax](minimax.md)
-- OpenCode Go (Pi model catalogue; quota adapter pending)
+- [OpenCode Go](opencode-go.md)
 
 
 ## Runtime Compatibility
@@ -35,7 +35,7 @@ Pi owns the model catalogue and authentication state. The wizard and selector re
 
 Pi does not expose a generic quota API, so the extension keeps provider-aware usage adapters for quota endpoints, local probes, and CLI sources. Some usage sources do not share the same credential as the Pi model provider, so those adapters retain their provider-specific fallback rules. `disabledProviders` remains an optional explicit opt-out for older configurations.
 
-> **Note**: When configuring mappings, the `model.provider` and `model.id` must exactly match a selectable model in the Pi registry (e.g., `openai`, `google`, `anthropic`, `github-copilot`, or `opencode-go`). Use the `/models` command in Pi to see available providers and their IDs. OpenCode Go models appear when Pi has an OpenCode Go key, but this extension does not yet treat OpenCode Go as an authoritative quota source.
+> **Note**: When configuring mappings, the `model.provider` and `model.id` must exactly match a selectable model in the Pi registry (e.g., `openai`, `google`, `anthropic`, `github-copilot`, or `opencode-go`). Use the `/models` command in Pi to see available providers and their IDs. OpenCode Go models appear when Pi has an OpenCode Go key, and the extension tracks OpenCode Go quota when that key can reach the usage endpoint.
 
 ### Ranking & Selection
 

@@ -29,11 +29,16 @@ describe("usage provider adapters", () => {
       "kiro",
       "zai",
       "minimax",
+      "opencode-go",
     ]);
   });
 
-  it("leaves OpenCode Go as a Pi model provider until quota support is verified", () => {
-    expect(getUsageProviderAdapter("opencode-go")).toBeUndefined();
+  it("binds OpenCode Go quota to Pi's opencode-go provider auth", () => {
+    const opencodeGo = getUsageProviderAdapter("opencode-go");
+
+    expect(opencodeGo).toBeDefined();
+    expect(opencodeGo?.piProviderIds).toEqual(["opencode-go"]);
+    expect(opencodeGo?.authMode).toBe("pi");
   });
 
   it("returns only adapters referenced by model mappings", () => {

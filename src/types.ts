@@ -158,6 +158,7 @@ export const ALL_PROVIDERS = [
   "kiro",
   "zai",
   "minimax",
+  "opencode-go",
 ] as const;
 /**
  * Union of provider names supported by selector configuration.

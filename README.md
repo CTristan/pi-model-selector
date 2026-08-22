@@ -5,7 +5,7 @@ A Pi extension that automatically selects the best AI model based on remaining u
 ## Features
 
 - **Smart Model Selection**: Automatically switches to the model with the most available quota or earliest reset time.
-- **Provider-aware usage adapters**: Tracks quota windows for Anthropic (Claude), GitHub Copilot, Google Gemini, OpenAI (Codex), Antigravity, Kiro, z.ai, and MiniMax.
+- **Provider-aware usage adapters**: Tracks quota windows for Anthropic (Claude), GitHub Copilot, Google Gemini, OpenAI (Codex), Antigravity, Kiro, z.ai, MiniMax, and OpenCode Go.
 - **Pi-native model catalogue**: Uses Pi's authenticated and session-scoped model list, so built-in providers such as OpenCode Go appear as mapping targets without extension changes.
 - **Configurable Priorities**: Define your own rules for selection (e.g., prioritize full availability over remaining percentage).
 - **Flexible Mappings**: Map specific usage windows (e.g., "5h quota", "Weekly limit") to specific models.
