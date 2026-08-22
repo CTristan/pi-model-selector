@@ -1,8 +1,11 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as types from "../src/types.js";
 import {
+  fetchAllCodexUsages,
   fetchClaudeUsage,
+  fetchCopilotUsage,
   fetchGeminiUsage,
   refreshGoogleToken,
 } from "../src/usage-fetchers.js";
@@ -25,6 +28,178 @@ describe("Provider auth fallback behavior", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+  });
+
+  it("fetchClaudeUsage should resolve Anthropic OAuth through Pi's public registry", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ five_hour: { utilization: 20 } }),
+    } as Response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const getProviderAuth = vi.fn(async () => ({
+      auth: { apiKey: "registry-oauth-token" },
+      source: "OAuth",
+    }));
+    const result = await fetchClaudeUsage({ getProviderAuth }, {});
+
+    expect(result.error).toBeUndefined();
+    expect(getProviderAuth).toHaveBeenCalledWith("anthropic");
+    const firstCall = fetchMock.mock.calls[0];
+    if (!firstCall) throw new Error("Expected an Anthropic usage request");
+    const request = firstCall[1];
+    if (!request) throw new Error("Expected Anthropic request options");
+    expect((request.headers as Record<string, string>).Authorization).toBe(
+      "Bearer registry-oauth-token",
+    );
+  });
+
+  it("fetchClaudeUsage should not send non-OAuth Anthropic credentials to the OAuth usage endpoint", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    const getApiKey = vi.fn().mockResolvedValue("legacy-api-key");
+    const get = vi.fn().mockResolvedValue({ access: "legacy-oauth-token" });
+
+    const result = await fetchClaudeUsage(
+      {
+        getProviderAuth: vi.fn(async () => ({
+          auth: { apiKey: "api-key" },
+          source: "stored credential",
+        })),
+        authStorage: { getApiKey, get },
+      },
+      { anthropic: { access: "legacy-auth-json-token" } },
+    );
+
+    expect(result.error).toBe("Anthropic usage requires OAuth authentication");
+    expect(JSON.stringify(result)).not.toContain("legacy-auth-json-token");
+    expect(JSON.stringify(result)).not.toContain("legacy-api-key");
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(getApiKey).not.toHaveBeenCalled();
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it("does not log a failed Copilot auth resolution", async () => {
+    const secret = "copilot-auth-resolution-secret";
+    const debugLog = vi.spyOn(types, "writeDebugLog");
+
+    await fetchCopilotUsage(
+      {
+        getProviderAuth: vi.fn().mockRejectedValue(new Error(secret)),
+      },
+      {},
+    );
+
+    expect(
+      debugLog.mock.calls.every(([message]) => !message.includes(secret)),
+    ).toBe(true);
+  });
+
+  it("does not treat Anthropic auth-token Bearer headers as OAuth usage auth", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await fetchClaudeUsage(
+      {
+        getProviderAuth: vi.fn().mockResolvedValue({
+          auth: { headers: { Authorization: "Bearer auth-token" } },
+          source: "ANTHROPIC_AUTH_TOKEN",
+        }),
+      },
+      {},
+    );
+
+    expect(result.error).toBe("Anthropic usage requires OAuth authentication");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("does not expose a failed Pi auth resolution in Claude usage output", async () => {
+    const secret = "oauth-resolution-secret";
+    const result = await fetchClaudeUsage(
+      {
+        getProviderAuth: vi.fn().mockRejectedValue(new Error(secret)),
+      },
+      {},
+    );
+
+    expect(JSON.stringify(result)).not.toContain(secret);
+    expect(result.error).toBe("No credentials");
+  });
+
+  it("fetchCopilotUsage should use Pi API-key auth without using the minted OAuth token", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () =>
+        Promise.resolve({
+          login: "octocat",
+          copilot_plan: "individual",
+          quota_reset_date_utc: "2026-03-01T00:00:00Z",
+          quota_snapshots: {
+            premium_interactions: { percent_remaining: 80 },
+          },
+        }),
+    } as Response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const getProviderAuth = vi.fn(async () => ({
+      auth: { apiKey: "github-oauth-token" },
+      source: "environment",
+    }));
+    const result = await fetchCopilotUsage({ getProviderAuth }, {});
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.error).toBeUndefined();
+    expect(getProviderAuth).toHaveBeenCalledWith("github-copilot");
+    const firstCall = fetchMock.mock.calls[0];
+    if (!firstCall) throw new Error("Expected a Copilot usage request");
+    const request = firstCall[1];
+    if (!request) throw new Error("Expected Copilot request options");
+    expect((request.headers as Record<string, string>).Authorization).toBe(
+      "token github-oauth-token",
+    );
+  });
+
+  it("fetchCopilotUsage should use the stored GitHub token behind Pi's OAuth credential", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () =>
+        Promise.resolve({
+          login: "octocat",
+          copilot_plan: "individual",
+          quota_snapshots: {
+            premium_interactions: { percent_remaining: 80 },
+          },
+        }),
+    } as Response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await fetchCopilotUsage(
+      {
+        getProviderAuth: vi.fn(async () => ({
+          auth: { apiKey: "minted-copilot-token" },
+          source: "OAuth",
+        })),
+      },
+      {
+        "github-copilot": {
+          type: "oauth",
+          access: "minted-copilot-token",
+          refresh: "github-oauth-token",
+        },
+      },
+    );
+
+    expect(result[0]?.error).toBeUndefined();
+    const firstCall = fetchMock.mock.calls[0];
+    if (!firstCall) throw new Error("Expected a Copilot usage request");
+    const request = firstCall[1];
+    if (!request) throw new Error("Expected Copilot request options");
+    expect((request.headers as Record<string, string>).Authorization).toBe(
+      "token github-oauth-token",
+    );
   });
 
   it("fetchClaudeUsage should use registry Anthropic token when available", async () => {
@@ -128,6 +303,48 @@ describe("Provider auth fallback behavior", () => {
 
     expect(result.error).toBe("HTTP 500");
     expect(result.account).toBe("registry:anthropic:apiKey");
+  });
+
+  it("fetchAllCodexUsages should use Pi's resolved OAuth token and derive its account ID", async () => {
+    vi.spyOn(fs.promises, "stat").mockRejectedValue(new Error("no codex home"));
+
+    const payload = Buffer.from(
+      JSON.stringify({
+        "https://api.openai.com/auth": {
+          chatgpt_account_id: "jwt-account",
+        },
+      }),
+    ).toString("base64url");
+    const token = `header.${payload}.signature`;
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () =>
+        Promise.resolve({
+          rate_limit: {
+            primary_window: { used_percent: 20 },
+          },
+        }),
+    } as Response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const getProviderAuth = vi.fn(async () => ({
+      auth: { apiKey: token },
+      source: "OAuth",
+    }));
+    const result = await fetchAllCodexUsages({ getProviderAuth }, {});
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.error).toBeUndefined();
+    expect(result[0]?.account).toBe("jwt-account");
+    expect(getProviderAuth).toHaveBeenCalledWith("openai-codex");
+    const firstCall = fetchMock.mock.calls[0];
+    if (!firstCall) throw new Error("Expected a Codex usage request");
+    const request = firstCall[1];
+    if (!request) throw new Error("Expected Codex request options");
+    expect(
+      (request.headers as Record<string, string>)["ChatGPT-Account-Id"],
+    ).toBe("jwt-account");
   });
 
   it("fetchGeminiUsage should discover registry google-gemini-cli tokens", async () => {

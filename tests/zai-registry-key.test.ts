@@ -40,6 +40,19 @@ describe("fetchZaiUsage registry key resolution", () => {
     }
   });
 
+  it("uses Pi's public provider auth when available", async () => {
+    const getProviderAuth = vi.fn().mockResolvedValue({
+      auth: { apiKey: "public-registry-zai-key" },
+      source: "stored credential",
+    });
+
+    const result = await fetchZaiUsage({ getProviderAuth }, {});
+
+    expect(result.provider).toBe("zai");
+    expect(result.error).toBeUndefined();
+    expect(getProviderAuth).toHaveBeenCalledWith("zai");
+  });
+
   it("uses registry authStorage.getApiKey('zai') when available", async () => {
     const modelRegistry = {
       authStorage: {

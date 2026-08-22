@@ -1,20 +1,17 @@
 import { isOmp } from "./adapter.js";
-import { fetchClaudeUsage } from "./fetchers/anthropic.js";
-import { fetchAntigravityUsage } from "./fetchers/antigravity.js";
-import { fetchAllCodexUsages } from "./fetchers/codex.js";
 import {
   formatReset,
   loadPiAuth,
   PROVIDER_DISPLAY_NAMES,
   safeDate,
 } from "./fetchers/common.js";
-import { fetchCopilotUsage } from "./fetchers/copilot.js";
-import { fetchGeminiUsage } from "./fetchers/gemini.js";
 import { fetchKiroUsage } from "./fetchers/kiro.js";
-import { fetchMinimaxUsage } from "./fetchers/minimax.js";
-import { fetchZaiUsage } from "./fetchers/zai.js";
 import type { ProviderSettings, UsageSnapshot } from "./types.js";
 import { writeDebugLog } from "./types.js";
+import {
+  getUsageProviderAdapters,
+  isUnavailableUsageSnapshot,
+} from "./usage-provider-adapters.js";
 
 // ============================================================================
 // OMP Provider Name Normalization
@@ -199,10 +196,15 @@ async function fetchOmpUsages(
     }) => Promise<OmpUsageReport[] | null>;
   },
   disabledProviders: string[] = [],
+  mappedUsageProviders?: readonly string[],
 ): Promise<UsageSnapshot[]> {
   writeDebugLog("Fetching usage via OMP authStorage.fetchUsageReports()");
 
   const disabled = new Set(disabledProviders.map((p) => p.toLowerCase()));
+  const mapped =
+    mappedUsageProviders === undefined
+      ? undefined
+      : new Set(mappedUsageProviders.map((p) => p.toLowerCase()));
   let ompSnapshots: UsageSnapshot[] = [];
 
   try {
@@ -217,8 +219,11 @@ async function fetchOmpUsages(
     writeDebugLog(`OMP fetchUsageReports failed: ${String(err)}`);
   }
 
-  // Filter out disabled providers from OMP results
-  ompSnapshots = ompSnapshots.filter((s) => !disabled.has(s.provider));
+  ompSnapshots = ompSnapshots.filter(
+    (s) =>
+      !disabled.has(s.provider) &&
+      (mapped === undefined || mapped.has(s.provider)),
+  );
 
   // Determine which providers OMP covered
   const ompCoveredProviders = new Set(ompSnapshots.map((s) => s.provider));
@@ -231,7 +236,11 @@ async function fetchOmpUsages(
   }[] = [];
 
   // Kiro: not covered by OMP, always use extension fetcher if not disabled
-  if (!disabled.has("kiro") && !ompCoveredProviders.has("kiro")) {
+  if (
+    !disabled.has("kiro") &&
+    (mapped === undefined || mapped.has("kiro")) &&
+    !ompCoveredProviders.has("kiro")
+  ) {
     fallbackFetchers.push({
       provider: "kiro",
       fetch: () => fetchKiroUsage(),
@@ -284,14 +293,13 @@ async function fetchOmpUsages(
 // ============================================================================
 
 /**
- * Aggregates usage data from all enabled providers.
- * When running under OMP, delegates to authStorage.fetchUsageReports().
- * Falls back to extension-managed HTTP fetchers for Pi or OMP without reports.
+ * Aggregates usage through registered provider adapters, with Pi and OMP fallbacks.
  */
 export async function fetchAllUsages(
   modelRegistry: unknown,
   disabledProviders: string[] = [],
   providerSettings?: ProviderSettings,
+  mappedUsageProviders?: readonly string[],
 ): Promise<UsageSnapshot[]> {
   // OMP path: use built-in usage reports
   if (isOmp) {
@@ -303,7 +311,11 @@ export async function fetchAllUsages(
       };
     };
     if (mr?.authStorage?.fetchUsageReports) {
-      return fetchOmpUsages(mr.authStorage, disabledProviders);
+      return fetchOmpUsages(
+        mr.authStorage,
+        disabledProviders,
+        mappedUsageProviders,
+      );
     }
     writeDebugLog(
       "OMP detected but authStorage.fetchUsageReports unavailable, falling back to extension fetchers",
@@ -312,6 +324,10 @@ export async function fetchAllUsages(
 
   // Legacy Pi path: extension-managed HTTP fetchers
   const disabled = new Set(disabledProviders.map((p) => p.toLowerCase())),
+    mapped =
+      mappedUsageProviders === undefined
+        ? undefined
+        : new Set(mappedUsageProviders.map((p) => p.toLowerCase())),
     piAuth = await loadPiAuth(),
     timeout = <T extends UsageSnapshot | UsageSnapshot[]>(
       promise: Promise<T>,
@@ -345,44 +361,43 @@ export async function fetchAllUsages(
         if (timer) clearTimeout(timer);
       });
     },
-    fetchers: {
-      provider: string;
-      fetch: () => Promise<UsageSnapshot | UsageSnapshot[]>;
-    }[] = [
-      {
-        provider: "anthropic",
-        fetch: () => fetchClaudeUsage(modelRegistry, piAuth),
-      },
-      {
-        provider: "copilot",
-        fetch: () => fetchCopilotUsage(modelRegistry, piAuth),
-      },
-      {
-        provider: "gemini",
-        fetch: () => fetchGeminiUsage(modelRegistry, piAuth),
-      },
-      {
-        provider: "codex",
-        fetch: () => fetchAllCodexUsages(modelRegistry, piAuth),
-      },
-      {
-        provider: "antigravity",
-        fetch: () => fetchAntigravityUsage(modelRegistry, piAuth),
-      },
-      { provider: "kiro", fetch: () => fetchKiroUsage() },
-      { provider: "zai", fetch: () => fetchZaiUsage(modelRegistry, piAuth) },
-      {
-        provider: "minimax",
-        fetch: () =>
-          fetchMinimaxUsage(piAuth, providerSettings?.minimax?.groupId),
-      },
-    ],
-    activeFetchers = fetchers.filter((f) => !disabled.has(f.provider)),
+    activeAdapters = getUsageProviderAdapters().filter(
+      (adapter) =>
+        !disabled.has(adapter.usageProvider) &&
+        (mapped === undefined || mapped.has(adapter.usageProvider)),
+    ),
+    availableAdapters = (
+      await Promise.all(
+        activeAdapters.map(async (adapter) => {
+          try {
+            const available = await adapter.isAvailable?.(
+              modelRegistry,
+              piAuth,
+              providerSettings,
+            );
+            return available === false ? undefined : adapter;
+          } catch {
+            return adapter;
+          }
+        }),
+      )
+    ).filter(
+      (adapter): adapter is NonNullable<typeof adapter> =>
+        adapter !== undefined,
+    ),
     results = await Promise.all(
-      activeFetchers.map((f) => timeout(f.fetch(), 30000, f.provider)),
+      availableAdapters.map((adapter) =>
+        timeout(
+          adapter.fetch(modelRegistry, piAuth, providerSettings),
+          30000,
+          adapter.usageProvider,
+        ),
+      ),
     );
 
-  return results.flat();
+  return results
+    .flat()
+    .filter((snapshot) => !isUnavailableUsageSnapshot(snapshot));
 }
 
 export { fetchClaudeUsage } from "./fetchers/anthropic.js";

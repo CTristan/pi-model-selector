@@ -20,25 +20,21 @@ import {
   updateWidgetConfig,
   upsertMapping,
 } from "./config.js";
-import { hasProviderCredential, PROVIDER_LABELS } from "./credential-check.js";
 import { sortModelsForUsageProvider } from "./model-provider-affinity.js";
+import {
+  findSelectableModel,
+  getSelectableModelsAsync,
+} from "./pi-registry.js";
 
 import type {
   MappingEntry,
-  ProviderName,
   UsageCandidate,
   UsageSnapshot,
   WidgetConfig,
 } from "./types.js";
-import {
-  ALL_PROVIDERS,
-  mappingKey,
-  notify,
-  setGlobalConfig,
-  writeDebugLog,
-} from "./types.js";
+import { mappingKey, notify, setGlobalConfig, writeDebugLog } from "./types.js";
 import { priorityOptions, selectWrapped } from "./ui-helpers.js";
-import { fetchAllUsages, loadPiAuth } from "./usage-fetchers.js";
+import { fetchAllUsages } from "./usage-fetchers.js";
 import {
   getWidgetState,
   renderUsageWidget,
@@ -85,15 +81,9 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
   ];
 
   let cachedUsages: UsageSnapshot[] | null = null,
-    cachedModels: Array<{ provider: string; id: string }> | null = null,
-    cachedPiAuth: Record<string, unknown> | null = null;
+    cachedModels: Array<{ provider: string; id: string }> | null = null;
 
-  const loadAuth = async (): Promise<Record<string, unknown>> => {
-      if (cachedPiAuth !== null) return cachedPiAuth;
-      cachedPiAuth = (await loadPiAuth()) || {};
-      return cachedPiAuth;
-    },
-    loadCandidates = async (): Promise<UsageCandidate[] | null> => {
+  const loadCandidates = async (): Promise<UsageCandidate[] | null> => {
       if (!cachedUsages) {
         cachedUsages = await fetchAllUsages(
           ctx.modelRegistry,
@@ -112,28 +102,11 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
       // Avoid cross-deduping raw vs. synthetic candidates so both remain visible.
       const candidates = [...dedupedRaw, ...syntheticOnly];
       if (candidates.length === 0) {
-        let detail =
-          "No usage windows found. Check provider credentials and connectivity.";
-        if (config.disabledProviders.length > 0) {
-          const piAuth = await loadAuth();
-          const disabledWithCredentials: ProviderName[] = [];
-          for (const provider of config.disabledProviders) {
-            if (
-              await hasProviderCredential(provider, piAuth, ctx.modelRegistry)
-            ) {
-              disabledWithCredentials.push(provider);
-            }
-          }
-
-          if (disabledWithCredentials.length > 0) {
-            const labels = disabledWithCredentials.map(
-              (provider) => PROVIDER_LABELS[provider],
-            );
-            detail += ` Detected credentials for disabled provider(s): ${labels.join(", ")}. Enable them via "Configure providers".`;
-          }
-        }
-
-        notify(ctx, "error", detail);
+        notify(
+          ctx,
+          "error",
+          "No usage windows found. Check provider credentials and connectivity.",
+        );
         return null;
       }
       return candidates;
@@ -144,9 +117,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
     }> | null> => {
       if (cachedModels) return cachedModels;
       try {
-        const availableModels = await Promise.resolve(
-          ctx.modelRegistry.getAvailable(),
-        );
+        const availableModels = await getSelectableModelsAsync(ctx);
         if (availableModels.length === 0) {
           notify(
             ctx,
@@ -1010,11 +981,10 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
       }
       renderUsageWidget(ctx);
     },
-    configureProviders = async (): Promise<void> => {
-      const piAuth = await loadAuth();
+    configureUsageSettings = async (): Promise<void> => {
       const locationChoice = await selectWrapped(
         ctx,
-        "Select configuration scope",
+        "Save usage settings to",
         locationLabels,
       );
       if (!locationChoice) return;
@@ -1023,148 +993,25 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
         targetRaw = saveToProject ? config.raw.project : config.raw.global,
         targetPath = saveToProject
           ? config.sources.projectPath
-          : config.sources.globalPath;
-
-      const currentRawDisabled = Array.isArray(targetRaw.disabledProviders)
-        ? (targetRaw.disabledProviders as unknown[]).filter(
-            (value: unknown): value is ProviderName =>
-              typeof value === "string" &&
-              (ALL_PROVIDERS as readonly string[]).includes(value),
-          )
-        : [];
-
-      const credentialChecks = await Promise.all(
-        ALL_PROVIDERS.map((provider: ProviderName) =>
-          hasProviderCredential(provider, piAuth, ctx.modelRegistry).then(
-            (hasCredentials) => ({ provider, hasCredentials }),
-          ),
-        ),
-      );
-
-      const providerOptions: string[] = [];
-      for (const { provider, hasCredentials } of credentialChecks) {
-        const disabledInTarget = currentRawDisabled.includes(
-          provider as ProviderName,
+          : config.sources.globalPath,
+        currentGroupId = config.providerSettings?.minimax?.groupId ?? "not set",
+        groupIdInput = await ctx.ui.input(
+          `Enter MiniMax GroupId (current: ${currentGroupId})`,
         );
-        const providerLabel = PROVIDER_LABELS[provider as ProviderName];
-        const mergedDisabled = config.disabledProviders.includes(
-          provider as ProviderName,
-        );
+      if (groupIdInput === undefined) return;
 
-        let statusLabel = disabledInTarget ? "⏸ disabled" : "✅ enabled";
-        if (disabledInTarget !== mergedDisabled) {
-          statusLabel += ` (overall: ${mergedDisabled ? "disabled" : "enabled"})`;
-        }
-
-        providerOptions.push(
-          `${statusLabel} ${providerLabel} (${provider}) — credentials: ${hasCredentials ? "detected" : "missing"}`,
-        );
-      }
-
-      const selectedProviderLabel = await selectWrapped(
-        ctx,
-        `Configure providers in ${saveToProject ? "Project" : "Global"}`,
-        providerOptions,
-      );
-
-      if (!selectedProviderLabel) return;
-      const selectedIndex = providerOptions.indexOf(selectedProviderLabel);
-      if (selectedIndex < 0) return;
-
-      const selectedProvider = ALL_PROVIDERS[selectedIndex] as ProviderName,
-        currentlyDisabledInTarget =
-          currentRawDisabled.includes(selectedProvider),
-        nextDisabled = !currentlyDisabledInTarget,
-        disabledSet = new Set(currentRawDisabled);
-
-      const selectedProviderLabelFriendly =
-        PROVIDER_LABELS[selectedProvider as ProviderName];
-
-      if (selectedProvider === "minimax") {
-        const subMenuOptions = [
-          currentlyDisabledInTarget
-            ? `✅ Enable ${selectedProviderLabelFriendly}`
-            : `⏸ Disable ${selectedProviderLabelFriendly}`,
-          "Configure GroupId",
-          "Back",
-        ];
-
-        const subMenuChoice = await selectWrapped(
+      const groupId = groupIdInput.trim();
+      if (!groupId) {
+        notify(
           ctx,
-          `Configure ${selectedProviderLabelFriendly}`,
-          subMenuOptions,
+          "error",
+          "MiniMax GroupId cannot be empty or whitespace only.",
         );
-
-        if (!subMenuChoice || subMenuChoice === "Back") return;
-
-        if (subMenuChoice === "Configure GroupId") {
-          const currentGroupId =
-            config.providerSettings?.minimax?.groupId || "none";
-          const newGroupId = await ctx.ui.input(
-            `Enter Minimax GroupId (current: ${currentGroupId})`,
-          );
-          if (newGroupId) {
-            const trimmedGroupId = newGroupId.trim();
-            if (!trimmedGroupId) {
-              notify(
-                ctx,
-                "error",
-                "Minimax GroupId cannot be empty or whitespace only.",
-              );
-              return;
-            }
-            try {
-              updateProviderSettings(targetRaw, "minimax", {
-                groupId: trimmedGroupId,
-              });
-              await saveConfigFile(targetPath, targetRaw);
-              notify(
-                ctx,
-                "info",
-                `Minimax GroupId updated to: ${trimmedGroupId}`,
-              );
-
-              // Reload config to update in-memory providerSettings
-              const reloaded = await loadConfig(ctx, {
-                requireMappings: false,
-              });
-              if (reloaded) {
-                if (reloaded.providerSettings) {
-                  config.providerSettings = reloaded.providerSettings;
-                }
-                config.raw = reloaded.raw;
-              }
-
-              // Clear cached usages to force refresh with new GroupId
-              cachedUsages = null;
-            } catch (error: unknown) {
-              notify(
-                ctx,
-                "error",
-                `Failed to write ${targetPath}: ${String(error)}`,
-              );
-            }
-          }
-          return;
-        }
-
-        // Otherwise, it was the enable/disable choice
-        if (nextDisabled) {
-          disabledSet.add(selectedProvider);
-        } else {
-          disabledSet.delete(selectedProvider);
-        }
-      } else {
-        // Standard enable/disable for other providers
-        if (nextDisabled) {
-          disabledSet.add(selectedProvider);
-        } else {
-          disabledSet.delete(selectedProvider);
-        }
+        return;
       }
 
       try {
-        targetRaw.disabledProviders = [...disabledSet];
+        updateProviderSettings(targetRaw, "minimax", { groupId });
         await saveConfigFile(targetPath, targetRaw);
       } catch (error: unknown) {
         notify(ctx, "error", `Failed to write ${targetPath}: ${String(error)}`);
@@ -1173,24 +1020,15 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
 
       const reloaded = await loadConfig(ctx, { requireMappings: false });
       if (reloaded) {
-        config.disabledProviders = reloaded.disabledProviders;
         if (reloaded.providerSettings) {
           config.providerSettings = reloaded.providerSettings;
+        } else {
+          delete config.providerSettings;
         }
         config.raw = reloaded.raw;
       }
-
       cachedUsages = null;
-
-      const isActuallyDisabled =
-        config.disabledProviders.includes(selectedProvider);
-      const scopeLabel = saveToProject ? "Project" : "Global";
-
-      notify(
-        ctx,
-        "info",
-        `${nextDisabled ? "Disabled" : "Enabled"} ${selectedProviderLabelFriendly} in ${scopeLabel} config. Overall status: ${isActuallyDisabled ? "Disabled" : "Enabled"}.`,
-      );
+      notify(ctx, "info", `MiniMax GroupId updated to: ${groupId}`);
     },
     configureCleanup = async (): Promise<void> => {
       const locationChoice = await selectWrapped(
@@ -1209,17 +1047,16 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
           string,
           unknown
         >,
-        modelFinder =
-          typeof ctx.modelRegistry?.find === "function"
-            ? ctx.modelRegistry.find.bind(ctx.modelRegistry)
-            : undefined;
+        modelFinder = (provider: string, id: string) =>
+          findSelectableModel(ctx, provider, id);
 
       let availableModelKeys: Set<string> | null = null;
-      if (typeof ctx.modelRegistry?.getAvailable === "function") {
+      if (
+        typeof (ctx.modelRegistry as { getAvailable?: unknown })
+          ?.getAvailable === "function"
+      ) {
         try {
-          const availableModels = await Promise.resolve(
-            ctx.modelRegistry.getAvailable(),
-          );
+          const availableModels = await getSelectableModelsAsync(ctx);
           availableModelKeys = new Set(
             availableModels.map(
               (model) => `${model.provider}\u0000${model.id}`,
@@ -1255,59 +1092,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
       });
 
       const cleanupSummary = [...cleanupResult.summary],
-        autoDisabledProviders: ProviderName[] = [];
-
-      const mappedUsageProviders = new Set(
-        (Array.isArray(candidateRaw.mappings) ? candidateRaw.mappings : [])
-          .map((entry) => {
-            if (!entry || typeof entry !== "object") return undefined;
-            const usage = (entry as { usage?: { provider?: unknown } }).usage;
-            return usage?.provider;
-          })
-          .filter(
-            (provider): provider is string => typeof provider === "string",
-          )
-          .filter((p): p is ProviderName =>
-            ALL_PROVIDERS.includes(p as ProviderName),
-          ),
-      );
-
-      if (mappedUsageProviders.size > 0) {
-        const piAuth = await loadAuth();
-        const existingDisabled = Array.isArray(candidateRaw.disabledProviders)
-          ? candidateRaw.disabledProviders
-              .filter((value): value is string => typeof value === "string")
-              .filter((p): p is ProviderName =>
-                ALL_PROVIDERS.includes(p as ProviderName),
-              )
-          : [];
-        const disabledSet = new Set<ProviderName>(existingDisabled);
-
-        for (const provider of mappedUsageProviders) {
-          if (disabledSet.has(provider)) continue;
-          const hasCredential = await hasProviderCredential(
-            provider,
-            piAuth,
-            ctx.modelRegistry,
-          );
-          if (!hasCredential) {
-            disabledSet.add(provider);
-            autoDisabledProviders.push(provider);
-          }
-        }
-
-        if (autoDisabledProviders.length > 0) {
-          candidateRaw.disabledProviders = [...disabledSet];
-          const providerLabels = autoDisabledProviders.map(
-            (provider) => `${PROVIDER_LABELS[provider]} (${provider})`,
-          );
-          cleanupSummary.push(
-            `Disabled ${autoDisabledProviders.length} provider${autoDisabledProviders.length === 1 ? "" : "s"} with missing credentials: ${providerLabels.join(", ")}.`,
-          );
-        }
-      }
-
-      const changed = cleanupResult.changed || autoDisabledProviders.length > 0;
+        changed = cleanupResult.changed;
       if (!changed) {
         notify(ctx, "info", `No cleanup changes needed for ${targetPath}.`);
         return;
@@ -1477,7 +1262,7 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
     },
     menuOptions = [
       "Edit mappings",
-      "Configure providers",
+      "Configure usage settings",
       "Configure priority",
       "Configure fallback",
       "Configure widget",
@@ -1496,13 +1281,13 @@ async function runMappingWizard(ctx: ExtensionContext): Promise<void> {
     );
     if (!action || action === "Done") return;
 
-    if (action === "Configure priority") {
-      await configurePriority();
+    if (action === "Configure usage settings") {
+      await configureUsageSettings();
       continue;
     }
 
-    if (action === "Configure providers") {
-      await configureProviders();
+    if (action === "Configure priority") {
+      await configurePriority();
       continue;
     }
 

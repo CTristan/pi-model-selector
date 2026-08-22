@@ -1,4 +1,8 @@
 import * as os from "node:os";
+import {
+  getProviderAuthFromRegistry,
+  type PiProviderAuth,
+} from "../pi-registry.js";
 import type { RateWindow, UsageSnapshot } from "../types.js";
 import {
   execFileAsync,
@@ -196,10 +200,28 @@ async function loadClaudeKeychainToken(): Promise<string | undefined> {
   }
 }
 
+function getAuthHeader(
+  headers: Record<string, string | null> | undefined,
+): string | undefined {
+  if (!headers) return undefined;
+  const entry = Object.entries(headers).find(
+    ([name, value]) => name.toLowerCase() === "authorization" && value,
+  );
+  return entry?.[1] ?? undefined;
+}
+
+function isClaudeOAuthAuth(auth: PiProviderAuth): boolean {
+  const source = auth.source?.trim().toLowerCase();
+  return source === "oauth" || source === "anthropic_oauth_token";
+}
+
 async function loadClaudeCredentials(
   modelRegistry: unknown,
   piAuth: Record<string, unknown>,
-): Promise<ClaudeCredential[]> {
+): Promise<{
+  credentials: ClaudeCredential[];
+  unsupportedRegistryAuth: boolean;
+}> {
   const credentials: ClaudeCredential[] = [],
     seenTokens = new Set<string>(),
     addCredential = (credential: ClaudeCredential | undefined) => {
@@ -207,53 +229,83 @@ async function loadClaudeCredentials(
       seenTokens.add(credential.token);
       credentials.push(credential);
     };
+  let unsupportedRegistryAuth = false;
+  let hasPublicRegistryAuth = false;
 
   try {
-    const mr = modelRegistry as {
-      authStorage?: {
-        getApiKey?: (
-          id: string,
-        ) => Promise<string | undefined> | string | undefined;
-        get?: (
-          id: string,
-        ) =>
-          | Promise<Record<string, unknown> | undefined>
-          | Record<string, unknown>
-          | undefined;
-      };
-    };
-
-    const registryApiKey = await Promise.resolve(
-      mr?.authStorage?.getApiKey?.("anthropic"),
+    const resolvedAuth = await getProviderAuthFromRegistry(
+      modelRegistry,
+      "anthropic",
     );
-    addCredential(
-      registryApiKey
-        ? {
-            token: registryApiKey,
-            source: "registry:anthropic:apiKey",
-          }
-        : undefined,
-    );
-
-    const registryData = await Promise.resolve(
-      mr?.authStorage?.get?.("anthropic"),
-    );
-    addCredential(
-      extractClaudeCredential(registryData, "registry:anthropic:data"),
-    );
+    if (resolvedAuth) {
+      hasPublicRegistryAuth = true;
+      const authHeader = getAuthHeader(resolvedAuth.auth.headers),
+        bearerToken = authHeader?.match(/^Bearer\s+(\S+)/i)?.[1],
+        token = bearerToken ?? resolvedAuth.auth.apiKey;
+      if (token && isClaudeOAuthAuth(resolvedAuth)) {
+        addCredential({
+          token,
+          source: `registry:anthropic:${resolvedAuth.source ?? "auth"}`,
+        });
+      } else if (resolvedAuth.auth.apiKey || authHeader) {
+        unsupportedRegistryAuth = true;
+      }
+    }
   } catch {
-    // Ignore registry access errors.
+    // Ignore public registry access errors and use compatibility fallbacks.
   }
 
-  addCredential(extractClaudeCredential(piAuth.anthropic, "auth.json"));
+  if (!hasPublicRegistryAuth) {
+    try {
+      const mr = modelRegistry as {
+        authStorage?: {
+          getApiKey?: (
+            id: string,
+          ) => Promise<string | undefined> | string | undefined;
+          get?: (
+            id: string,
+          ) =>
+            | Promise<Record<string, unknown> | undefined>
+            | Record<string, unknown>
+            | undefined;
+        };
+      };
+
+      const registryApiKey = await Promise.resolve(
+        mr?.authStorage?.getApiKey?.("anthropic"),
+      );
+      addCredential(
+        registryApiKey
+          ? {
+              token: registryApiKey,
+              source: "registry:anthropic:apiKey",
+            }
+          : undefined,
+      );
+
+      const registryData = await Promise.resolve(
+        mr?.authStorage?.get?.("anthropic"),
+      );
+      addCredential(
+        extractClaudeCredential(registryData, "registry:anthropic:data"),
+      );
+    } catch {
+      // Ignore registry access errors.
+    }
+
+    addCredential(extractClaudeCredential(piAuth.anthropic, "auth.json"));
+  }
 
   const now = Date.now();
-  return credentials.sort((a, b) => {
-    const aExpired = (a.expiresAt ?? Number.MAX_SAFE_INTEGER) <= now;
-    const bExpired = (b.expiresAt ?? Number.MAX_SAFE_INTEGER) <= now;
-    if (aExpired !== bExpired) return aExpired ? 1 : -1;
-    return 0;
-  });
+  return {
+    credentials: credentials.sort((a, b) => {
+      const aExpired = (a.expiresAt ?? Number.MAX_SAFE_INTEGER) <= now;
+      const bExpired = (b.expiresAt ?? Number.MAX_SAFE_INTEGER) <= now;
+      if (aExpired !== bExpired) return aExpired ? 1 : -1;
+      return 0;
+    }),
+    unsupportedRegistryAuth,
+  };
 }
 
 /** Fetches usage information for Claude models from Anthropic. */
@@ -285,10 +337,11 @@ export async function fetchClaudeUsage(
     effectiveModelRegistry = undefined;
   }
 
-  const credentials = await loadClaudeCredentials(
+  const credentialResult = await loadClaudeCredentials(
       effectiveModelRegistry,
       effectivePiAuth,
     ),
+    { credentials } = credentialResult,
     attemptedTokens = new Set<string>();
 
   const doFetch = (accessToken: string) =>
@@ -378,7 +431,9 @@ export async function fetchClaudeUsage(
       windows: [],
       error: lastAuthFailure
         ? `HTTP ${lastAuthFailure.status}`
-        : "No credentials",
+        : credentialResult.unsupportedRegistryAuth
+          ? "Anthropic usage requires OAuth authentication"
+          : "No credentials",
     };
     if (lastAuthFailure?.source !== undefined) {
       snapshot.account = lastAuthFailure.source;

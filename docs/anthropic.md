@@ -6,15 +6,9 @@ The Anthropic provider fetches usage information for Claude models. It primarily
 
 ## Authentication
 
-The extension discovers credentials from multiple sources and retries on auth failures:
+Pi resolves Anthropic authentication through `getProviderAuth("anthropic")`. Claude OAuth auth can call the usage endpoint, while an Anthropic API key cannot. The extension keeps `auth.json` and macOS Keychain fallback only when Pi has no resolved provider auth, so existing Claude Code installations can still recover.
 
-1. **Pi model registry (`authStorage`)**: Tries `anthropic` API key/data when available.
-2. **`auth.json`**: Looks for `piAuth.anthropic.access`, `piAuth.anthropic.accessToken`, or `piAuth.anthropic.token`.
-3. **macOS Keychain**: Attempts to find `Claude Code-credentials`.
-   - Supports the Claude JSON payload format (`claudeAiOauth.accessToken` with `user:profile` scope).
-   - Also supports plain token values for environments that store only the raw token.
-
-If one credential returns `401/403`, the extension automatically tries the next discovered credential source before failing.
+If one OAuth credential returns `401/403`, the extension tries the optional Keychain OAuth source before failing.
 
 ## API Endpoint
 

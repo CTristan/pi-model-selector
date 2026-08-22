@@ -41,6 +41,25 @@ describe("Minimax Fetcher", () => {
     expect(result.windows).toHaveLength(0);
   });
 
+  it("should use Pi's public provider auth when available", async () => {
+    vi.mocked(common.fetchWithTimeout).mockResolvedValue({
+      res: { ok: true } as Response,
+      data: {
+        model_remains: [],
+        base_resp: { status_code: 0, status_msg: "success" },
+      },
+    });
+
+    const result = await fetchMinimaxUsage({}, mockGroupId, {
+      getProviderAuth: vi.fn().mockResolvedValue({
+        auth: { apiKey: "public-registry-minimax-key" },
+        source: "stored credential",
+      }),
+    });
+
+    expect(result.error).toBeUndefined();
+  });
+
   it("should fetch usage successfully with multiple models", async () => {
     const mockResponse = {
       model_remains: [

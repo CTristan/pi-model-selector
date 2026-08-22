@@ -1,3 +1,4 @@
+import { getProviderAuthFromRegistry } from "../pi-registry.js";
 import type { RateWindow, UsageSnapshot } from "../types.js";
 import { fetchWithTimeout, formatReset, safeDate, URLS } from "./common.js";
 
@@ -42,7 +43,21 @@ async function resolveZaiApiKeyWithRegistry(
     return envKey.trim();
   }
 
-  // 2. Check model registry authStorage (OMP uses SQLite, not auth.json)
+  // 2. Check Pi's public provider auth, which resolves auth.json and env values.
+  for (const providerId of ["zai", "zai-coding-cn"]) {
+    try {
+      const resolvedAuth = await getProviderAuthFromRegistry(
+        modelRegistry,
+        providerId,
+      );
+      const registryKey = resolvedAuth?.auth.apiKey?.trim();
+      if (registryKey) return registryKey;
+    } catch {
+      // Continue through compatibility credential sources.
+    }
+  }
+
+  // 3. Check model registry authStorage (OMP uses SQLite, not auth.json)
   try {
     const mr = modelRegistry as {
       authStorage?: {

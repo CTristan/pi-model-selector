@@ -1,3 +1,4 @@
+import { getProviderAuthFromRegistry } from "../pi-registry.js";
 import type { RateWindow, UsageSnapshot } from "../types.js";
 import { writeDebugLog } from "../types.js";
 import {
@@ -83,14 +84,36 @@ export async function fetchCopilotUsage(
       extractFromData = (data: unknown, source: string) => {
         if (data == null || typeof data !== "object") return;
         const d = data as Record<string, unknown>;
-        const token = d.access || d.accessToken || d.access_token || d.token;
+        const refreshToken =
+          typeof d.refresh === "string" ? d.refresh : undefined;
+        const token =
+          refreshToken ??
+          (d.access || d.accessToken || d.access_token || d.token);
         if (typeof token === "string" && token) {
-          addToken(token, `${source}.access`);
+          addToken(
+            token,
+            refreshToken !== undefined
+              ? `${source}.refresh`
+              : `${source}.access`,
+          );
         }
       };
 
     // 1. Discovery
     try {
+      const resolvedAuth = await getProviderAuthFromRegistry(
+        modelRegistry,
+        "github-copilot",
+      );
+      const resolvedSource = resolvedAuth?.source?.toLowerCase() ?? "";
+      if (
+        resolvedAuth?.auth.apiKey &&
+        resolvedSource !== "oauth" &&
+        !resolvedSource.includes("oauth")
+      ) {
+        addToken(resolvedAuth.auth.apiKey, "registry:github-copilot:resolved");
+      }
+
       const gcpKey = await mr?.authStorage?.getApiKey?.("github-copilot");
       addToken(gcpKey, "registry:github-copilot:apiKey");
 
@@ -102,8 +125,8 @@ export async function fetchCopilotUsage(
 
       const ghData = await mr?.authStorage?.get?.("github");
       extractFromData(ghData, "registry:github:data");
-    } catch (e: unknown) {
-      writeDebugLog(`fetchCopilotUsage: registry error: ${String(e)}`);
+    } catch {
+      writeDebugLog("fetchCopilotUsage: registry auth discovery failed");
     }
 
     const copilotAuth = piAuth["github-copilot"] as

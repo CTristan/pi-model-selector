@@ -207,9 +207,9 @@ describe("fetchAllUsages — OMP path", () => {
     const { fetchAllUsages } = await import("../src/usage-fetchers.js");
     const result = await fetchAllUsages(modelRegistry);
 
-    // Should have fallen back to the Pi fetchers path and returned snapshots
+    // The Pi path should skip providers without configured auth instead of returning empty error cards.
     expect(Array.isArray(result)).toBe(true);
-    expect(result.length).toBeGreaterThan(0);
+    expect(result).toHaveLength(0);
 
     vi.unstubAllGlobals();
   });

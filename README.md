@@ -5,14 +5,8 @@ A Pi extension that automatically selects the best AI model based on remaining u
 ## Features
 
 - **Smart Model Selection**: Automatically switches to the model with the most available quota or earliest reset time.
-- **Multi-Provider Support**: Tracks usage for:
-  - Anthropic (Claude)
-  - GitHub Copilot
-  - Google Gemini
-  - OpenAI (Codex)
-  - Antigravity
-  - Kiro
-  - z.ai
+- **Provider-aware usage adapters**: Tracks quota windows for Anthropic (Claude), GitHub Copilot, Google Gemini, OpenAI (Codex), Antigravity, Kiro, z.ai, and MiniMax.
+- **Pi-native model catalogue**: Uses Pi's authenticated and session-scoped model list, so built-in providers such as OpenCode Go appear as mapping targets without extension changes.
 - **Configurable Priorities**: Define your own rules for selection (e.g., prioritize full availability over remaining percentage).
 - **Flexible Mappings**: Map specific usage windows (e.g., "5h quota", "Weekly limit") to specific models.
 - **Interactive Configuration**: Built-in wizard to easily set up mappings and priorities.
@@ -64,6 +58,12 @@ Configuration is merged from two sources:
 
 A template for the global configuration can be found in `config/model-selector.example.json`.
 
+### Provider discovery and authentication
+
+Pi owns the model catalogue and authentication state. The extension reads the current session's scoped models and authenticated model snapshot, so you do not need to enable providers or duplicate credential checks here.
+
+Pi does not expose a generic quota API. Provider-aware adapters still query each provider's supported usage source, using Pi's resolved auth when the request credential also works for that usage endpoint. CodexBar's provider documentation remains the reference for source selection, fallback order, and parser behavior. `disabledProviders` remains an optional explicit opt-out for older configurations, not a required setup step.
+
 ### Priority Rules
 
 You can prioritize candidates based on:
@@ -90,11 +90,11 @@ Example `model-selector.json`:
   "mappings": [
     {
       "usage": { "provider": "anthropic", "window": "Sonnet" },
-      "model": { "provider": "anthropic", "id": "claude-3-5-sonnet" }
+      "model": { "provider": "anthropic", "id": "claude-sonnet-4-5" }
     },
     {
       "usage": { "provider": "copilot", "window": "Chat" },
-      "model": { "provider": "github-copilot", "id": "gpt-4o" },
+      "model": { "provider": "github-copilot", "id": "gpt-4.1" },
       "reserve": 20
     },
     {

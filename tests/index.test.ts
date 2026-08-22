@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import modelSelectorExtension from "../index.js";
 import * as configMod from "../src/config.js";
+import type { LoadedConfig } from "../src/types.js";
 import * as usageFetchers from "../src/usage-fetchers.js";
 import * as widgetMod from "../src/widget.js";
 
@@ -224,7 +225,7 @@ describe("Model Selector Extension", () => {
     );
   });
 
-  it("only fetches usage for providers referenced by mappings", async () => {
+  it("passes only mapped usage adapters to selection fetches", async () => {
     vi.mocked(configMod.loadConfig).mockResolvedValueOnce({
       mappings: [
         {
@@ -255,11 +256,64 @@ describe("Model Selector Extension", () => {
 
     await handler({}, ctx);
 
-    const disabledProviders = vi.mocked(usageFetchers.fetchAllUsages).mock
-      .calls[0]?.[1] as string[];
-    expect(disabledProviders).toContain("gemini");
-    expect(disabledProviders).toContain("antigravity");
-    expect(disabledProviders).not.toContain("anthropic");
+    const call = vi.mocked(usageFetchers.fetchAllUsages).mock.calls[0];
+    if (!call) throw new Error("Expected a usage fetch");
+    expect(call[1]).toEqual([]);
+    expect(call[3]).toEqual(["anthropic"]);
+  });
+
+  it("passes mapped adapters to the skip flow", async () => {
+    const mappedConfig: LoadedConfig = {
+      mappings: [
+        {
+          usage: { provider: "anthropic", window: "Sonnet" },
+          model: { provider: "p1", id: "m1" },
+        },
+        {
+          usage: { provider: "codex", window: "1w" },
+          model: { provider: "p2", id: "m2" },
+        },
+      ],
+      priority: ["remainingPercent"],
+      widget: { enabled: true, placement: "belowEditor", showCount: 3 },
+      autoRun: false,
+      enableModelLocking: true,
+      disabledProviders: [],
+      sources: { globalPath: "", projectPath: "" },
+      raw: { global: {}, project: {} },
+    };
+    vi.mocked(configMod.loadConfig).mockResolvedValue(mappedConfig);
+    vi.mocked(usageFetchers.fetchAllUsages).mockResolvedValueOnce([
+      {
+        provider: "anthropic",
+        displayName: "Claude",
+        windows: [{ label: "Sonnet", usedPercent: 10 }],
+      },
+      {
+        provider: "codex",
+        displayName: "Codex",
+        windows: [{ label: "1w", usedPercent: 20 }],
+      },
+    ]);
+
+    modelSelectorExtension(pi);
+    const skipHandler = commands["model-skip"];
+    if (!skipHandler) throw new Error("Command not found: model-skip");
+
+    await skipHandler({}, ctx);
+
+    const call = vi.mocked(usageFetchers.fetchAllUsages).mock.calls[0];
+    if (!call) throw new Error("Expected a usage fetch");
+    expect(call[3]).toEqual(["anthropic", "codex"]);
+
+    const unskipHandler = commands["model-unskip"];
+    if (!unskipHandler) throw new Error("Command not found: model-unskip");
+    await unskipHandler({}, ctx);
+    const unskipCall = vi
+      .mocked(usageFetchers.fetchAllUsages)
+      .mock.calls.at(-1);
+    if (!unskipCall) throw new Error("Expected an unskip usage fetch");
+    expect(unskipCall[3]).toEqual(["anthropic", "codex"]);
   });
 
   it("should select best model on command", async () => {
