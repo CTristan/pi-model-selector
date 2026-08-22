@@ -85,7 +85,9 @@ export async function fetchCopilotUsage(
         if (data == null || typeof data !== "object") return;
         const d = data as Record<string, unknown>;
         const refreshToken =
-          typeof d.refresh === "string" ? d.refresh : undefined;
+          typeof d.refresh === "string" && d.refresh.trim().length > 0
+            ? d.refresh.trim()
+            : undefined;
         const token =
           refreshToken ??
           (d.access || d.accessToken || d.access_token || d.token);

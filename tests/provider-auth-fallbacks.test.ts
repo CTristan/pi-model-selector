@@ -207,6 +207,42 @@ describe("Provider auth fallback behavior", () => {
     expect(getApiKey).toHaveBeenCalledWith("github-copilot");
   });
 
+  it("fetchCopilotUsage should fall back to access when the stored refresh token is empty", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () =>
+        Promise.resolve({
+          login: "octocat",
+          copilot_plan: "individual",
+          quota_snapshots: {
+            premium_interactions: { percent_remaining: 80 },
+          },
+        }),
+    } as Response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await fetchCopilotUsage(
+      {},
+      {
+        "github-copilot": {
+          type: "oauth",
+          access: "github-oauth-token",
+          refresh: "   ",
+        },
+      },
+    );
+
+    expect(result[0]?.error).toBeUndefined();
+    const firstCall = fetchMock.mock.calls[0];
+    if (!firstCall) throw new Error("Expected a Copilot usage request");
+    const request = firstCall[1];
+    if (!request) throw new Error("Expected Copilot request options");
+    expect((request.headers as Record<string, string>).Authorization).toBe(
+      "token github-oauth-token",
+    );
+  });
+
   it("fetchCopilotUsage should use the stored GitHub token behind Pi's OAuth credential", async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
