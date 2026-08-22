@@ -32,6 +32,10 @@ valid:
   - |-
     jwt = require("other-mod", "jwt-simple");
     const decoded = jwt.decode(token, secret, true);
+  # Logical negation is falsy, so verification still happens.
+  - |-
+    const jwt = require("jwt-simple");
+    const decoded = jwt.decode(token, secret, !1);
 invalid:
   # Single-quoted require with a truthy no-verify argument.
   - |-
@@ -65,3 +69,7 @@ invalid:
   - |-
     import { decode } from "jwt-simple";
     const decoded = decode(token, secret, true);
+  # An aliased named import binds the local identifier.
+  - |-
+    import { decode as jwtDecode } from "jwt-simple";
+    const decoded = jwtDecode(token, secret, true);

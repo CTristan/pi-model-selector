@@ -293,6 +293,50 @@ snapshots:
       start: 0
       end: 37
   ? |-
+    import { decode as jwtDecode } from "jwt-simple";
+    const decoded = jwtDecode(token, secret, true);
+  : labels:
+    - source: jwtDecode(token, secret, true)
+      style: primary
+      start: 66
+      end: 96
+    - source: decode
+      style: secondary
+      start: 9
+      end: 15
+    - source: jwtDecode
+      style: secondary
+      start: 19
+      end: 28
+    - source: decode as jwtDecode
+      style: secondary
+      start: 9
+      end: 28
+    - source: '{ decode as jwtDecode }'
+      style: secondary
+      start: 7
+      end: 30
+    - source: '{ decode as jwtDecode }'
+      style: secondary
+      start: 7
+      end: 30
+    - source: jwt-simple
+      style: secondary
+      start: 37
+      end: 47
+    - source: '"jwt-simple"'
+      style: secondary
+      start: 36
+      end: 48
+    - source: import { decode as jwtDecode } from "jwt-simple";
+      style: secondary
+      start: 0
+      end: 49
+    - source: import { decode as jwtDecode } from "jwt-simple";
+      style: secondary
+      start: 0
+      end: 49
+  ? |-
     import { decode } from "jwt-simple";
     const decoded = decode(token, secret, true);
   : labels:
@@ -300,6 +344,10 @@ snapshots:
       style: primary
       start: 53
       end: 80
+    - source: decode
+      style: secondary
+      start: 9
+      end: 15
     - source: decode
       style: secondary
       start: 9

@@ -17,28 +17,30 @@
 # Four rules carry local fixes that are NOT upstream yet, so re-vendoring
 # from ast-grep-essentials must reconcile them instead of overwriting:
 # - `express-session-hardcoded-secret-typescript.yml` matches module
-#   specifiers quote-agnostically, accepts `var` requires, and detects
-#   backtick secrets, quoted `"secret"` keys, and rotation arrays that
-#   contain any constant secret (upstream only matches single quotes,
-#   unquoted keys, `const`/`let`/assignment requires, and single quoted
-#   strings; single quotes never occur here because biome enforces
-#   double quotes).
+#   specifiers quote-agnostically, accepts `var` requires, pins the module
+#   name to the first `require` argument, and detects backtick secrets,
+#   quoted `"secret"` keys, and rotation arrays that contain any constant
+#   secret (upstream only matches single quotes, unquoted keys,
+#   `const`/`let`/assignment requires, and single quoted strings; single
+#   quotes never occur here because biome enforces double quotes).
 # - both `node-sequelize-*` rules detect three- and four-argument
 #   constructor calls, double-quoted `require` calls, and empty backtick
-#   passwords, and the hardcoded-secret rule carries the correct CWE-798
-#   classification (upstream requires four arguments, single quotes, and
-#   quoted strings only, and mislabels CWE-287). Five-or-more-argument
-#   calls stay out of scope on purpose: the `position: 5` guard mirrors
-#   upstream's boundary, and Sequelize's canonical constructor is
-#   `(database, username, password, options)`, so argument three is only
-#   known to be the password up to four arguments.
+#   passwords while treating interpolated templates as non-empty, and the
+#   hardcoded-secret rule carries the correct CWE-798 classification
+#   (upstream requires four arguments, single quotes, and quoted strings
+#   only, and mislabels CWE-287). Five-or-more-argument calls stay out of
+#   scope on purpose: the `position: 5` guard mirrors upstream's boundary,
+#   and Sequelize's canonical constructor is `(database, username, password,
+#   options)`, so argument three is only known to be the password up to
+#   four arguments.
 # - `jwt-simple-noverify-typescript.yml` uses lowercase `typescript`, a
 #   properly folded message with correct remediation guidance, import
 #   forms for ES imports, import-equals bindings, and named-import
-#   destructuring, a require matcher that pins the module name to the
-#   first and only string argument, and a no-verify matcher that accepts
-#   non-empty strings and templates plus unambiguous non-zero decimals
-#   (signed or unsigned) while excluding empty and zero literals (upstream
+#   destructuring (including aliased imports), a require matcher that pins
+#   the module name to the first and only string argument, and a no-verify
+#   matcher that accepts non-empty strings and templates plus unambiguous
+#   non-zero decimals while excluding empty and zero literals and treating
+#   only sign-prefixed unary `+`/`-` numbers as truthy (upstream
 #   capitalizes the language inconsistently, renders the diagnostic with
 #   stray quotes and inverted guidance, accepts no imports, and misses
 #   numeric truthy flags).

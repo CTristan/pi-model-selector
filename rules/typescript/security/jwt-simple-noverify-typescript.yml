@@ -154,8 +154,9 @@ rule:
                                         - kind: pair
 
     # Named-import form: import { decode } from "jwt-simple" followed by a
-    # bare decode(token, secret, noVerify) call.
-    - pattern: decode($TOKEN, $SECRET, $NOVERIFY $$$)
+    # bare decode(token, secret, noVerify) call. The local name binds to
+    # $CALLEE so an aliased import like { decode as jwtDecode } matches too.
+    - pattern: $CALLEE($TOKEN, $SECRET, $NOVERIFY $$$)
       inside:
         stopBy: end
         follows:
@@ -168,9 +169,14 @@ rule:
                   kind: named_imports
                   has:
                     kind: import_specifier
-                    has:
-                      kind: identifier
-                      regex: ^decode$
+                    all:
+                      - has:
+                          kind: identifier
+                          nthChild: 1
+                          regex: ^decode$
+                      - has:
+                          kind: identifier
+                          pattern: $CALLEE
             - has:
                 kind: string
                 nthChild: 2
@@ -208,6 +214,7 @@ constraints:
               - regex: ^(?:[1-9][0-9]*(?:\\.[0-9]+)?|0*\\.[0-9]*[1-9][0-9]*)$
           - all:
               - kind: unary_expression
+              - regex: ^[+-]
               - has:
                   kind: number
                   regex: ^(?:[1-9][0-9]*(?:\\.[0-9]+)?|0*\\.[0-9]*[1-9][0-9]*)$
