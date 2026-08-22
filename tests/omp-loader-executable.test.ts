@@ -39,6 +39,11 @@ function findBun(): string | null {
 
 const BUN = findBun();
 
+// The synthetic executables are POSIX shell scripts with a shebang, so the
+// two fixture tests that spawn them cannot run on Windows. The remaining
+// synthetic cases exercise directory layout only and stay platform-neutral.
+const WINDOWS = process.platform === "win32";
+
 type CheckResult = { code: number | null; output: string };
 
 function spawnCheck(env: Record<string, string>): Promise<CheckResult> {
@@ -107,7 +112,7 @@ describe("OMP loader executable compatibility", () => {
     120_000,
   );
 
-  it.skipIf(!BUN)(
+  it.skipIf(!BUN || WINDOWS)(
     "skips with an explicit reason for a prebuilt standalone omp binary",
     async () => {
       const dir = mkdtempSync(join(tmpdir(), "omp-standalone-"));
@@ -215,7 +220,7 @@ describe("OMP loader executable compatibility", () => {
     120_000,
   );
 
-  it.skipIf(!BUN)(
+  it.skipIf(!BUN || WINDOWS)(
     "classifies an omp symlink into a package tree as a package install",
     async () => {
       const dir = mkdtempSync(join(tmpdir(), "omp-symlink-"));
