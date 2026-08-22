@@ -85,7 +85,7 @@ const USAGE_PROVIDER_ADAPTERS: readonly UsageProviderAdapter[] = [
   },
   {
     usageProvider: "minimax",
-    piProviderIds: ["minimax", "minimax-cn"],
+    piProviderIds: ["minimax"],
     authMode: "pi",
     fetch: (modelRegistry, piAuth, providerSettings) =>
       fetchMinimaxUsage(

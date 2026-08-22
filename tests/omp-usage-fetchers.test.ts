@@ -135,6 +135,28 @@ describe("fetchAllUsages — OMP path", () => {
     expect(providers).not.toContain("zai");
   });
 
+  it("matches mapped OMP provider IDs case-insensitively", async () => {
+    vi.doMock("../src/adapter.js", () => ({
+      isOmp: true,
+      EXTENSION_DIR: ".omp",
+    }));
+
+    const fetchUsageReports = vi
+      .fn()
+      .mockResolvedValue([makeOmpReport("ANTHROPIC", 0.5)]);
+
+    const { fetchAllUsages } = await import("../src/usage-fetchers.js");
+    const result = await fetchAllUsages(
+      { authStorage: { fetchUsageReports } },
+      [],
+      undefined,
+      ["anthropic"],
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.provider).toBe("ANTHROPIC");
+  });
+
   it("handles fetchUsageReports returning null by using fallback fetchers", async () => {
     vi.doMock("../src/adapter.js", () => ({
       isOmp: true,

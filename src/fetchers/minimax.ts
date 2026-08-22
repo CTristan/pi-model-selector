@@ -88,7 +88,7 @@ async function resolveMinimaxApiKeyWithRegistry(
   modelRegistry: unknown,
   piAuth: Record<string, unknown>,
 ): Promise<string | undefined> {
-  for (const providerId of ["minimax", "minimax-cn"]) {
+  for (const providerId of ["minimax"]) {
     try {
       const resolvedAuth = await getProviderAuthFromRegistry(
         modelRegistry,

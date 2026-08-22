@@ -100,25 +100,33 @@ export async function fetchCopilotUsage(
       };
 
     // 1. Discovery
+    let resolvedCopilotOAuth = false;
     try {
       const resolvedAuth = await getProviderAuthFromRegistry(
         modelRegistry,
         "github-copilot",
       );
       const resolvedSource = resolvedAuth?.source?.toLowerCase() ?? "";
-      if (
-        resolvedAuth?.auth.apiKey &&
-        resolvedSource !== "oauth" &&
-        !resolvedSource.includes("oauth")
-      ) {
+      resolvedCopilotOAuth =
+        resolvedSource === "oauth" || resolvedSource.includes("oauth");
+      if (resolvedAuth?.auth.apiKey && !resolvedCopilotOAuth) {
         addToken(resolvedAuth.auth.apiKey, "registry:github-copilot:resolved");
       }
 
       const gcpKey = await mr?.authStorage?.getApiKey?.("github-copilot");
-      addToken(gcpKey, "registry:github-copilot:apiKey");
+      if (!resolvedCopilotOAuth) {
+        addToken(gcpKey, "registry:github-copilot:apiKey");
+      }
 
       const gcpData = await mr?.authStorage?.get?.("github-copilot");
-      extractFromData(gcpData, "registry:github-copilot:data");
+      if (resolvedCopilotOAuth) {
+        const data = gcpData as Record<string, unknown> | undefined;
+        if (typeof data?.refresh === "string") {
+          addToken(data.refresh, "registry:github-copilot:data.refresh");
+        }
+      } else {
+        extractFromData(gcpData, "registry:github-copilot:data");
+      }
 
       const ghKey = await mr?.authStorage?.getApiKey?.("github");
       addToken(ghKey, "registry:github:apiKey");

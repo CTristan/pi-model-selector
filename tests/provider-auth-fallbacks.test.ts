@@ -18,6 +18,15 @@ vi.mock("node:os", async () => {
   };
 });
 
+vi.mock("../src/fetchers/common.js", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("../src/fetchers/common.js")>();
+  return {
+    ...actual,
+    execFileAsync: vi.fn().mockRejectedValue(new Error("gh unavailable")),
+  };
+});
+
 describe("Provider auth fallback behavior", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -159,6 +168,43 @@ describe("Provider auth fallback behavior", () => {
     expect((request.headers as Record<string, string>).Authorization).toBe(
       "token github-oauth-token",
     );
+  });
+
+  it("fetchCopilotUsage should not add a minted Copilot token from legacy auth storage", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+    } as Response);
+    vi.stubGlobal("fetch", fetchMock);
+    const getApiKey = vi.fn(async (providerId: string) =>
+      providerId === "github-copilot" ? "minted-copilot-token" : undefined,
+    );
+    const getProviderAuth = vi.fn(async () => ({
+      auth: { apiKey: "minted-copilot-token" },
+      source: "OAuth",
+    }));
+
+    const result = await fetchCopilotUsage(
+      {
+        getProviderAuth,
+        authStorage: {
+          getApiKey,
+          get: vi.fn().mockResolvedValue(undefined),
+        },
+      },
+      {},
+    );
+
+    expect(getProviderAuth).toHaveBeenCalledWith("github-copilot");
+    expect(result[0]?.error).not.toContain("minted-copilot-token");
+    expect(
+      fetchMock.mock.calls.every(
+        ([, options]) =>
+          (options?.headers as Record<string, string> | undefined)
+            ?.Authorization !== "token minted-copilot-token",
+      ),
+    ).toBe(true);
+    expect(getApiKey).toHaveBeenCalledWith("github-copilot");
   });
 
   it("fetchCopilotUsage should use the stored GitHub token behind Pi's OAuth credential", async () => {

@@ -219,14 +219,17 @@ async function fetchOmpUsages(
     writeDebugLog(`OMP fetchUsageReports failed: ${String(err)}`);
   }
 
-  ompSnapshots = ompSnapshots.filter(
-    (s) =>
-      !disabled.has(s.provider) &&
-      (mapped === undefined || mapped.has(s.provider)),
-  );
+  ompSnapshots = ompSnapshots.filter((snapshot) => {
+    const provider = snapshot.provider.toLowerCase();
+    return (
+      !disabled.has(provider) && (mapped === undefined || mapped.has(provider))
+    );
+  });
 
   // Determine which providers OMP covered
-  const ompCoveredProviders = new Set(ompSnapshots.map((s) => s.provider));
+  const ompCoveredProviders = new Set(
+    ompSnapshots.map((snapshot) => snapshot.provider.toLowerCase()),
+  );
 
   // Collect fallback fetchers for providers OMP didn't cover
   // (e.g. kiro uses CLI subprocess, which OMP doesn't have)

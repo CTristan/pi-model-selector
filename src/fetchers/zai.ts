@@ -44,7 +44,7 @@ async function resolveZaiApiKeyWithRegistry(
   }
 
   // 2. Check Pi's public provider auth, which resolves auth.json and env values.
-  for (const providerId of ["zai", "zai-coding-cn"]) {
+  for (const providerId of ["zai"]) {
     try {
       const resolvedAuth = await getProviderAuthFromRegistry(
         modelRegistry,
