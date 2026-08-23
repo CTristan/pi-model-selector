@@ -1,3 +1,4 @@
+import { DateTime } from "luxon";
 import { describe, expect, it } from "vitest";
 import { convertOmpUsageReports } from "../src/usage-fetchers.js";
 
@@ -114,7 +115,7 @@ describe("convertOmpUsageReports", () => {
   });
 
   it("canonicalizes uppercase OMP provider IDs before mapping", () => {
-    const now = Date.now();
+    const now = DateTime.now().toMillis();
     const reports: OmpUsageReport[] = [
       {
         provider: "ANTHROPIC",
