@@ -75,6 +75,13 @@ describe("Minimax Fetcher", () => {
     });
 
     expect(result.error).toBeUndefined();
+    const callArgs = vi.mocked(common.fetchWithTimeout).mock.calls[0];
+    if (!callArgs) throw new Error("fetchWithTimeout was not called");
+    const callHeaders = (callArgs[1] as { headers?: Record<string, string> })
+      ?.headers;
+    expect(callHeaders?.Authorization).toBe(
+      "Bearer public-registry-minimax-key",
+    );
   });
 
   it("should fetch usage successfully with multiple models", async () => {

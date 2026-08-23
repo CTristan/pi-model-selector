@@ -147,6 +147,32 @@ describe("fetchOpenCodeGoUsage", () => {
     );
   });
 
+  it("prefers OPENCODE_API_KEY over a stored registry credential", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => usageResponse(),
+      }),
+    );
+    process.env.OPENCODE_API_KEY = " env-override-key ";
+    const getProviderAuth = vi.fn().mockResolvedValue({
+      auth: { apiKey: "public-registry-opencode-key" },
+      source: "stored credential",
+    });
+
+    const result = await fetchOpenCodeGoUsage({ getProviderAuth }, {});
+
+    expect(result.error).toBeUndefined();
+    const call = vi.mocked(fetch).mock.calls[0];
+    if (!call) throw new Error("Expected an OpenCode Go usage request");
+    const request = call[1];
+    if (!request) throw new Error("Expected OpenCode Go request options");
+    expect((request.headers as Record<string, string>).Authorization).toBe(
+      "Bearer env-override-key",
+    );
+  });
+
   it("falls back to OPENCODE_API_KEY when the registry has nothing", async () => {
     vi.stubGlobal(
       "fetch",

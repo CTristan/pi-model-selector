@@ -105,6 +105,34 @@ describe("Provider auth fallback behavior", () => {
     ).toBe(true);
   });
 
+  it("fetchClaudeUsage should still use auth.json when Pi returns an empty registry auth object", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ five_hour: { utilization: 20 } }),
+    } as Response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await fetchClaudeUsage(
+      {
+        getProviderAuth: vi.fn().mockResolvedValue({
+          auth: { baseUrl: "https://api.anthropic.com" },
+          source: "stored credential",
+        }),
+      },
+      { anthropic: { access: "auth-json-oauth-token" } },
+    );
+
+    expect(result.error).toBeUndefined();
+    const firstCall = fetchMock.mock.calls[0];
+    if (!firstCall) throw new Error("Expected an Anthropic usage request");
+    const request = firstCall[1];
+    if (!request) throw new Error("Expected Anthropic request options");
+    expect((request.headers as Record<string, string>).Authorization).toBe(
+      "Bearer auth-json-oauth-token",
+    );
+  });
+
   it("does not treat Anthropic auth-token Bearer headers as OAuth usage auth", async () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
@@ -205,6 +233,48 @@ describe("Provider auth fallback behavior", () => {
       ),
     ).toBe(true);
     expect(getApiKey).toHaveBeenCalledWith("github-copilot");
+  });
+
+  it("fetchCopilotUsage should use the stored access token when an OAuth refresh token is blank", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () =>
+        Promise.resolve({
+          login: "octocat",
+          copilot_plan: "individual",
+          quota_snapshots: {
+            premium_interactions: { percent_remaining: 80 },
+          },
+        }),
+    } as Response);
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await fetchCopilotUsage(
+      {
+        getProviderAuth: vi.fn(async () => ({
+          auth: { apiKey: "minted-copilot-token" },
+          source: "OAuth",
+        })),
+        authStorage: {
+          getApiKey: vi.fn().mockResolvedValue(undefined),
+          get: vi.fn().mockResolvedValue({
+            refresh: "   ",
+            access: "github-oauth-token",
+          }),
+        },
+      },
+      {},
+    );
+
+    expect(result[0]?.error).toBeUndefined();
+    const firstCall = fetchMock.mock.calls[0];
+    if (!firstCall) throw new Error("Expected a Copilot usage request");
+    const request = firstCall[1];
+    if (!request) throw new Error("Expected Copilot request options");
+    expect((request.headers as Record<string, string>).Authorization).toBe(
+      "token github-oauth-token",
+    );
   });
 
   it("fetchCopilotUsage should fall back to access when the stored refresh token is empty", async () => {

@@ -100,26 +100,21 @@ export async function getProviderAuthFromRegistry(
   return await registry.getProviderAuth(providerId);
 }
 
-/** Finds a selectable model by exact provider and model ID. */
-export function findSelectableModel(
+function findModelInList(
+  models: readonly PiModel[],
+  providerId: string,
+  modelId: string,
+): PiModel | undefined {
+  return models.find(
+    (model) => model.provider === providerId && model.id === modelId,
+  );
+}
+
+function findByRegistryLookup(
   ctx: ExtensionContext,
   providerId: string,
   modelId: string,
 ): PiModel | undefined {
-  const scopedModels = getScopedModels(ctx);
-  if (scopedModels) {
-    return scopedModels.find(
-      (model) => model.provider === providerId && model.id === modelId,
-    );
-  }
-
-  const availableModels = getAvailableModelSnapshot(ctx);
-  if (availableModels) {
-    return availableModels.find(
-      (model) => model.provider === providerId && model.id === modelId,
-    );
-  }
-
   const finder = (
     ctx.modelRegistry as RegistryCompatibility & {
       find?: (provider: string, modelId: string) => PiModel | undefined;
@@ -128,6 +123,54 @@ export function findSelectableModel(
   return typeof finder === "function"
     ? finder.call(ctx.modelRegistry, providerId, modelId)
     : undefined;
+}
+
+/** Finds a selectable model by exact provider and model ID. */
+export function findSelectableModel(
+  ctx: ExtensionContext,
+  providerId: string,
+  modelId: string,
+): PiModel | undefined {
+  const scopedModels = getScopedModels(ctx);
+  if (scopedModels) {
+    return findModelInList(scopedModels, providerId, modelId);
+  }
+
+  const availableModels = getAvailableModelSnapshot(ctx);
+  if (availableModels) {
+    return findModelInList(availableModels, providerId, modelId);
+  }
+
+  return findByRegistryLookup(ctx, providerId, modelId);
+}
+
+/**
+ * Finds a selectable model, awaiting Promise-returning `getAvailable()` hosts.
+ * Falls back to `find()` only when `getAvailable` is absent.
+ */
+export async function findSelectableModelAsync(
+  ctx: ExtensionContext,
+  providerId: string,
+  modelId: string,
+): Promise<PiModel | undefined> {
+  const scopedModels = getScopedModels(ctx);
+  if (scopedModels) {
+    return findModelInList(scopedModels, providerId, modelId);
+  }
+
+  const registry = ctx.modelRegistry as RegistryCompatibility;
+  if (typeof registry.getAvailable === "function") {
+    const available = await Promise.resolve(registry.getAvailable());
+    const availableModels = Array.isArray(available)
+      ? [...available]
+      : undefined;
+    if (availableModels) {
+      return findModelInList(availableModels, providerId, modelId);
+    }
+    return undefined;
+  }
+
+  return findByRegistryLookup(ctx, providerId, modelId);
 }
 
 /** Returns whether Pi can select the exact provider and model ID. */

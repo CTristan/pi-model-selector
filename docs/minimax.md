@@ -43,5 +43,5 @@ Minimax's Coding Plan provides a rolling 5-hour usage window with prompt limits 
 
 ## Notes
 
-- Minimax usage is discovered automatically when Pi has a configured Minimax provider.
+- Minimax usage is fetched only when Pi has a configured Minimax provider and a usage mapping references `minimax`.
 - The `end_time` in the API response represents the end of the current usage interval, which is used to calculate the `resetsAt` time.

@@ -88,17 +88,15 @@ async function resolveMinimaxApiKeyWithRegistry(
   modelRegistry: unknown,
   piAuth: Record<string, unknown>,
 ): Promise<string | undefined> {
-  for (const providerId of ["minimax"]) {
-    try {
-      const resolvedAuth = await getProviderAuthFromRegistry(
-        modelRegistry,
-        providerId,
-      );
-      const apiKey = resolvedAuth?.auth.apiKey?.trim();
-      if (apiKey) return apiKey;
-    } catch {
-      // Continue through compatibility credential sources.
-    }
+  try {
+    const resolvedAuth = await getProviderAuthFromRegistry(
+      modelRegistry,
+      "minimax",
+    );
+    const apiKey = resolvedAuth?.auth.apiKey?.trim();
+    if (apiKey) return apiKey;
+  } catch {
+    // Continue through compatibility credential sources.
   }
   return resolveMinimaxApiKey(piAuth);
 }

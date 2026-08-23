@@ -154,7 +154,25 @@ describe("fetchAllUsages — OMP path", () => {
     );
 
     expect(result).toHaveLength(1);
-    expect(result[0]?.provider).toBe("ANTHROPIC");
+    expect(result[0]?.provider).toBe("anthropic");
+  });
+
+  it("filters expected unavailable fallback snapshots from the OMP path", async () => {
+    vi.doMock("../src/adapter.js", () => ({
+      isOmp: true,
+      EXTENSION_DIR: ".omp",
+    }));
+
+    const fetchUsageReports = vi.fn().mockResolvedValue([]);
+    const { fetchAllUsages } = await import("../src/usage-fetchers.js");
+    const result = await fetchAllUsages(
+      { authStorage: { fetchUsageReports } },
+      [],
+      undefined,
+      ["kiro"],
+    );
+
+    expect(result.some((snapshot) => snapshot.provider === "kiro")).toBe(false);
   });
 
   it("handles fetchUsageReports returning null by using fallback fetchers", async () => {

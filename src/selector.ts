@@ -21,7 +21,7 @@ import {
   createModelLockCoordinator as createModelLockCoordinatorImpl,
   modelLockKey,
 } from "./model-locks.js";
-import { findSelectableModel } from "./pi-registry.js";
+import { findSelectableModelAsync } from "./pi-registry.js";
 import type {
   LoadedConfig,
   MappingEntry,
@@ -313,7 +313,11 @@ export async function runSelector(
       mapping = findModelMapping(best, config.mappings),
       model =
         mapping?.model &&
-        findSelectableModel(ctx, mapping.model.provider, mapping.model.id),
+        (await findSelectableModelAsync(
+          ctx,
+          mapping.model.provider,
+          mapping.model.id,
+        )),
       lockKey: string | undefined,
       waitedForLockMs = 0;
 
@@ -484,7 +488,7 @@ async function handleExhaustedCandidates(
       "All candidates at or below their reserve thresholds, attempting fallback model",
     );
   }
-  const fallbackModel = findSelectableModel(
+  const fallbackModel = await findSelectableModelAsync(
     ctx,
     config.fallback.provider,
     config.fallback.id,
@@ -613,7 +617,7 @@ async function acquireModelLock(
     const candidateMapping = findModelMapping(candidate, config.mappings);
     if (!candidateMapping?.model) continue;
 
-    const candidateModel = findSelectableModel(
+    const candidateModel = await findSelectableModelAsync(
       ctx,
       candidateMapping.model.provider,
       candidateMapping.model.id,
@@ -639,7 +643,7 @@ async function acquireModelLock(
   // Add fallback model as the last lockable candidate (lowest priority)
   // Only if fallback.lock is true (default)
   if (config.fallback && config.fallback.lock !== false) {
-    const fallbackModel = findSelectableModel(
+    const fallbackModel = await findSelectableModelAsync(
       ctx,
       config.fallback.provider,
       config.fallback.id,
@@ -760,7 +764,7 @@ async function acquireModelLock(
   if (!selectedWithLock) {
     // All quota-tracked models are locked - try fallback without locking if fallback.lock is false
     if (config.fallback && config.fallback.lock === false) {
-      const fallbackModel = findSelectableModel(
+      const fallbackModel = await findSelectableModelAsync(
         ctx,
         config.fallback.provider,
         config.fallback.id,

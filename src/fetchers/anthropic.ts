@@ -238,16 +238,17 @@ async function loadClaudeCredentials(
       "anthropic",
     );
     if (resolvedAuth) {
-      hasPublicRegistryAuth = true;
       const authHeader = getAuthHeader(resolvedAuth.auth.headers),
         bearerToken = authHeader?.match(/^Bearer\s+(\S+)/i)?.[1],
         token = bearerToken ?? resolvedAuth.auth.apiKey;
       if (token && isClaudeOAuthAuth(resolvedAuth)) {
+        hasPublicRegistryAuth = true;
         addCredential({
           token,
           source: `registry:anthropic:${resolvedAuth.source ?? "auth"}`,
         });
       } else if (resolvedAuth.auth.apiKey || authHeader) {
+        hasPublicRegistryAuth = true;
         unsupportedRegistryAuth = true;
       }
     }

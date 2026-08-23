@@ -101,7 +101,8 @@ export function convertOmpUsageReports(
   >();
 
   for (const report of reports) {
-    const provider = OMP_PROVIDER_MAP[report.provider] ?? report.provider;
+    const rawProvider = report.provider.toLowerCase();
+    const provider = OMP_PROVIDER_MAP[rawProvider] ?? rawProvider;
     const displayName = PROVIDER_DISPLAY_NAMES[provider] ?? provider;
 
     // Extract account identifier from metadata
@@ -315,11 +316,13 @@ export async function fetchAllUsages(
       };
     };
     if (mr?.authStorage?.fetchUsageReports) {
-      return fetchOmpUsages(
-        mr.authStorage,
-        disabledProviders,
-        mappedUsageProviders,
-      );
+      return (
+        await fetchOmpUsages(
+          mr.authStorage,
+          disabledProviders,
+          mappedUsageProviders,
+        )
+      ).filter((snapshot) => !isUnavailableUsageSnapshot(snapshot));
     }
     writeDebugLog(
       "OMP detected but authStorage.fetchUsageReports unavailable, falling back to extension fetchers",

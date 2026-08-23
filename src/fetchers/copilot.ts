@@ -123,8 +123,12 @@ export async function fetchCopilotUsage(
       const gcpData = await mr?.authStorage?.get?.("github-copilot");
       if (resolvedCopilotOAuth) {
         const data = gcpData as Record<string, unknown> | undefined;
-        if (typeof data?.refresh === "string") {
-          addToken(data.refresh, "registry:github-copilot:data.refresh");
+        const refresh =
+          typeof data?.refresh === "string" ? data.refresh.trim() : "";
+        if (refresh) {
+          addToken(refresh, "registry:github-copilot:data.refresh");
+        } else {
+          extractFromData(data, "registry:github-copilot:data");
         }
       } else {
         extractFromData(gcpData, "registry:github-copilot:data");

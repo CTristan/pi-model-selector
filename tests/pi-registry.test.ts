@@ -1,6 +1,7 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import {
+  findSelectableModelAsync,
   getCatalogProviderIds,
   getProviderAuth,
   getProviderAuthStatus,
@@ -121,6 +122,35 @@ describe("Pi registry boundary", () => {
       isSelectableModel(ctx, { provider: "opencode-go", id: "kimi-k2.6" }),
     ).toBe(true);
     expect(find).toHaveBeenCalledWith("opencode-go", "kimi-k2.6");
+  });
+
+  it("resolves an async getAvailable snapshot when looking up a model", async () => {
+    const ctx = createContext({
+      modelRegistry: {
+        getAvailable: vi.fn(async () => [
+          { provider: "opencode-go", id: "kimi-k2.6" },
+        ]),
+      },
+    });
+
+    await expect(
+      findSelectableModelAsync(ctx, "opencode-go", "kimi-k2.6"),
+    ).resolves.toEqual({ provider: "opencode-go", id: "kimi-k2.6" });
+  });
+
+  it("does not fall back to find when an async registry reports an empty snapshot", async () => {
+    const find = vi.fn((provider: string, id: string) => ({ provider, id }));
+    const ctx = createContext({
+      modelRegistry: {
+        getAvailable: vi.fn(async () => []),
+        find,
+      },
+    });
+
+    await expect(
+      findSelectableModelAsync(ctx, "opencode-go", "kimi-k2.6"),
+    ).resolves.toBeUndefined();
+    expect(find).not.toHaveBeenCalled();
   });
 
   it("does not fall back to find when Pi reports an empty authenticated snapshot", () => {

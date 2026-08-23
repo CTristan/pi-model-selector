@@ -57,7 +57,13 @@ async function resolveOpenCodeGoApiKeyWithRegistry(
   modelRegistry: unknown,
   piAuth: Record<string, unknown>,
 ): Promise<string | undefined> {
-  // 1. Check Pi's public provider auth, which resolves auth.json and env values.
+  // 1. Check the explicit environment override.
+  const envKey = process.env.OPENCODE_API_KEY;
+  if (typeof envKey === "string" && envKey.trim().length > 0) {
+    return envKey.trim();
+  }
+
+  // 2. Check Pi's public provider auth, which resolves auth.json and env values.
   try {
     const resolvedAuth = await getProviderAuthFromRegistry(
       modelRegistry,
@@ -69,7 +75,7 @@ async function resolveOpenCodeGoApiKeyWithRegistry(
     // Continue through compatibility credential sources.
   }
 
-  // 2. Check model registry authStorage (OMP uses SQLite, not auth.json)
+  // 3. Check model registry authStorage (OMP uses SQLite, not auth.json)
   try {
     const mr = modelRegistry as {
       authStorage?: {
@@ -85,10 +91,10 @@ async function resolveOpenCodeGoApiKeyWithRegistry(
       return registryKey.trim();
     }
   } catch {
-    // Auth storage not available, continue to env and piAuth.
+    // Auth storage not available, continue to piAuth.
   }
 
-  // 3. Check OPENCODE_API_KEY and piAuth fragments.
+  // 4. Check remaining piAuth fragments.
   return resolveOpenCodeGoApiKey(piAuth);
 }
 

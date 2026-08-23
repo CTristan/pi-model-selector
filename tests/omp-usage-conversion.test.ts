@@ -113,6 +113,28 @@ describe("convertOmpUsageReports", () => {
     expect(snap.windows[1]!.usedPercent).toBe(75);
   });
 
+  it("canonicalizes uppercase OMP provider IDs before mapping", () => {
+    const now = Date.now();
+    const reports: OmpUsageReport[] = [
+      {
+        provider: "ANTHROPIC",
+        fetchedAt: now,
+        limits: [
+          {
+            id: "anthropic:5h",
+            label: "Claude 5 Hour",
+            amount: { usedFraction: 0.2, unit: "percent" },
+          },
+        ],
+      },
+    ];
+
+    const snapshots = convertOmpUsageReports(reports);
+
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0]?.provider).toBe("anthropic");
+  });
+
   it("normalizes OMP provider names to extension names", () => {
     const now = Date.now();
     const reports: OmpUsageReport[] = [
