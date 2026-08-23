@@ -120,6 +120,15 @@ describe("Config Loading", () => {
     ]);
   });
 
+  it("should not disable quota providers in the seeded config", async () => {
+    const enoent = Object.assign(new Error("ENOENT"), { code: "ENOENT" });
+    vi.mocked(fs.promises.access).mockRejectedValue(enoent);
+
+    const config = await loadConfig(mockCtx, { requireMappings: false });
+
+    expect(config?.disabledProviders).toEqual([]);
+  });
+
   it("should handle invalid JSON in config files", async () => {
     vi.mocked(fs.promises.readFile).mockResolvedValue("invalid json");
 
@@ -339,8 +348,8 @@ describe("Config Loading", () => {
     const config = await loadConfig(mockCtx);
 
     expect(fs.promises.writeFile).toHaveBeenCalled();
-    // Default mappings length is 9
-    expect(config?.mappings).toHaveLength(9);
+    // Default mappings omit providers without a Pi model target.
+    expect(config?.mappings).toHaveLength(8);
     expect(config?.mappings[0]?.usage.provider).toBe("anthropic");
   });
 

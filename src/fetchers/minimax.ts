@@ -1,3 +1,4 @@
+import { getProviderAuthFromRegistry } from "../pi-registry.js";
 import type { RateWindow, UsageSnapshot } from "../types.js";
 import {
   fetchWithTimeout,
@@ -82,6 +83,24 @@ export function resolveMinimaxGroupId(
   return undefined;
 }
 
+/** Resolves a Minimax key through Pi before using compatibility sources. */
+async function resolveMinimaxApiKeyWithRegistry(
+  modelRegistry: unknown,
+  piAuth: Record<string, unknown>,
+): Promise<string | undefined> {
+  try {
+    const resolvedAuth = await getProviderAuthFromRegistry(
+      modelRegistry,
+      "minimax",
+    );
+    const apiKey = resolvedAuth?.auth.apiKey?.trim();
+    if (apiKey) return apiKey;
+  } catch {
+    // Continue through compatibility credential sources.
+  }
+  return resolveMinimaxApiKey(piAuth);
+}
+
 /**
  * Fetches usage snapshots for Minimax by calling the coding plan API.
  * @param piAuth The user's Pi authentication configuration.
@@ -91,10 +110,11 @@ export function resolveMinimaxGroupId(
 export async function fetchMinimaxUsage(
   piAuth: Record<string, unknown>,
   configGroupId?: string,
+  modelRegistry?: unknown,
 ): Promise<UsageSnapshot> {
   const provider = "minimax",
     displayName = PROVIDER_DISPLAY_NAMES[provider] || "Minimax",
-    apiKey = resolveMinimaxApiKey(piAuth),
+    apiKey = await resolveMinimaxApiKeyWithRegistry(modelRegistry, piAuth),
     groupId = resolveMinimaxGroupId(configGroupId);
 
   if (!apiKey) {

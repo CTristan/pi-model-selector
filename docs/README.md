@@ -11,6 +11,8 @@ This directory contains detailed information about each usage provider supported
 - [Codex](codex.md)
 - [Kiro](kiro.md)
 - [z.ai](zai.md)
+- [MiniMax](minimax.md)
+- [OpenCode Go](opencode-go.md)
 
 
 ## Runtime Compatibility
@@ -29,9 +31,11 @@ Each provider reports usage in one or more "windows". A window typically consist
 
 ### Authentication
 
-Most providers look for credentials in the active host's configured agent directory (`auth.json`). This is normally `~/.pi/agent/auth.json` under Pi. OMP's configured agent directory and SQLite credential store are also supported. Some providers additionally support environment variables, system keychains, or specific CLI tools.
+Pi owns the model catalogue and authentication state. The wizard and selector read the current session's scoped models, then Pi's authenticated model snapshot, so you do not need to copy credentials or enable providers in this extension. Use `/login` or the provider's environment variable through Pi.
 
-> **Note**: When configuring mappings, the `model.provider` must exactly match the provider name as registered in the Pi model registry (e.g., `openai`, `google`, `anthropic`, `github-copilot`). Use the `/models` command in Pi to see available providers and their IDs.
+Pi does not expose a generic quota API, so the extension keeps provider-aware usage adapters for quota endpoints, local probes, and CLI sources. Some usage sources do not share the same credential as the Pi model provider, so those adapters retain their provider-specific fallback rules. `disabledProviders` remains an optional explicit opt-out for older configurations.
+
+> **Note**: When configuring mappings, the `model.provider` and `model.id` must exactly match a selectable model in the Pi registry (e.g., `openai`, `google`, `anthropic`, `github-copilot`, or `opencode-go`). Use the `/models` command in Pi to see available providers and their IDs. OpenCode Go models appear when Pi has an OpenCode Go key, and the extension tracks OpenCode Go quota when that key can reach the usage endpoint.
 
 ### Ranking & Selection
 

@@ -4,10 +4,7 @@ The `minimax` provider supports fetching usage data from the Minimax Coding Plan
 
 ## Authentication
 
-Authentication can be configured in two ways:
-
-1. **Environment Variable**: `MINIMAX_API_KEY` (must be a Coding Plan key, prefixed with `sk-cp-`)
-2. **piAuth**: In `~/.pi/agent/auth.json` under the `minimax` key, using the `key` or `access` field.
+Pi resolves the Minimax API key from its provider auth state, which includes `auth.json` and `MINIMAX_API_KEY`. The extension uses that resolved key for the quota request, so you do not need to copy credentials into model-selector configuration.
 
 ```json
 {
@@ -46,5 +43,5 @@ Minimax's Coding Plan provides a rolling 5-hour usage window with prompt limits 
 
 ## Notes
 
-- Disabled by default. You must remove it from `disabledProviders` in your config or enable it via the `/model-select-config` wizard.
+- Minimax usage is fetched only when Pi has a configured Minimax provider and a usage mapping references `minimax`.
 - The `end_time` in the API response represents the end of the current usage interval, which is used to calculate the `resetsAt` time.

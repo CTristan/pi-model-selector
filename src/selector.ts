@@ -21,21 +21,17 @@ import {
   createModelLockCoordinator as createModelLockCoordinatorImpl,
   modelLockKey,
 } from "./model-locks.js";
-
+import { findSelectableModelAsync } from "./pi-registry.js";
 import type {
   LoadedConfig,
   MappingEntry,
   UsageCandidate,
   UsageSnapshot,
 } from "./types.js";
-import {
-  ALL_PROVIDERS,
-  notify,
-  setGlobalConfig,
-  writeDebugLog,
-} from "./types.js";
+import { notify, setGlobalConfig, writeDebugLog } from "./types.js";
 import { isProviderIgnored } from "./ui-helpers.js";
 import { fetchAllUsages } from "./usage-fetchers.js";
+import { getUsageProviderAdaptersForMappings } from "./usage-provider-adapters.js";
 import { clearWidget, renderUsageWidget, updateWidgetState } from "./widget.js";
 
 const MODEL_LOCK_WAIT_TIMEOUT_MS = 10 * 60 * 1000;
@@ -130,22 +126,17 @@ export async function runSelector(
     setGlobalConfig(config);
     writeDebugLog(`Running selector (reason: ${reason})`);
 
-    const mappedUsageProviders = new Set(
-        config.mappings.map((mapping) => mapping.usage.provider),
-      ),
-      implicitDisabledProviders = ALL_PROVIDERS.filter(
-        (provider) => !mappedUsageProviders.has(provider),
-      ),
-      effectiveDisabledProviders = [
-        ...new Set([...config.disabledProviders, ...implicitDisabledProviders]),
-      ],
-      usages =
-        options.preloadedUsages ||
-        (await fetchAllUsages(
-          ctx.modelRegistry,
-          effectiveDisabledProviders,
-          config.providerSettings,
-        ));
+    const mappedUsageAdapters = getUsageProviderAdaptersForMappings(
+      config.mappings,
+    );
+    const usages =
+      options.preloadedUsages ||
+      (await fetchAllUsages(
+        ctx.modelRegistry,
+        config.disabledProviders,
+        config.providerSettings,
+        mappedUsageAdapters.map((adapter) => adapter.usageProvider),
+      ));
 
     // Clean up stale cooldowns first so fresh 429s can always re-arm cooldowns.
     cooldownManager.pruneExpiredCooldowns();
@@ -322,7 +313,11 @@ export async function runSelector(
       mapping = findModelMapping(best, config.mappings),
       model =
         mapping?.model &&
-        ctx.modelRegistry.find(mapping.model.provider, mapping.model.id),
+        (await findSelectableModelAsync(
+          ctx,
+          mapping.model.provider,
+          mapping.model.id,
+        )),
       lockKey: string | undefined,
       waitedForLockMs = 0;
 
@@ -493,7 +488,8 @@ async function handleExhaustedCandidates(
       "All candidates at or below their reserve thresholds, attempting fallback model",
     );
   }
-  const fallbackModel = ctx.modelRegistry.find(
+  const fallbackModel = await findSelectableModelAsync(
+    ctx,
     config.fallback.provider,
     config.fallback.id,
   );
@@ -621,7 +617,8 @@ async function acquireModelLock(
     const candidateMapping = findModelMapping(candidate, config.mappings);
     if (!candidateMapping?.model) continue;
 
-    const candidateModel = ctx.modelRegistry.find(
+    const candidateModel = await findSelectableModelAsync(
+      ctx,
       candidateMapping.model.provider,
       candidateMapping.model.id,
     );
@@ -646,7 +643,8 @@ async function acquireModelLock(
   // Add fallback model as the last lockable candidate (lowest priority)
   // Only if fallback.lock is true (default)
   if (config.fallback && config.fallback.lock !== false) {
-    const fallbackModel = ctx.modelRegistry.find(
+    const fallbackModel = await findSelectableModelAsync(
+      ctx,
       config.fallback.provider,
       config.fallback.id,
     );
@@ -766,7 +764,8 @@ async function acquireModelLock(
   if (!selectedWithLock) {
     // All quota-tracked models are locked - try fallback without locking if fallback.lock is false
     if (config.fallback && config.fallback.lock === false) {
-      const fallbackModel = ctx.modelRegistry.find(
+      const fallbackModel = await findSelectableModelAsync(
+        ctx,
         config.fallback.provider,
         config.fallback.id,
       );

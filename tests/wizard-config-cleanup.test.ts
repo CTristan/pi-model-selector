@@ -152,6 +152,20 @@ describe("mapping wizard config cleanup", () => {
     modelSelectorExtension(pi as unknown as ExtensionAPI);
   });
 
+  it("does not expose a provider enablement menu", async () => {
+    ctx.ui.select = vi.fn((message: string, options: string[]) => {
+      if (message === "Model selector configuration") {
+        expect(options).not.toContain("Configure providers");
+        return Promise.resolve("Done");
+      }
+      return Promise.resolve(undefined);
+    });
+
+    const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
+    await runWizard({}, ctx as unknown as Record<string, unknown>);
+  });
+
   it("applies cleanup to selected config file", async () => {
     let menuVisits = 0;
     ctx.ui.select = vi.fn((message: string, _options: string[]) => {
@@ -190,33 +204,7 @@ describe("mapping wizard config cleanup", () => {
     );
   });
 
-  it("disables mapped providers with missing credentials during cleanup", async () => {
-    const credentiallessConfig: LoadedConfig = {
-      ...initialConfig,
-      disabledProviders: [],
-      raw: {
-        global: {
-          mappings: [
-            {
-              usage: { provider: "gemini", window: "Flash" },
-              model: { provider: "google", id: "gemini-1.5-flash" },
-            },
-          ],
-        },
-        project: {},
-      },
-    };
-
-    const reloadedWithDisabled: LoadedConfig = {
-      ...credentiallessConfig,
-      disabledProviders: ["gemini"],
-    };
-
-    vi.mocked(configMod.loadConfig)
-      .mockReset()
-      .mockResolvedValueOnce(credentiallessConfig)
-      .mockResolvedValueOnce(reloadedWithDisabled);
-
+  it("does not disable mapped providers when credentials are missing", async () => {
     vi.mocked(configMod.cleanupConfigRaw).mockReset();
     vi.mocked(configMod.cleanupConfigRaw).mockImplementation(() => ({
       changed: false,
@@ -239,20 +227,14 @@ describe("mapping wizard config cleanup", () => {
       }
       return Promise.resolve(undefined);
     });
-    ctx.ui.confirm = vi.fn(() => Promise.resolve(true));
 
     const runWizard = commands["model-select-config"];
     if (!runWizard) throw new Error("Command not found: model-select-config");
     await runWizard({}, ctx as unknown as Record<string, unknown>);
 
-    expect(configMod.saveConfigFile).toHaveBeenCalledWith(
-      "global.json",
-      expect.objectContaining({
-        disabledProviders: expect.arrayContaining(["gemini"]),
-      }),
-    );
+    expect(configMod.saveConfigFile).not.toHaveBeenCalled();
     expect(ctx.ui.notify).toHaveBeenCalledWith(
-      expect.stringContaining("Disabled 1 provider with missing credentials"),
+      expect.stringContaining("No cleanup changes needed"),
       "info",
     );
   });

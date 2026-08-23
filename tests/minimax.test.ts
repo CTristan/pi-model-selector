@@ -41,6 +41,49 @@ describe("Minimax Fetcher", () => {
     expect(result.windows).toHaveLength(0);
   });
 
+  it("should not use MiniMax CN auth with the global quota adapter", async () => {
+    const fetchWithTimeout = vi.mocked(common.fetchWithTimeout);
+    const result = await fetchMinimaxUsage({}, mockGroupId, {
+      getProviderAuth: vi.fn(async (providerId: string) =>
+        providerId === "minimax-cn"
+          ? {
+              auth: { apiKey: "cn-key" },
+              source: "stored credential",
+            }
+          : undefined,
+      ),
+    });
+
+    expect(result.error).toContain("No API key found");
+    expect(fetchWithTimeout).not.toHaveBeenCalled();
+  });
+
+  it("should use Pi's public provider auth when available", async () => {
+    vi.mocked(common.fetchWithTimeout).mockResolvedValue({
+      res: { ok: true } as Response,
+      data: {
+        model_remains: [],
+        base_resp: { status_code: 0, status_msg: "success" },
+      },
+    });
+
+    const result = await fetchMinimaxUsage({}, mockGroupId, {
+      getProviderAuth: vi.fn().mockResolvedValue({
+        auth: { apiKey: "public-registry-minimax-key" },
+        source: "stored credential",
+      }),
+    });
+
+    expect(result.error).toBeUndefined();
+    const callArgs = vi.mocked(common.fetchWithTimeout).mock.calls[0];
+    if (!callArgs) throw new Error("fetchWithTimeout was not called");
+    const callHeaders = (callArgs[1] as { headers?: Record<string, string> })
+      ?.headers;
+    expect(callHeaders?.Authorization).toBe(
+      "Bearer public-registry-minimax-key",
+    );
+  });
+
   it("should fetch usage successfully with multiple models", async () => {
     const mockResponse = {
       model_remains: [

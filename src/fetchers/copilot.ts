@@ -1,3 +1,4 @@
+import { getProviderAuthFromRegistry } from "../pi-registry.js";
 import type { RateWindow, UsageSnapshot } from "../types.js";
 import { writeDebugLog } from "../types.js";
 import {
@@ -83,27 +84,63 @@ export async function fetchCopilotUsage(
       extractFromData = (data: unknown, source: string) => {
         if (data == null || typeof data !== "object") return;
         const d = data as Record<string, unknown>;
-        const token = d.access || d.accessToken || d.access_token || d.token;
+        const refreshToken =
+          typeof d.refresh === "string" && d.refresh.trim().length > 0
+            ? d.refresh.trim()
+            : undefined;
+        const token =
+          refreshToken ??
+          (d.access || d.accessToken || d.access_token || d.token);
         if (typeof token === "string" && token) {
-          addToken(token, `${source}.access`);
+          addToken(
+            token,
+            refreshToken !== undefined
+              ? `${source}.refresh`
+              : `${source}.access`,
+          );
         }
       };
 
     // 1. Discovery
+    let resolvedCopilotOAuth = false;
     try {
+      const resolvedAuth = await getProviderAuthFromRegistry(
+        modelRegistry,
+        "github-copilot",
+      );
+      const resolvedSource = resolvedAuth?.source?.toLowerCase() ?? "";
+      resolvedCopilotOAuth =
+        resolvedSource === "oauth" || resolvedSource.includes("oauth");
+      if (resolvedAuth?.auth.apiKey && !resolvedCopilotOAuth) {
+        addToken(resolvedAuth.auth.apiKey, "registry:github-copilot:resolved");
+      }
+
       const gcpKey = await mr?.authStorage?.getApiKey?.("github-copilot");
-      addToken(gcpKey, "registry:github-copilot:apiKey");
+      if (!resolvedCopilotOAuth) {
+        addToken(gcpKey, "registry:github-copilot:apiKey");
+      }
 
       const gcpData = await mr?.authStorage?.get?.("github-copilot");
-      extractFromData(gcpData, "registry:github-copilot:data");
+      if (resolvedCopilotOAuth) {
+        const data = gcpData as Record<string, unknown> | undefined;
+        const refresh =
+          typeof data?.refresh === "string" ? data.refresh.trim() : "";
+        if (refresh) {
+          addToken(refresh, "registry:github-copilot:data.refresh");
+        } else {
+          extractFromData(data, "registry:github-copilot:data");
+        }
+      } else {
+        extractFromData(gcpData, "registry:github-copilot:data");
+      }
 
       const ghKey = await mr?.authStorage?.getApiKey?.("github");
       addToken(ghKey, "registry:github:apiKey");
 
       const ghData = await mr?.authStorage?.get?.("github");
       extractFromData(ghData, "registry:github:data");
-    } catch (e: unknown) {
-      writeDebugLog(`fetchCopilotUsage: registry error: ${String(e)}`);
+    } catch {
+      writeDebugLog("fetchCopilotUsage: registry auth discovery failed");
     }
 
     const copilotAuth = piAuth["github-copilot"] as

@@ -101,6 +101,28 @@ describe("Wizard Settings", () => {
     modelSelectorExtension(pi as unknown as ExtensionAPI);
   });
 
+  it("updates MiniMax GroupId without provider enablement controls", async () => {
+    ctx.ui.select
+      .mockResolvedValueOnce("Configure usage settings")
+      .mockResolvedValueOnce("Global (global.json)")
+      .mockResolvedValueOnce("Done");
+    ctx.ui.input.mockResolvedValueOnce("  group-123  ");
+
+    const runWizard = commands["model-select-config"];
+    if (!runWizard) throw new Error("Command not found: model-select-config");
+    await runWizard({}, ctx as unknown as Record<string, unknown>);
+
+    expect(configMod.updateProviderSettings).toHaveBeenCalledWith(
+      baseConfig.raw.global,
+      "minimax",
+      { groupId: "group-123" },
+    );
+    expect(configMod.saveConfigFile).toHaveBeenCalledWith(
+      "global.json",
+      baseConfig.raw.global,
+    );
+  });
+
   it("notifies when UI is unavailable", async () => {
     ctx.hasUI = false;
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});

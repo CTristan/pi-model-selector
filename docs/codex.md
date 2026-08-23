@@ -6,11 +6,9 @@ The Codex provider fetches usage information for OpenAI-based models managed via
 
 ## Authentication
 
-Discovers credentials from:
+Pi resolves the primary Codex credential through `getProviderAuth("openai-codex")`, which refreshes stored OAuth credentials before the usage request. The adapter derives `ChatGPT-Account-Id` from the OAuth token when Pi does not expose it directly.
 
-1. **`auth.json`**: Entries starting with `openai-codex`.
-2. **Pi Model Registry**: `openai-codex` entry.
-3. **`~/.codex/` Directory**: Looks for `auth*.json` files.
+Legacy `auth.json` and `~/.codex/` discovery remain as fallbacks for separate Codex accounts.
 
 ## API Endpoint
 

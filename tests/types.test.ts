@@ -3,6 +3,7 @@ import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { LoadedConfig, MappingEntry } from "../src/types.js";
 import {
+  DEFAULT_MAPPINGS,
   DEFAULT_PRIORITY,
   mappingKey,
   notify,
@@ -53,6 +54,14 @@ describe("Types / Utilities", () => {
       "earliestReset",
       "remainingPercent",
     ]);
+  });
+
+  it("should use current Anthropic model IDs in default mappings", () => {
+    expect(
+      DEFAULT_MAPPINGS.filter(
+        (mapping) => mapping.usage.provider === "anthropic" && mapping.model,
+      ).map((mapping) => mapping.model?.id),
+    ).toEqual(["claude-sonnet-4-5", "claude-opus-4-5", "claude-sonnet-4-5"]);
   });
 
   it("should handle debug log queueing and directory creation", () => {

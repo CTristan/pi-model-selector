@@ -40,6 +40,43 @@ describe("fetchZaiUsage registry key resolution", () => {
     }
   });
 
+  it("does not use z.ai Coding CN auth with the global quota adapter", async () => {
+    const getProviderAuth = vi.fn(async (providerId: string) =>
+      providerId === "zai-coding-cn"
+        ? {
+            auth: { apiKey: "cn-key" },
+            source: "stored credential",
+          }
+        : undefined,
+    );
+
+    const result = await fetchZaiUsage({ getProviderAuth }, {});
+
+    expect(result.error).toBe("No API key");
+    expect(getProviderAuth).toHaveBeenCalledWith("zai");
+    expect(getProviderAuth).not.toHaveBeenCalledWith("zai-coding-cn");
+  });
+
+  it("uses Pi's public provider auth when available", async () => {
+    const getProviderAuth = vi.fn().mockResolvedValue({
+      auth: { apiKey: "public-registry-zai-key" },
+      source: "stored credential",
+    });
+
+    const result = await fetchZaiUsage({ getProviderAuth }, {});
+
+    expect(result.provider).toBe("zai");
+    expect(result.error).toBeUndefined();
+    expect(getProviderAuth).toHaveBeenCalledWith("zai");
+    const call = vi.mocked(fetch).mock.calls[0];
+    if (!call) throw new Error("Expected a z.ai usage request");
+    const request = call[1];
+    if (!request) throw new Error("Expected z.ai request options");
+    expect((request.headers as Record<string, string>).Authorization).toBe(
+      "Bearer public-registry-zai-key",
+    );
+  });
+
   it("uses registry authStorage.getApiKey('zai') when available", async () => {
     const modelRegistry = {
       authStorage: {

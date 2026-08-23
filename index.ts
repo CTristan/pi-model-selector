@@ -18,6 +18,7 @@ import { runSelector, type SelectorReason } from "./src/selector.js";
 import type { LoadedConfig, UsageSnapshot } from "./src/types.js";
 import { notify, writeDebugLog } from "./src/types.js";
 import { fetchAllUsages } from "./src/usage-fetchers.js";
+import { getUsageProviderAdaptersForMappings } from "./src/usage-provider-adapters.js";
 import {
   getWidgetState,
   renderUsageWidget,
@@ -306,7 +307,7 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
   });
 
   pi.registerCommand("model-select-config", {
-    description: "Configure mappings, providers, and widget settings",
+    description: "Configure mappings, usage settings, and widget settings",
     handler: async (_args, ctx) => {
       void _args;
       await runMappingWizard(ctx);
@@ -328,6 +329,9 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
         ctx.modelRegistry,
         config.disabledProviders,
         config.providerSettings,
+        getUsageProviderAdaptersForMappings(config.mappings).map(
+          (adapter) => adapter.usageProvider,
+        ),
       );
 
       let lastSelectedCandidateKey = cooldownManager.getLastSelectedKey();
@@ -415,6 +419,9 @@ export default function modelSelectorExtension(pi: ExtensionAPI) {
             ctx.modelRegistry,
             config.disabledProviders,
             config.providerSettings,
+            getUsageProviderAdaptersForMappings(config.mappings).map(
+              (adapter) => adapter.usageProvider,
+            ),
           );
           await runSelectorWrapper(ctx, "command", {
             preloadedConfig: config,

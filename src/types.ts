@@ -134,6 +134,7 @@ export interface LoadedConfig {
   autoRun: boolean;
   enableModelLocking: boolean;
   preserveDefaultModel?: boolean;
+  /** Legacy explicit opt-outs for usage adapters. */
   disabledProviders: ProviderName[];
   providerSettings?: ProviderSettings;
   debugLog?: {
@@ -157,6 +158,7 @@ export const ALL_PROVIDERS = [
   "kiro",
   "zai",
   "minimax",
+  "opencode-go",
 ] as const;
 /**
  * Union of provider names supported by selector configuration.
@@ -164,13 +166,9 @@ export const ALL_PROVIDERS = [
 export type ProviderName = (typeof ALL_PROVIDERS)[number];
 
 /**
- * Providers skipped unless the user explicitly maps them.
+ * Legacy opt-out list for quota adapters; discovery no longer requires enablement.
  */
-export const DEFAULT_DISABLED_PROVIDERS: readonly ProviderName[] = [
-  "kiro",
-  "zai",
-  "minimax",
-];
+export const DEFAULT_DISABLED_PROVIDERS: readonly ProviderName[] = [];
 
 // ============================================================================
 // Utility Functions
@@ -307,15 +305,15 @@ export const DEFAULT_WIDGET_CONFIG: Required<WidgetConfig> = {
 export const DEFAULT_MAPPINGS: MappingEntry[] = [
   {
     usage: { provider: "anthropic", window: "Sonnet" },
-    model: { provider: "anthropic", id: "claude-3-5-sonnet-latest" },
+    model: { provider: "anthropic", id: "claude-sonnet-4-5" },
   },
   {
     usage: { provider: "anthropic", window: "Opus" },
-    model: { provider: "anthropic", id: "claude-3-opus-latest" },
+    model: { provider: "anthropic", id: "claude-opus-4-5" },
   },
   {
     usage: { provider: "anthropic", window: "Shared" },
-    model: { provider: "anthropic", id: "claude-3-5-sonnet-latest" },
+    model: { provider: "anthropic", id: "claude-sonnet-4-5" },
   },
   {
     usage: { provider: "anthropic", window: "5h" },
@@ -327,18 +325,14 @@ export const DEFAULT_MAPPINGS: MappingEntry[] = [
   },
   {
     usage: { provider: "gemini", window: "Flash" },
-    model: { provider: "google", id: "gemini-1.5-flash" },
+    model: { provider: "google", id: "gemini-2.5-flash" },
   },
   {
     usage: { provider: "copilot", window: "Chat" },
-    model: { provider: "github-copilot", id: "gpt-4o" },
+    model: { provider: "github-copilot", id: "gpt-4.1" },
   },
   {
     usage: { provider: "codex", window: "1w" },
-    model: { provider: "openai-codex", id: "gpt-4o" },
-  },
-  {
-    usage: { provider: "antigravity", window: "Claude" },
-    model: { provider: "google", id: "claude-sonnet-4-5" },
+    model: { provider: "openai-codex", id: "gpt-5.4" },
   },
 ];

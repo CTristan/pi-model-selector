@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { getProviderAuthFromRegistry } from "../pi-registry.js";
 import type { RateWindow, UsageSnapshot } from "../types.js";
 import { fetchWithTimeout, formatReset, URLS } from "./common.js";
 
@@ -8,6 +9,48 @@ interface CodexCredential {
   accessToken: string;
   accountId?: string;
   source: string;
+}
+
+function extractCodexAccountId(accessToken: string): string | undefined {
+  const payload = accessToken.split(".")[1];
+  if (!payload) return undefined;
+
+  try {
+    const decoded = JSON.parse(
+      Buffer.from(payload, "base64url").toString("utf8"),
+    ) as Record<string, unknown>;
+    const auth = decoded["https://api.openai.com/auth"];
+    if (!auth || typeof auth !== "object") return undefined;
+    const accountId = (auth as Record<string, unknown>).chatgpt_account_id;
+    return typeof accountId === "string" && accountId.length > 0
+      ? accountId
+      : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function getPiRegistryCodexAuth(
+  modelRegistry: unknown,
+): Promise<CodexCredential | undefined> {
+  try {
+    const resolvedAuth = await getProviderAuthFromRegistry(
+      modelRegistry,
+      "openai-codex",
+    );
+    const accessToken = resolvedAuth?.auth.apiKey;
+    if (!accessToken) return undefined;
+
+    const accountId = extractCodexAccountId(accessToken);
+    const result: CodexCredential = {
+      accessToken,
+      source: "pi",
+    };
+    if (accountId !== undefined) result.accountId = accountId;
+    return result;
+  } catch {
+    return undefined;
+  }
 }
 
 function getPiCodexAuths(piAuth: Record<string, unknown>): CodexCredential[] {
@@ -92,8 +135,7 @@ async function discoverCodexCredentials(
   piAuth: Record<string, unknown>,
 ): Promise<CodexCredential[]> {
   const credentials: CodexCredential[] = [],
-    seenTokens = new Set<string>(),
-    piAuths = getPiCodexAuths(piAuth);
+    seenTokens = new Set<string>();
   const addCredential = (credential: CodexCredential): void => {
     if (seenTokens.has(credential.accessToken)) return;
 
@@ -101,7 +143,10 @@ async function discoverCodexCredentials(
     seenTokens.add(credential.accessToken);
   };
 
-  for (const p of piAuths) {
+  const piRegistryAuth = await getPiRegistryCodexAuth(modelRegistry);
+  if (piRegistryAuth) addCredential(piRegistryAuth);
+
+  for (const p of getPiCodexAuths(piAuth)) {
     addCredential(p);
   }
   try {

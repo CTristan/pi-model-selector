@@ -135,6 +135,46 @@ describe("fetchAllUsages — OMP path", () => {
     expect(providers).not.toContain("zai");
   });
 
+  it("matches mapped OMP provider IDs case-insensitively", async () => {
+    vi.doMock("../src/adapter.js", () => ({
+      isOmp: true,
+      EXTENSION_DIR: ".omp",
+    }));
+
+    const fetchUsageReports = vi
+      .fn()
+      .mockResolvedValue([makeOmpReport("ANTHROPIC", 0.5)]);
+
+    const { fetchAllUsages } = await import("../src/usage-fetchers.js");
+    const result = await fetchAllUsages(
+      { authStorage: { fetchUsageReports } },
+      [],
+      undefined,
+      ["anthropic"],
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0]?.provider).toBe("anthropic");
+  });
+
+  it("filters expected unavailable fallback snapshots from the OMP path", async () => {
+    vi.doMock("../src/adapter.js", () => ({
+      isOmp: true,
+      EXTENSION_DIR: ".omp",
+    }));
+
+    const fetchUsageReports = vi.fn().mockResolvedValue([]);
+    const { fetchAllUsages } = await import("../src/usage-fetchers.js");
+    const result = await fetchAllUsages(
+      { authStorage: { fetchUsageReports } },
+      [],
+      undefined,
+      ["kiro"],
+    );
+
+    expect(result.some((snapshot) => snapshot.provider === "kiro")).toBe(false);
+  });
+
   it("handles fetchUsageReports returning null by using fallback fetchers", async () => {
     vi.doMock("../src/adapter.js", () => ({
       isOmp: true,
@@ -207,9 +247,9 @@ describe("fetchAllUsages — OMP path", () => {
     const { fetchAllUsages } = await import("../src/usage-fetchers.js");
     const result = await fetchAllUsages(modelRegistry);
 
-    // Should have fallen back to the Pi fetchers path and returned snapshots
+    // The Pi path should skip providers without configured auth instead of returning empty error cards.
     expect(Array.isArray(result)).toBe(true);
-    expect(result.length).toBeGreaterThan(0);
+    expect(result).toHaveLength(0);
 
     vi.unstubAllGlobals();
   });
