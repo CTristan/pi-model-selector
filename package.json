@@ -32,7 +32,7 @@
     "node": ">=22.19.0"
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "^0.84.1",
+    "@earendil-works/pi-coding-agent": "^0.84.1 || ^0.85.0",
     "@earendil-works/pi-tui": "^0.84.1",
     "@oh-my-pi/pi-coding-agent": "^17.2.12",
     "@oh-my-pi/pi-tui": "^17.2.12"
@@ -53,7 +53,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.3",
-    "@earendil-works/pi-coding-agent": "0.84.4",
+    "@earendil-works/pi-coding-agent": "0.85.0",
     "@earendil-works/pi-tui": "0.84.4",
     "@types/luxon": "3.7.5",
     "@types/node": "24.13.3",
